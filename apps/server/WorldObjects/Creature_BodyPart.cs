@@ -74,10 +74,14 @@ public class Creature_BodyPart
         var enchantmentMultiplicativeMod = ignoreMagicResist ? 0 : EnchantmentManager.GetBodyArmorMultiplicativeMod();
 
         var effectiveAL = (armorVsType + enchantmentMod) * enchantmentMultiplicativeMod;
+
         // handle monsters w/ multiple layers of armor
-        foreach (var armorLayer in armorLayers)
+        if (Creature is {IsMonster: true, CreatureArmorEffectsDamageReduction: true})
         {
-            effectiveAL += GetArmorMod(armorLayer, damageType, ignoreMagicArmor);
+            foreach (var armorLayer in armorLayers)
+            {
+                effectiveAL += GetArmorMod(armorLayer, damageType, ignoreMagicArmor);
+            }
         }
 
         // armor rending reduces base armor + all physical armor too?

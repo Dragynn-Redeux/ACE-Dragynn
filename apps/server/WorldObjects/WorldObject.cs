@@ -1851,4 +1851,20 @@ public abstract partial class WorldObject : IActor
             }
         }
     }
+
+    public bool? CreatureArmorEffectsDamageReduction
+    {
+        get => GetProperty(PropertyBool.CreatureArmorEffectsDamageReduction);
+        set
+        {
+            if (!value.HasValue)
+            {
+                RemoveProperty(PropertyBool.CreatureArmorEffectsDamageReduction);
+            }
+            else
+            {
+                SetProperty(PropertyBool.CreatureArmorEffectsDamageReduction, value.Value);
+            }
+        }
+    }
 }

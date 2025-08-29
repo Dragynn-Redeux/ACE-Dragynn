@@ -118,6 +118,8 @@ public static class LevelScaling
 
     public static float GetMonsterDamageTakenTtkScalar(Creature player, Creature monster)
     {
+        return 1.0f; // TODO: reassess if this is needed
+
         if (!CanScalePlayer(player, monster))
         {
             return 1.0f;

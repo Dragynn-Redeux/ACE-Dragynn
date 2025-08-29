@@ -31,6 +31,9 @@ public class ReloadLandblock
         // clear landblock cache
         DatabaseManager.World.ClearCachedInstancesByLandblock(landblock.Id.Landblock);
 
+        landblock.LandblockLethalityMod = 0.0;
+        landblock.LandblockLootQualityMod = 0.0;
+
         // reload landblock
         var actionChain = new ActionChain();
         actionChain.AddDelayForOneTick();

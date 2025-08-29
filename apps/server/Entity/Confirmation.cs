@@ -206,6 +206,9 @@ public class Confirmation_CraftInteration : Confirmation
             case WeenieType.BezelTool:
                 BezelTool.UseObjectOnTarget(player, source, target, true);
                 break;
+            case WeenieType.DungeonModder:
+                source.ActOnUse(player);
+                break;
             default:
                 RecipeManager.UseObjectOnTarget(player, source, target, true);
                 break;

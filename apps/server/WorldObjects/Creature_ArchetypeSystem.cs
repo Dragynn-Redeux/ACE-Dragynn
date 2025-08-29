@@ -1,5 +1,4 @@
 using System;
-using System.Linq;
 using ACE.Entity.Enum;
 using ACE.Entity.Enum.Properties;
 using ACE.Entity.Models;
@@ -30,6 +29,9 @@ partial class Creature
     private static readonly float[] avgPlayerArmorReduction = { 0.75f, 0.57f, 0.40f, 0.31f, 0.25f, 0.21f, 0.18f, 0.16f, 0.1f };
     private static readonly float[] avgPlayerLifeProtReduction = { 1.0f, 0.9f, 0.9f, 0.85f, 0.85f, 0.8f, 0.8f, 0.75f, 0.75f };
     private static readonly int[] avgPlayerPhysicalMagicDefense = { 10, 75, 150, 175, 200, 225, 275, 350, 500 };
+
+    private int _tier;
+    private float _statWeight;
 
     private void SetSkills(
         int tier,
@@ -346,6 +348,9 @@ partial class Creature
         {
             Console.WriteLine($"\n-- SetDamageArmorAegus() for {Name} ({WeenieClassId}) (statWeight: {statWeight}) --");
         }
+
+        _tier = tier;
+        _statWeight = statWeight;
 
         // Damage + Armor
         {
@@ -1347,5 +1352,109 @@ partial class Creature
             7 => 160,
             _ => 9
         };
+    }
+
+    public void SetLethalityModFromDungeonMod()
+    {
+        if (CurrentLandblock is null)
+        {
+            return;
+        }
+
+        if (UseArchetypeSystem is not true)
+        {
+            return;
+        }
+
+        var archetypeLethality = ArchetypeLethality ?? 1.0;
+
+        var landblockLethalityMod = true switch
+        {
+            _ when CurrentLandblock.ActiveLandblockMods["Lethality 500%"].Active => 5.0,
+            _ when CurrentLandblock.ActiveLandblockMods["Lethality 450%"].Active => 4.5,
+            _ when CurrentLandblock.ActiveLandblockMods["Lethality 400%"].Active => 4.0,
+            _ when CurrentLandblock.ActiveLandblockMods["Lethality 350%"].Active => 3.5,
+            _ when CurrentLandblock.ActiveLandblockMods["Lethality 300%"].Active => 3.0,
+            _ when CurrentLandblock.ActiveLandblockMods["Lethality 250%"].Active => 2.5,
+            _ when CurrentLandblock.ActiveLandblockMods["Lethality 200%"].Active => 2.0,
+            _ when CurrentLandblock.ActiveLandblockMods["Lethality 150%"].Active => 1.5,
+            _ when CurrentLandblock.ActiveLandblockMods["Lethality 100%"].Active => 1.0,
+            _ when CurrentLandblock.ActiveLandblockMods["Lethality 50%"].Active => 0.5,
+            _ => 0.0
+        };
+
+        var adjustment = archetypeLethality * landblockLethalityMod;
+
+        ArchetypeLethality = adjustment + archetypeLethality;
+
+        SetSkills(_tier,
+            _statWeight,
+            ArchetypeToughness ?? 1.0,
+            ArchetypePhysicality ?? 1.0,
+            ArchetypeDexterity ?? 1.0,
+            ArchetypeMagic ?? 1.0,
+            ArchetypeIntelligence ?? 1.0);
+
+        SetDamageArmorWard(_tier,
+            _statWeight,
+            ArchetypeToughness ?? 1.0,
+            ArchetypePhysicality ?? 1.0,
+            ArchetypeMagic ?? 1.0,
+            ArchetypeLethality ?? 1.0);
+
+        //Console.WriteLine($"{Name}: BaseLethality = {archetypeLethality}, LbLethality = {CurrentLandblock.LandblockLethalityMod}, Adjustment = {adjustment}, Total: {adjustment + archetypeLethality}");
+    }
+
+    public void SetHealthFromDungeonMod()
+    {
+        if (CurrentLandblock is null)
+        {
+            return;
+        }
+
+        if (UseArchetypeSystem is not true)
+        {
+            return;
+        }
+
+        if (!CurrentLandblock.ActiveLandblockMods["Titans"].Active)
+        {
+            return;
+        }
+
+        if (MonsterRank < 4)
+        {
+            return;
+        }
+
+        ArchetypeToughness *= 2;
+
+    SetVitals(_tier,
+            _statWeight,
+            ArchetypeToughness ?? 1.0,
+            ArchetypePhysicality ?? 1.0,
+            ArchetypeDexterity ?? 1.0,
+            ArchetypeMagic ?? 1.0);
+    }
+
+    public void SetSkillsFromDungeonMod()
+    {
+        if (CurrentLandblock is null)
+        {
+            return;
+        }
+
+        if (!CurrentLandblock.ActiveLandblockMods["Skilled"].Active)
+        {
+            return;
+        }
+
+        SetSkills(_tier,
+            _statWeight,
+            ArchetypeToughness ?? 1.0,
+            ArchetypePhysicality ?? 1.0,
+            ArchetypeDexterity ?? 1.0,
+            ArchetypeMagic ?? 1.0,
+            ArchetypeIntelligence ?? 1.0);
     }
 }

@@ -163,6 +163,8 @@ public static class WorldObjectFactory
                 return new UpgradeKit(weenie, guid);
             case WeenieType.BezelTool:
                 return new BezelTool(weenie, guid);
+            case WeenieType.DungeonModder:
+                return new DungeonModder(weenie, guid);
             default:
                 return new GenericObject(weenie, guid);
         }
@@ -302,6 +304,8 @@ public static class WorldObjectFactory
                 return new UpgradeKit(biota);
             case WeenieType.BezelTool:
                 return new BezelTool(biota);
+            case WeenieType.DungeonModder:
+                return new DungeonModder(biota);
             default:
                 return new GenericObject(biota);
         }

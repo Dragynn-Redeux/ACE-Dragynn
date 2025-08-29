@@ -22,4 +22,20 @@ partial class Creature
             }
         }
     }
+
+    public int MonsterRank
+    {
+        get => GetProperty(PropertyInt.MonsterRank) ?? 0;
+        set
+        {
+            if (value == 0)
+            {
+                RemoveProperty(PropertyInt.MonsterRank);
+            }
+            else
+            {
+                SetProperty(PropertyInt.MonsterRank, value);
+            }
+        }
+    }
 }
