@@ -1887,7 +1887,7 @@ public class Landblock : IActor
             landblock.CapstoneFellowship = fellowship;
             fellowship.CapstoneDungeon = landblockId;
 
-            landblock.SetLandblockMods(fellowship);
+            landblock.SetLandblockMods(fellowship, dungeonName);
 
             CapstoneTeleport(player, landblock);
             return;
@@ -1903,52 +1903,72 @@ public class Landblock : IActor
         WorldManager.ThreadSafeTeleport(player, player.Sanctuary);
     }
 
-    private void SetLandblockMods(Fellowship fellowship)
+    private void SetLandblockMods(Fellowship fellowship, string dungeonName)
     {
         LandblockLootQualityMod = 0.0;
 
         var playerLeaderGuid = fellowship.FellowshipLeaderGuid;
 
+        // must be fellowship leader
         if (!fellowship.GetFellowshipMembers().TryGetValue(playerLeaderGuid, out var playerLeader))
         {
             return;
         }
 
-        var leaderLandblockModSpells = new List<PropertiesEnchantmentRegistry>();
-
-        foreach (var landblockMod in ActiveLandblockMods)
+        if (dungeonName is "Lugian Mines2" or "Beyond the Mines")
         {
-            leaderLandblockModSpells.Add(playerLeader.EnchantmentManager.GetEnchantment((uint)landblockMod.Value.SpellId));
-        }
+            var previousLandblock = LandblockManager.GetLandblock(GetPartOneDungeon(Id), false);
 
-        if (leaderLandblockModSpells.Count == 0)
-        {
-            return;
-        }
+            var previousLandblockMods = previousLandblock.LandblockMods;
+            var previousLandblockLootQuality = previousLandblock.LandblockLootQualityMod;
 
-        var distinctLandblockMoSpellsActive = leaderLandblockModSpells.Distinct();
-
-        foreach (var landblockModSpell in distinctLandblockMoSpellsActive)
-        {
-            if (landblockModSpell is null)
+            foreach (var kvp in previousLandblockMods)
             {
-                continue;
+                LandblockMods[kvp.Key] = kvp.Value;
             }
 
-            LandblockModsSpellToName.TryGetValue(landblockModSpell.SpellId, out var value);
+            LandblockLootQualityMod = previousLandblockLootQuality;
+        }
+        else
+        {
+            var leaderLandblockModSpells = new List<PropertiesEnchantmentRegistry>();
 
-            if (value is null)
+            foreach (var landblockMod in LandblockMods)
             {
-                continue;
+                leaderLandblockModSpells.Add(
+                    playerLeader.EnchantmentManager.GetEnchantment((uint)landblockMod.Value.SpellId));
             }
-            var modInfo = ActiveLandblockMods[value];
-            modInfo.Active = true;
 
-            ActiveLandblockMods[value] = modInfo;
+            if (leaderLandblockModSpells.Count == 0)
+            {
+                return;
+            }
 
-            LandblockLootQualityMod += ActiveLandblockMods[value].LootQualityBonus;
+            var distinctLandblockMoSpellsActive = leaderLandblockModSpells.Distinct();
 
-            playerLeader.EnchantmentManager.Dispel(landblockModSpell);
+            foreach (var landblockModSpell in distinctLandblockMoSpellsActive)
+            {
+                if (landblockModSpell is null)
+                {
+                    continue;
+                }
+
+                LandblockModsSpellToName.TryGetValue(landblockModSpell.SpellId, out var modName);
+
+                if (modName is null)
+                {
+                    continue;
+                }
+
+                var modInfo = LandblockMods[modName];
+                modInfo.Active = true;
+
+                LandblockMods[modName] = modInfo;
+
+                LandblockLootQualityMod += LandblockMods[modName].LootQualityBonus;
+
+                playerLeader.EnchantmentManager.Dispel(landblockModSpell);
+            }
         }
 
         foreach (var fellowshipMember in playerLeader.Fellowship.GetFellowshipMembers())
@@ -1958,7 +1978,7 @@ public class Landblock : IActor
                 ChatMessageType.Broadcast
             ));
 
-            foreach (var activeLandblockMod in ActiveLandblockMods)
+            foreach (var activeLandblockMod in LandblockMods)
             {
                 if (!activeLandblockMod.Value.Active)
                 {
@@ -1978,11 +1998,11 @@ public class Landblock : IActor
         }
     }
 
-    public Dictionary<string, (bool Active, int SpellId, double LootQualityBonus)> ActiveLandblockMods { get; private set; }
+    public Dictionary<string, (bool Active, int SpellId, double LootQualityBonus)> LandblockMods { get; private set; }
 
     private void SetActiveMods()
     {
-        ActiveLandblockMods = new Dictionary<string, (bool Active, int SpellId, double LootQualityBonus)>
+        LandblockMods = new Dictionary<string, (bool Active, int SpellId, double LootQualityBonus)>
         {
             { "Lethality 50%", (false, 6416, 0.05) },
             { "Lethality 100%", (false, 6417, 0.1) },
@@ -2116,6 +2136,23 @@ public class Landblock : IActor
         }
         return null;
     }
+
+    public static LandblockId GetPartOneDungeon(LandblockId dungeonId)
+    {
+        if (CapstoneDungeonLists("Lugian Mines2").Contains(dungeonId))
+        {
+            var index = CapstoneDungeonLists("Lugian Mines2").IndexOf(dungeonId);
+
+            return CapstoneDungeonLists("Lugian Mines")[index];
+        }
+        else
+        {
+            var index = CapstoneDungeonLists("Beyond the Mines").IndexOf(dungeonId);
+
+            return CapstoneDungeonLists("Mines of Despair")[index];
+        }
+    }
+
 
     public static readonly Dictionary<LandblockId, Position> CapstoneTeleportLocations = new()
     {

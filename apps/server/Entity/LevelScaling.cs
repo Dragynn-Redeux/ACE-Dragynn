@@ -14,16 +14,13 @@ public static class LevelScaling
      *
      * When level scaling is active, the following adjustments are made to the player and enemy:
      *  -During player attacks on the enemy:
-     *   -Player damage is scaled down based on monster average max health.
      *   -Player attack skill is scaled down.
-     *   -Player main attribute is scaled down for attribute mod calculations.
-     *   -Monster armor is scaled up.
-     *   -Monster ward is scaled up.
+     *   -Player damage is scaled down based on monster average max health.
+     *   -Monster armor/ward is scaled up.
      *  -During enemy attacks on the player
-     *   -Monster damage is scaled up based on player average max health.
      *   -Player defense skill is scaled down.
-     *   -Player armor is scaled down.
-     *   -Player ward is scaled down.
+     *   -Monster damage is scaled up based on player average max health.
+     *   -Player armor/ward is scaled down.
      *   -Player resistance is scaled down.
      *  -During player heals on other players:
      *   -Player heal amount is scaled down based on the target's level.
@@ -221,6 +218,8 @@ public static class LevelScaling
 
     public static float GetPlayerAttributeScalar(Creature player, Creature monster)
     {
+        return 1.0f; // TODO: determine if this is needed
+
         if (!CanScalePlayer(player, monster))
         {
             return 1.0f;

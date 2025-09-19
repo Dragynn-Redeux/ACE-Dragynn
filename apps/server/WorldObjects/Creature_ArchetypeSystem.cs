@@ -40,7 +40,8 @@ partial class Creature
         double physicality,
         double dexterity,
         double magic,
-        double intelligence
+        double intelligence,
+        double multiplier
     )
     {
         if (DebugArchetypeSystem)
@@ -55,6 +56,8 @@ partial class Creature
             // Martial Weapons Skill
             {
                 var newSkill = GetNewMeleeAttackSkill(tier, statWeight, physicality, dexterity);
+
+                newSkill = ApplyMultiplier(multiplier, newSkill);
 
                 var skillType = Skill.MartialWeapons;
 
@@ -71,6 +74,8 @@ partial class Creature
             {
                 var newSkill = GetNewUnarmedCombatSkill(tier, statWeight, physicality, dexterity);
 
+                newSkill = ApplyMultiplier(multiplier, newSkill);
+
                 var skillType = Skill.UnarmedCombat;
 
                 var propertiesSkill = new PropertiesSkill()
@@ -85,6 +90,8 @@ partial class Creature
             // Dagger Skill
             {
                 var newSkill = GetNewDaggerSkill(tier, statWeight, physicality, dexterity);
+
+                newSkill = ApplyMultiplier(multiplier, newSkill);
 
                 var skillType = Skill.Dagger;
 
@@ -101,6 +108,8 @@ partial class Creature
             {
                 var newSkill = GetNewStaffSkill(tier, statWeight, physicality, dexterity);
 
+                newSkill = ApplyMultiplier(multiplier, newSkill);
+
                 var skillType = Skill.Staff;
 
                 var propertiesSkill = new PropertiesSkill()
@@ -115,6 +124,8 @@ partial class Creature
             // Missile Attack Skill
             {
                 var newSkill = GetNewMissileAttackSkill(tier, statWeight, dexterity);
+
+                newSkill = ApplyMultiplier(multiplier, newSkill);
 
                 var skillType = Skill.Bow;
 
@@ -131,6 +142,8 @@ partial class Creature
             {
                 var newSkill = GetNewMissileAttackSkill(tier, statWeight, dexterity);
 
+                newSkill = ApplyMultiplier(multiplier, newSkill);
+
                 var skillType = Skill.ThrownWeapon;
 
                 var propertiesSkill = new PropertiesSkill()
@@ -145,6 +158,8 @@ partial class Creature
             // War Magic Skill
             {
                 var newSkill = GetNewWarMagicSkill(tier, statWeight, magic);
+
+                newSkill = ApplyMultiplier(multiplier, newSkill);
 
                 var skillType = Skill.WarMagic;
 
@@ -161,6 +176,8 @@ partial class Creature
             {
                 var newSkill = GetNewLifeMagicSkill(tier, statWeight, magic);
 
+                newSkill = ApplyMultiplier(multiplier, newSkill);
+
                 var skillType = Skill.LifeMagic;
 
                 var propertiesSkill = new PropertiesSkill()
@@ -175,6 +192,8 @@ partial class Creature
             // Physical Defense
             {
                 var newSkill = GetNewPhysicalDefenseSkill(tier, statWeight, physicality, dexterity);
+
+                newSkill = ApplyMultiplier(multiplier, newSkill);
 
                 var skillType = Skill.PhysicalDefense;
 
@@ -202,6 +221,8 @@ partial class Creature
             {
                 var newSkill = GetNewMagicDefenseSkill(tier, statWeight, magic);
 
+                newSkill = ApplyMultiplier(multiplier, newSkill);
+
                 var skillType = Skill.MagicDefense;
 
                 var propertiesSkill = new PropertiesSkill()
@@ -216,6 +237,8 @@ partial class Creature
             // Perception
             {
                 var newSkill = GetNewPerceptionSkill(tier, statWeight, intelligence);
+
+                newSkill = ApplyMultiplier(multiplier, newSkill);
 
                 var skillType = Skill.Perception;
 
@@ -232,6 +255,8 @@ partial class Creature
             {
                 var newSkill = GetNewDeceptionSkill(tier, statWeight, intelligence);
 
+                newSkill = ApplyMultiplier(multiplier, newSkill);
+
                 var skillType = Skill.Deception;
 
                 var propertiesSkill = new PropertiesSkill()
@@ -247,6 +272,8 @@ partial class Creature
             {
                 var newSkill = GetNewRunSkill(tier, statWeight, dexterity);
 
+                newSkill = ApplyMultiplier(multiplier, newSkill);
+
                 var skillType = Skill.Run;
 
                 var propertiesSkill = new PropertiesSkill()
@@ -258,6 +285,20 @@ partial class Creature
                 Skills[Skill.Run] = new CreatureSkill(this, skillType, propertiesSkill);
             }
         }
+    }
+
+    private static uint ApplyMultiplier(double multiplier, uint newSkill)
+    {
+        var multipliedSkill = newSkill * multiplier;
+
+        multipliedSkill = multipliedSkill switch
+        {
+            < uint.MinValue => uint.MinValue,
+            > uint.MaxValue => uint.MaxValue,
+            _ => Convert.ToUInt32(multipliedSkill)
+        };
+
+        return (uint)multipliedSkill;
     }
 
     private void SetVitals(
@@ -494,7 +535,7 @@ partial class Creature
             );
         }
 
-        var newSkill = tweakedSkill - (uint)skillFromAttributes;
+        var newSkill = tweakedSkill < skillFromAttributes ? 0 : tweakedSkill - (uint)skillFromAttributes;
 
         if (DebugArchetypeSystem)
         {
@@ -533,7 +574,7 @@ partial class Creature
             );
         }
 
-        var newSkill = tweakedSkill - (uint)skillFromAttributes;
+        var newSkill = tweakedSkill < skillFromAttributes ? 0 : tweakedSkill - (uint)skillFromAttributes;
 
         if (DebugArchetypeSystem)
         {
@@ -572,7 +613,7 @@ partial class Creature
             );
         }
 
-        var newSkill = tweakedSkill - (uint)skillFromAttributes;
+        var newSkill = tweakedSkill < skillFromAttributes ? 0 : tweakedSkill - (uint)skillFromAttributes;
 
         if (DebugArchetypeSystem)
         {
@@ -611,7 +652,7 @@ partial class Creature
             );
         }
 
-        var newSkill = tweakedSkill - (uint)skillFromAttributes;
+        var newSkill = tweakedSkill < skillFromAttributes ? 0 : tweakedSkill - (uint)skillFromAttributes;
 
         if (DebugArchetypeSystem)
         {
@@ -650,7 +691,7 @@ partial class Creature
             );
         }
 
-        var newSkill = tweakedSkill - (uint)skillFromAttributes;
+        var newSkill = tweakedSkill < skillFromAttributes ? 0 : tweakedSkill - (uint)skillFromAttributes;
 
         if (DebugArchetypeSystem)
         {
@@ -689,7 +730,7 @@ partial class Creature
             );
         }
 
-        var newSkill = tweakedSkill - (uint)skillFromAttributes;
+        var newSkill = tweakedSkill < skillFromAttributes ? 0 : tweakedSkill - (uint)skillFromAttributes;
 
         if (DebugArchetypeSystem)
         {
@@ -728,7 +769,7 @@ partial class Creature
             );
         }
 
-        var newSkill = tweakedSkill - (uint)skillFromAttributes;
+        var newSkill = tweakedSkill < skillFromAttributes ? 0 : tweakedSkill - (uint)skillFromAttributes;
 
         if (DebugArchetypeSystem)
         {
@@ -767,7 +808,7 @@ partial class Creature
             );
         }
 
-        var newSkill = tweakedSkill - (uint)skillFromAttributes;
+        var newSkill = tweakedSkill < skillFromAttributes ? 0 : tweakedSkill - (uint)skillFromAttributes;
 
         if (DebugArchetypeSystem)
         {
@@ -806,7 +847,7 @@ partial class Creature
             );
         }
 
-        var newSkill = tweakedSkill - (uint)skillFromAttributes;
+        var newSkill = tweakedSkill < skillFromAttributes ? 0 : tweakedSkill - (uint)skillFromAttributes;
 
         if (DebugArchetypeSystem)
         {
@@ -845,7 +886,7 @@ partial class Creature
             );
         }
 
-        var newSkill = tweakedSkill - (uint)skillFromAttributes;
+        var newSkill = tweakedSkill < skillFromAttributes ? 0 : tweakedSkill - (uint)skillFromAttributes;
 
         if (DebugArchetypeSystem)
         {
@@ -885,7 +926,7 @@ partial class Creature
             );
         }
 
-        var newSkill = tweakedSkill - (uint)skillFromAttributes;
+        var newSkill = tweakedSkill < skillFromAttributes ? 0 : tweakedSkill - (uint)skillFromAttributes;
 
         if (DebugArchetypeSystem)
         {
@@ -925,7 +966,7 @@ partial class Creature
             );
         }
 
-        var newSkill = tweakedSkill - (uint)skillFromAttributes;
+        var newSkill = tweakedSkill < skillFromAttributes ? 0 : tweakedSkill - (uint)skillFromAttributes;
 
         if (DebugArchetypeSystem)
         {
@@ -948,13 +989,12 @@ partial class Creature
         var multiplier = dexterity;
         var tweakedSkill = (uint)(target * multiplier);
 
-        var divisor = 1;
-        var skillFromAttributes = Quickness.Base / divisor;
+        var skillFromAttributes = Quickness.Base;
 
         if (skillFromAttributes > tweakedSkill)
         {
             var diff = (int)tweakedSkill - skillFromAttributes;
-            var attributeAdjustment = diff * divisor;
+            var attributeAdjustment = diff;
             _log.Warning(
                 "Creature.SetSkills() - Archetype system is attempting to set the base Run skill to {TweakedSkill} for {Name} ({WeenieClassId}) (defaulting to 1). Quickness attribute should be lowered by {AttributeAdjustment}.",
                 diff,
@@ -964,7 +1004,7 @@ partial class Creature
             );
         }
 
-        var newSkill = tweakedSkill - (uint)skillFromAttributes;
+        var newSkill = tweakedSkill < skillFromAttributes ? 0 : tweakedSkill - skillFromAttributes;
 
         if (DebugArchetypeSystem)
         {
@@ -1077,13 +1117,12 @@ partial class Creature
         var multiplier = (physicality + dexterity) / 2;
         var tweakedVital = (uint)(target * multiplier);
 
-        var divisor = 1;
-        var vitalFromAttributes = Endurance.Base / divisor;
+        var vitalFromAttributes = Endurance.Base;
 
         if (vitalFromAttributes > tweakedVital)
         {
             var diff = (int)tweakedVital - vitalFromAttributes;
-            var attributeAdjustment = diff * divisor;
+            var attributeAdjustment = diff;
             _log.Warning(
                 "Creature.SetSkills() - Archetype system is attempting to set the base Stamina skill to {TweakedSkill} for {Name} ({WeenieClassId}) (defaulting to 1). Endurance attribute should be lowered by {AttributeAdjustment}.",
                 diff,
@@ -1136,13 +1175,12 @@ partial class Creature
         var multiplier = magic;
         var tweakedVital = (uint)(target * multiplier);
 
-        var divisor = 1;
-        var vitalFromAttributes = Self.Base / divisor;
+        var vitalFromAttributes = Self.Base;
 
         if (vitalFromAttributes > tweakedVital)
         {
             var diff = (int)tweakedVital - vitalFromAttributes;
-            var attributeAdjustment = diff * divisor;
+            var attributeAdjustment = diff;
             _log.Warning(
                 "Creature.SetSkills() - Archetype system is attempting to set the base Mana skill to {TweakedSkill} for {Name} ({WeenieClassId}) (defaulting to 1). Self attribute should be lowered by {AttributeAdjustment}.",
                 diff,
@@ -1370,16 +1408,16 @@ partial class Creature
 
         var landblockLethalityMod = true switch
         {
-            _ when CurrentLandblock.ActiveLandblockMods["Lethality 500%"].Active => 5.0,
-            _ when CurrentLandblock.ActiveLandblockMods["Lethality 450%"].Active => 4.5,
-            _ when CurrentLandblock.ActiveLandblockMods["Lethality 400%"].Active => 4.0,
-            _ when CurrentLandblock.ActiveLandblockMods["Lethality 350%"].Active => 3.5,
-            _ when CurrentLandblock.ActiveLandblockMods["Lethality 300%"].Active => 3.0,
-            _ when CurrentLandblock.ActiveLandblockMods["Lethality 250%"].Active => 2.5,
-            _ when CurrentLandblock.ActiveLandblockMods["Lethality 200%"].Active => 2.0,
-            _ when CurrentLandblock.ActiveLandblockMods["Lethality 150%"].Active => 1.5,
-            _ when CurrentLandblock.ActiveLandblockMods["Lethality 100%"].Active => 1.0,
-            _ when CurrentLandblock.ActiveLandblockMods["Lethality 50%"].Active => 0.5,
+            _ when CurrentLandblock.LandblockMods["Lethality 500%"].Active => 5.0,
+            _ when CurrentLandblock.LandblockMods["Lethality 450%"].Active => 4.5,
+            _ when CurrentLandblock.LandblockMods["Lethality 400%"].Active => 4.0,
+            _ when CurrentLandblock.LandblockMods["Lethality 350%"].Active => 3.5,
+            _ when CurrentLandblock.LandblockMods["Lethality 300%"].Active => 3.0,
+            _ when CurrentLandblock.LandblockMods["Lethality 250%"].Active => 2.5,
+            _ when CurrentLandblock.LandblockMods["Lethality 200%"].Active => 2.0,
+            _ when CurrentLandblock.LandblockMods["Lethality 150%"].Active => 1.5,
+            _ when CurrentLandblock.LandblockMods["Lethality 100%"].Active => 1.0,
+            _ when CurrentLandblock.LandblockMods["Lethality 50%"].Active => 0.5,
             _ => 0.0
         };
 
@@ -1393,7 +1431,8 @@ partial class Creature
             ArchetypePhysicality ?? 1.0,
             ArchetypeDexterity ?? 1.0,
             ArchetypeMagic ?? 1.0,
-            ArchetypeIntelligence ?? 1.0);
+            ArchetypeIntelligence ?? 1.0,
+            1.0);
 
         SetDamageArmorWard(_tier,
             _statWeight,
@@ -1417,7 +1456,7 @@ partial class Creature
             return;
         }
 
-        if (!CurrentLandblock.ActiveLandblockMods["Titans"].Active)
+        if (!CurrentLandblock.LandblockMods["Titans"].Active)
         {
             return;
         }
@@ -1444,7 +1483,12 @@ partial class Creature
             return;
         }
 
-        if (!CurrentLandblock.ActiveLandblockMods["Skilled"].Active)
+        if (UseArchetypeSystem is not true)
+        {
+            return;
+        }
+
+        if (!CurrentLandblock.LandblockMods["Skilled"].Active)
         {
             return;
         }
@@ -1455,6 +1499,7 @@ partial class Creature
             ArchetypePhysicality ?? 1.0,
             ArchetypeDexterity ?? 1.0,
             ArchetypeMagic ?? 1.0,
-            ArchetypeIntelligence ?? 1.0);
+            ArchetypeIntelligence ?? 1.0,
+            1.1);
     }
 }

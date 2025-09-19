@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
+using ACE.Common;
 using ACE.Entity.Enum;
 using ACE.Entity.Enum.Properties;
 using ACE.Server.WorldObjects.Entity;
@@ -25,6 +26,19 @@ partial class Creature
         Mana.Current = Mana.MaxValue;
 
         DamageHistory.OnHeal(missingHealth);
+    }
+
+    public double LastHotspotVitalResetTime;
+
+    public void RegainHalfOfMissingHealth()
+    {
+        LastHotspotVitalResetTime = Time.GetUnixTime();
+
+        var missingHealth = Health.Missing;
+        var healAmount = (uint)(missingHealth * 0.5);
+
+        Health.Current += healAmount;
+        DamageHistory.OnHeal(healAmount);
     }
 
     public CreatureVital GetCreatureVital(PropertyAttribute2nd vital)

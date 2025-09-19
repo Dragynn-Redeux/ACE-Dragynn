@@ -242,7 +242,7 @@ public partial class Creature : Container
                 var intelligence = ArchetypeIntelligence ?? 1.0;
                 var lethality = ArchetypeLethality ?? 1.0;
 
-                SetSkills(tier, statWeight, toughness, physicality, dexterity, magic, intelligence);
+                SetSkills(tier, statWeight, toughness, physicality, dexterity, magic, intelligence, 1.0);
 
                 SetVitals(tier, statWeight, toughness, physicality, dexterity, magic);
 

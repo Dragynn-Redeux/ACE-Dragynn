@@ -68,8 +68,22 @@ public class Hotspot : WorldObject
 
         if (AffectsOnlyAis && creature is {ResetFromHotspot: true})
         {
-            creature.SetMaxVitals();
+            if (Time.GetUnixTime() < creature.LastHotspotVitalResetTime + 5.0)
+            {
+                return;
+            }
+
+            creature.RegainHalfOfMissingHealth();
             creature.MoveToHome();
+
+            creature.EnqueueBroadcast(
+                new GameMessageSystemChat(
+                    $"{creature.Name} retreats to safety!",
+                    ChatMessageType.Broadcast
+                ),
+                LocalBroadcastRange,
+                ChatMessageType.Broadcast
+            );
         }
 
         if (!Creatures.Contains(creature.Guid))
