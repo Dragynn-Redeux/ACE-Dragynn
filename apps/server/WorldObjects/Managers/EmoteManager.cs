@@ -276,79 +276,8 @@ public class EmoteManager
 
                 if (player != null)
                 {
-                    var reward = true;
-
-                    if (WorldObject.CacheLog != null)
-                    {
-                        var accountIds = WorldObject.CacheLog.Split('/');
-
-                        foreach (var accountId in accountIds)
-                        {
-                            if (uint.TryParse(accountId, out var account))
-                            {
-                                if (account == player.Account.AccountId)
-                                {
-                                    reward = false;
-                                }
-                            }
-                        }
-                        if (reward == false)
-                        {
-                            player.Session.Network.EnqueueSend(
-                                new GameMessageSystemChat(
-                                    $"You have already received a reward from this cache.",
-                                    ChatMessageType.Broadcast
-                                )
-                            );
-                            ExecuteEmoteSet(
-                                reward ? EmoteCategory.TestSuccess : EmoteCategory.TestFailure,
-                                emote.Message,
-                                targetObject,
-                                true
-                            );
-                            break;
-                        }
-                    }
-                    if (player.GetFreeInventorySlots() < 5)
-                    {
-                        reward = false;
-                        player.Session.Network.EnqueueSend(
-                            new GameMessageSystemChat(
-                                $"You must have at least 5 free inventory slots in your main pack to receive a reward.",
-                                ChatMessageType.Broadcast
-                            )
-                        );
-                        ExecuteEmoteSet(
-                            reward ? EmoteCategory.TestSuccess : EmoteCategory.TestFailure,
-                            emote.Message,
-                            targetObject,
-                            true
-                        );
-                        break;
-                    }
-
                     AwardCapstoneItems(player, emote.Amount ?? 2);
                     AwardCapstoneTradeNotes(player, emote.Amount ?? 2);
-
-                    if (WorldObject.CacheLog == null)
-                    {
-                        WorldObject.CacheLog = $"{player.Account.AccountId}/";
-                    }
-                    else
-                    {
-                        WorldObject.CacheLog += $"{player.Account.AccountId}/";
-                    }
-
-                    player.QuestManager.Stamp(emote.Message);
-
-                    player.SaveBiotaToDatabase();
-
-                    ExecuteEmoteSet(
-                        reward ? EmoteCategory.TestSuccess : EmoteCategory.TestFailure,
-                        emote.Message,
-                        targetObject,
-                        true
-                    );
                 }
 
                 break;
@@ -358,6 +287,9 @@ public class EmoteManager
                 if (WorldObject != null)
                 {
                     var spell = new Spell((uint)emote.SpellId);
+                    var damageMultiplier = emote.Percent ?? 1.0;
+                    var tryResist = emote.Message != "noresist";
+
                     if (spell.NotFound)
                     {
                         _log.Error(
@@ -380,7 +312,16 @@ public class EmoteManager
                         creature,
                         () =>
                         {
-                            creature.TryCastSpell_WithRedirects(spell, spellTarget, creature);
+                            creature.TryCastSpell_WithRedirects(
+                                spell,
+                                spellTarget,
+                                creature,
+                                null,
+                                false,
+                                false,
+                                tryResist,
+                                damageMultiplier);
+
                             creature.PostCastMotion();
                         }
                     );
@@ -393,27 +334,23 @@ public class EmoteManager
                 if (WorldObject != null)
                 {
                     var spell = new Spell((uint)emote.SpellId);
+                    var damageMultiplier = emote.Percent ?? 1.0;
+                    var tryResist = emote.Message != "noresist";
 
                     if (!spell.NotFound)
                     {
                         var spellTarget = GetSpellTarget(spell, targetObject);
 
-                        if (emote.Message != null && emote.Message == "noresist")
-                        {
-                            WorldObject.TryCastSpell_WithRedirects(
-                                spell,
-                                spellTarget,
-                                WorldObject,
-                                null,
-                                false,
-                                false,
-                                false
-                            );
-                        }
-                        else
-                        {
-                            WorldObject.TryCastSpell_WithRedirects(spell, spellTarget, WorldObject);
-                        }
+                        WorldObject.TryCastSpell_WithRedirects(
+                            spell,
+                            spellTarget,
+                            WorldObject,
+                            null,
+                            false,
+                            false,
+                            tryResist,
+                            damageMultiplier
+                        );
                     }
                 }
                 break;
@@ -2123,6 +2060,19 @@ public class EmoteManager
                     }
 
                     questTarget.QuestManager.Stamp(emote.Message);
+
+                    if (CapstoneCompletionQuests.Contains(emote.Message))
+                    {
+                        var capstoneDifficulty = Math.Round(questTarget.CurrentLandblock.LandblockLootQualityMod * 100);
+                        var fellowshipSize = 1;
+
+                        if (questTarget is Player { Fellowship: not null } playerInFellowship)
+                        {
+                            fellowshipSize = playerInFellowship.Fellowship.GetFellowshipMembers().Count;
+                        }
+
+                        questTarget.QuestManager.Stamp(emote.Message+"_size:"+fellowshipSize+"_diff:"+capstoneDifficulty+"%");
+                    }
                 }
                 break;
 
@@ -3390,16 +3340,18 @@ public class EmoteManager
     /// <summary>
     /// Trade note awards for completing a capstone dungeon.<br /><br />
     /// Type Odds: 40% = I, 30% = V, 20% = X, 9% = L, 1% = C<br />
-    /// Higher level players have improved luck, up to level 50.<br />
+    /// Capstone Completions and Dungeon Mods raise the minimum roll.<br />
     /// </summary>
     private void AwardCapstoneTradeNotes(Player player, int amount)
     {
-        var characterLevel = Math.Min(player.Level ?? 1, 50);
+        var capstoneModifier = GetCapstoneModifier(player.CurrentLandblock);
+        var capstonesCompleted = GetCapstonesCompleted(player);
+        var minimumRoll = (capstonesCompleted * 2) + (capstoneModifier * 100);
 
         for (var i = 0; i < amount; i++)
         {
             var tradeNote = 2621u; // I note
-            switch (ThreadSafeRandom.Next(characterLevel, 100))
+            switch (ThreadSafeRandom.Next((int)minimumRoll, 100))
             {
                 case <= 40:
                     break;
@@ -3424,26 +3376,38 @@ public class EmoteManager
     /// <summary>
     /// Item awards for completing a capstone dungeon.<br /><br />
     /// Amount Odds:  40% = 1, 30% = 2, 20% = 3, 9% = 4, 1% = 5<br />
-    /// Higher level players have improved luck, up to level 50.<br />
+    /// Capstone Completions and Dungeon Mods raise the minimum roll.<br />
     /// </summary>
     private void AwardCapstoneItems(Player player, int numRewards)
     {
         var itemPool = new List<(uint,int)>
         {
-            (1054000,2), // Pearl of Transference
+            (1054000,1), // Pearl of Transference
+            (1054000,1), // Pearl of Transference
+            (1054000,1), // Pearl of Transference
+            (1054000,1), // Pearl of Transference
+            (1054000,1), // Pearl of Transference
             (1054005,10), // Pearl of Spell Purging
+            (1054005,10), // Pearl of Spell Purging
+            (1054005,10), // Pearl of Spell Purging
+            (1054005,10), // Pearl of Spell Purging
+            (1054005,10), // Pearl of Spell Purging
+            (1054004,1),  // Upgrade Kit
+            (1054004,1),  // Upgrade Kit
+            (1054004,1),  // Upgrade Kit
+            (1054004,1),  // Upgrade Kit
+            (1054004,1),  // Upgrade Kit
             (1054002,1), // Sanguine Crystal
             (1054003,1), // Scourging Stone
-            (1053972,1), // Tailoring Kit
-            (1054004,2)  // Upgrade Kit
+            (1053972,1) // Tailoring Kit
         };
 
-        //numRewards *= GetCapstoneModifier(); // TODO: allow this to scale up when a fellowship has difficulty modifiers set
-
-        var characterLevel = Math.Min(player.Level ?? 1, 50);
+        var capstoneModifier = GetCapstoneModifier(player.CurrentLandblock);
+        var capstonesCompleted = GetCapstonesCompleted(player);
+        var minimumRoll = (capstonesCompleted * 2) + (capstoneModifier * 100);
 
         var amount = 1;
-        switch (ThreadSafeRandom.Next(characterLevel, 100))
+        switch (ThreadSafeRandom.Next((int)minimumRoll, 100))
         {
             case <= 40:
                 break;
@@ -3469,7 +3433,53 @@ public class EmoteManager
 
             var amountToGive = amount * randomItem.Item2;
 
+            // max 1 amount for Sanguine/Scouring/Tailor
+            if (randomItem.Item1 is 1054002 or 1054003 or 1054972)
+            {
+                amountToGive = 1;
+            }
+
             player.GiveFromEmote(WorldObject, randomItem.Item1, amountToGive);
         }
     }
+
+    private static double GetCapstoneModifier(Landblock landblock)
+    {
+        return landblock?.LandblockLootQualityMod ?? 1.0;
+    }
+
+    private int GetCapstonesCompleted(Player player)
+    {
+        var capstonesCompleted = 0;
+        var questManager = player.QuestManager;
+
+        foreach (var capstoneCompletionQuest in CapstoneCompletionQuests)
+        {
+            if (questManager.HasQuest(capstoneCompletionQuest))
+            {
+                capstonesCompleted++;
+            }
+        }
+
+        return capstonesCompleted;
+    }
+
+    private List<string> CapstoneCompletionQuests =
+    [
+        "EmpyreanGarrisonCompleted",
+        "FolthidCellarCompleted",
+        "GlendenWoodDungeonCompleted",
+        "GredalineConsulateCompleted",
+        "GreenMireGraveCompleted",
+        "GrievousVaultCompleted",
+        "HallsOfTheHelmCompleted",
+        "LugianMinesCompleted",
+        "MageAcademyCompleted",
+        "ManseOfPanderlouCompleted",
+        "MinesOfColierCompleted",
+        "MinesOfDespairCompleted",
+        "MountainFortressCompleted",
+        "SandShallowCompleted",
+        "SmugglersHideawayCompleted"
+    ];
 }

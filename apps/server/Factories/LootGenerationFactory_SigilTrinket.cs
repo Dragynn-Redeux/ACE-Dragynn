@@ -244,7 +244,7 @@ public static partial class LootGenerationFactory
         switch (sigilTrinket.SigilTrinketType)
         {
             case (int)SigilTrinketType.Compass:
-                sigilTrinket.SigilTrinketHealthReserved = GetReservedVital(profile);
+                sigilTrinket.SigilTrinketHealthReserved = GetReservedVital(profile, false, true);
                 sigilTrinket.WieldSkillType = wieldSkillRng == 0 ? (int)Skill.Shield : (int)Skill.TwoHandedCombat;
 
                 if (sigilTrinket.WieldSkillType == (int)Skill.Shield)
@@ -261,7 +261,8 @@ public static partial class LootGenerationFactory
                 }
                 break;
             case (int)SigilTrinketType.PuzzleBox:
-                sigilTrinket.SigilTrinketStaminaReserved = GetReservedVital(profile);
+                sigilTrinket.SigilTrinketHealthReserved = GetReservedVital(profile, true, true);
+                sigilTrinket.SigilTrinketStaminaReserved = GetReservedVital(profile, true);
                 sigilTrinket.WieldSkillType = wieldSkillRng == 0 ? (int)Skill.DualWield : (int)Skill.Thievery;
 
                 if (sigilTrinket.WieldSkillType == (int)Skill.DualWield)
@@ -278,7 +279,8 @@ public static partial class LootGenerationFactory
                 }
                 break;
             case (int)SigilTrinketType.Scarab:
-                sigilTrinket.SigilTrinketManaReserved = GetReservedVital(profile);
+                sigilTrinket.SigilTrinketHealthReserved = GetReservedVital(profile, true, true);
+                sigilTrinket.SigilTrinketManaReserved = GetReservedVital(profile, true);
                 sigilTrinket.WieldSkillType = wieldSkillRng == 0 ? (int)Skill.LifeMagic : (int)Skill.WarMagic;
 
                 if (sigilTrinket.WieldSkillType == (int)Skill.LifeMagic)
@@ -295,16 +297,14 @@ public static partial class LootGenerationFactory
                 }
                 break;
             case (int)SigilTrinketType.PocketWatch:
-                sigilTrinket.SigilTrinketHealthReserved = GetReservedVital(profile, true);
-                sigilTrinket.SigilTrinketStaminaReserved = GetReservedVital(profile, true);
+                sigilTrinket.SigilTrinketStaminaReserved = GetReservedVital(profile);
                 sigilTrinket.WieldSkillType = (int)Skill.PhysicalDefense;
                 sigilTrinket.SigilTrinketEffectId = ThreadSafeRandom.Next(0, SigilTrinket.MaxPhysicalDefenseEffectId);
 
                 SetPhysicalDefensePocketWatchStats(profile, sigilTrinket);
                 break;
             case (int)SigilTrinketType.Top:
-                sigilTrinket.SigilTrinketHealthReserved = GetReservedVital(profile, true);
-                sigilTrinket.SigilTrinketManaReserved = GetReservedVital(profile, true);
+                sigilTrinket.SigilTrinketManaReserved = GetReservedVital(profile);
                 sigilTrinket.WieldSkillType = (int)Skill.MagicDefense;
                 sigilTrinket.SigilTrinketEffectId = ThreadSafeRandom.Next(0, SigilTrinket.MaxMagicDefenseEffectId);
 

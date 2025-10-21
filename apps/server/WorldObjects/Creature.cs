@@ -631,6 +631,38 @@ public partial class Creature : Container
         return sortedTargets;
     }
 
+    public List<Creature> GetNearbyPlayers(double distance)
+    {
+        var visibleTargets = new List<Creature>();
+
+        foreach (var obj in PhysicsObj.ObjMaint.GetVisibleObjects(PhysicsObj.CurCell))
+        {
+            var creature = obj.WeenieObj.WorldObject as Creature;
+
+            if (creature is null
+                || creature.IsMonster
+                || GetDistance(creature) > distance
+                || creature.WeenieClassId is 1020001
+                || creature.Visibility)
+            {
+                continue;
+            }
+
+            visibleTargets.Add(creature);
+        }
+
+        var nearestTargets = BuildTargetDistance(visibleTargets);
+
+        var sortedTargets = new List<Creature>();
+
+        foreach (var target in nearestTargets)
+        {
+            sortedTargets.Add(target.Target);
+        }
+
+        return sortedTargets;
+    }
+
     public int GetCreatureAvgTierHealth()
     {
 

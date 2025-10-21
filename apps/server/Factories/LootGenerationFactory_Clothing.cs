@@ -255,7 +255,7 @@ public static partial class LootGenerationFactory
         var armorSlots = wo.ArmorSlots ?? 1;
 
         // Get Armor/Ward Level
-        var baseWardLevel = wo.ArmorWeightClass == (int)ArmorWeightClass.Cloth ? 10 : 7;
+        var baseWardLevel = wo.ArmorWeightClass == (int)ArmorWeightClass.Cloth ? 7 : 5;
 
         switch (wo.ArmorStyle)
         {
@@ -263,7 +263,7 @@ public static partial class LootGenerationFactory
             case (int)ArmorStyle.Chiran:
             case (int)ArmorStyle.OlthoiAmuli:
                 baseArmorLevel = 80;
-                baseWardLevel = 9;
+                baseWardLevel = 6;
                 break;
             case (int)ArmorStyle.Leather:
             case (int)ArmorStyle.Yoroi:
@@ -573,14 +573,30 @@ public static partial class LootGenerationFactory
 
         var baseMod = wo.GetProperty(prop) ?? 0;
 
-        // Let's roll a value between -0.75 and 0.5, with lower chances of rolling a higher value. We will add this value to the base ArmorMod.
-        // If base ArmorMod is 1, the final mod will range from 0.25 (poor) to 1.5 (above average).
-        var roll = ThreadSafeRandom.Next(-1.25f, 1.0f);
-        roll *= Math.Abs(roll);
-        roll *= 0.5f;
-        roll = Math.Max(roll, -0.75f);
+        // Target range for armor that has 1.0 base protection: 0.4 to 1.6. Rare chance for -0.05 or +0.05.
+        // Loot Quality Mod contributes.
+        var minimumRoll = 0.0f;
+        if (profile is not null)
+        {
+            minimumRoll = (float)(1 - Math.Exp(-1 * profile.LootQualityMod));
+        }
 
-        var newMod = (double)baseMod + roll;
+        var roll = ThreadSafeRandom.Next(minimumRoll, 1.2f);
+        roll -= 0.6;
+
+        // rare chance for outliers
+        var outlierRoll = ThreadSafeRandom.Next(1, 10);
+        switch (outlierRoll)
+        {
+            case 1:
+                roll -= 0.05;
+                break;
+            case 10:
+                roll += 0.05;
+                break;
+        }
+
+        var newMod = baseMod + roll;
 
         wo.SetProperty(prop, newMod);
 
@@ -1112,41 +1128,52 @@ public static partial class LootGenerationFactory
             case (int)ArmorStyle.Amuli:
             case (int)ArmorStyle.Chiran:
             case (int)ArmorStyle.OlthoiAmuli:
-                return 0.02f;
+                mod = 0.02f;
+                break;
             case (int)ArmorStyle.StuddedLeather:
             case (int)ArmorStyle.Koujia:
             case (int)ArmorStyle.OlthoiKoujia:
-                return 0.02f;
+                mod = 0.02f;
+                break;
             case (int)ArmorStyle.Chainmail:
             case (int)ArmorStyle.Scalemail:
             case (int)ArmorStyle.Nariyid:
-                return 0.03f;
+                mod = 0.03f;
+                break;
             case (int)ArmorStyle.Platemail:
             case (int)ArmorStyle.Celdon:
             case (int)ArmorStyle.OlthoiCeldon:
-                return 0.04f;
+                mod = 0.04f;
+                break;
             case (int)ArmorStyle.Covenant:
             case (int)ArmorStyle.OlthoiArmor:
-                return 0.05f;
+                mod = 0.05f;
+                break;
         }
 
         switch ((int)wo.WeenieClassId)
         {
             case 44: // Buckler
-                return 0.05f;
+                mod = 0.05f;
+                break;
             case 1050111: // Small Kite Shield
             case 1050112: // Small Round Shield
-                 return 0.05f;
+                mod = 0.05f;
+                break;
             case 91: // Kite Shield
             case 93: // Round Shield
-                return 0.1f;
+                mod = 0.1f;
+                break;
             case 92: // Large Kite Shield
             case 94: // Large Round Shield
-                return 0.15f;
+                mod = 0.15f;
+                break;
             case 95: // Tower Shield
-                return 0.2f;
+                mod = 0.2f;
+                break;
             case 21158: // Covenant Shield
-                return 0.25f;
+                mod = 0.25f;
+                break;
         }
 
         return mod;

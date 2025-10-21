@@ -1928,6 +1928,8 @@ public class Landblock : IActor
             }
 
             LandblockLootQualityMod = previousLandblockLootQuality;
+
+            return;
         }
         else
         {
@@ -2398,5 +2400,23 @@ public class Landblock : IActor
                 }
             }
         }
+    }
+
+    public double GetLandblockLethalityMod()
+    {
+        return true switch
+        {
+            _ when LandblockMods["Lethality 500%"].Active => 5.0,
+            _ when LandblockMods["Lethality 450%"].Active => 4.5,
+            _ when LandblockMods["Lethality 400%"].Active => 4.0,
+            _ when LandblockMods["Lethality 350%"].Active => 3.5,
+            _ when LandblockMods["Lethality 300%"].Active => 3.0,
+            _ when LandblockMods["Lethality 250%"].Active => 2.5,
+            _ when LandblockMods["Lethality 200%"].Active => 2.0,
+            _ when LandblockMods["Lethality 150%"].Active => 1.5,
+            _ when LandblockMods["Lethality 100%"].Active => 1.0,
+            _ when LandblockMods["Lethality 50%"].Active => 0.5,
+            _ => 0.0
+        };
     }
 }

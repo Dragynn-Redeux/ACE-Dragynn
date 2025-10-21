@@ -1180,6 +1180,12 @@ partial class Player
                     var fellows = GetFellowshipTargets();
                     foreach (var fellow in fellows)
                     {
+                        // Fellowship spells do not affect the caster
+                        if (fellow == this)
+                        {
+                            continue;
+                        }
+
                         CreatePlayerSpell(fellow, spell, isWeaponSpell);
                     }
                 }

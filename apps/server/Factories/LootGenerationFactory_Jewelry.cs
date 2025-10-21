@@ -117,9 +117,9 @@ public static partial class LootGenerationFactory
         var qualityMod = td.LootQualityMod != 0.0f ? td.LootQualityMod : 0.0f;
 
         // Roll Ward
-        var minWard = GetMaxValueOfTier(tier);
+        var minWard = GetMaxWardOfTier(tier);
         wo.WardLevel = (int)(minWard * GetDiminishingRoll(td) + minWard);
-        var maxWardRollPercentile = (float)wo.WardLevel / (GetMaxValueOfTier(8));
+        var maxWardRollPercentile = (float)wo.WardLevel / (GetMaxWardOfTier(8));
 
         // Necklaces
         if (jewelryType == EquipMask.NeckWear)

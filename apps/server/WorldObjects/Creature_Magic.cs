@@ -143,8 +143,9 @@ partial class Creature
 
         const float maxManaReduction = 0.5f;
 
-        var manaConMod = SkillCheck.GetSkillChance(manaConv, difficulty);
-        var reductionRoll = maxManaReduction * ThreadSafeRandom.Next(0.0f, (float)manaConMod);
+        var manaConModCeiling = SkillCheck.GetSkillChance(manaConv, difficulty);
+        var manaConModFloor = manaConModCeiling * 0.5;
+        var reductionRoll = maxManaReduction * ThreadSafeRandom.Next((float)manaConModFloor, (float)manaConModCeiling);
         var savedMana = (uint)Math.Round(manaCost * reductionRoll);
 
         manaCost -= savedMana;

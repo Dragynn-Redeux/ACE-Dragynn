@@ -2786,31 +2786,34 @@ public static partial class LootGenerationFactory
 
         var roll = (float)ThreadSafeRandom.Next(minimumRoll, 1.0f);
 
+        roll *= roll;
+
+        //Console.WriteLine($"GetDiminishingRoll - LQ: {lootQualityMod}, minRoll: {minimumRoll}, roll: {roll}");
+
         return roll;
     }
 
-    private static int GetMaxValueOfTier(int tier)
+    private static int GetMaxWardOfTier(int tier)
     {
         switch (tier)
         {
             case 1:
-                return 10;
             case 2:
-                return 20;
+                return 7;
             case 3:
-                return 30;
+                return 14;
             case 4:
-                return 40;
+                return 21;
             case 5:
-                return 50;
+                return 28;
             case 6:
-                return 75;
+                return 35;
             case 7:
-                return 100;
+                return 50;
             case 8:
-                return 126;
+                return 75;
             default:
-                return 10;
+                return 7;
         }
     }
 

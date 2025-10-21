@@ -325,6 +325,13 @@ public class DamageEvent
 
         if (attackRoll > GetEvadeChance(attacker, defender))
         {
+            // If playerDefender has Phalanx active, 50% chance to convert a full hit into a partial hit.
+            if (playerDefender is { PhalanxIsActive: true } && ThreadSafeRandom.Next(0.0f, 1.0f) > 0.5f)
+            {
+                _evasionMod = 0.5f;
+                PartialEvasion = PartialEvasion.Some;
+            }
+
             return;
         }
 
@@ -355,6 +362,15 @@ public class DamageEvent
                 Evaded = false;
                 break;
             default:
+                // If playerDefender has Phalanx active, 50% chance to convert a full hit into a partial hit.
+                if (playerDefender is { PhalanxIsActive: true } && ThreadSafeRandom.Next(0.1f, 1.0f) > 0.5f)
+                {
+                    _evasionMod = 0.5f;
+                    PartialEvasion = PartialEvasion.Some;
+                    Evaded = false;
+                    break;
+                }
+
                 _evasionMod = 1.0f;
                 PartialEvasion = PartialEvasion.None;
                 Evaded = false;
@@ -436,12 +452,6 @@ public class DamageEvent
             return;
         }
 
-        if (playerDefender is { PhalanxIsActive: true } && PartialEvasion is PartialEvasion.Some)
-        {
-            Blocked = true;
-            return;
-        }
-
         var effectiveAngle = 180.0f;
         effectiveAngle += GetSpecShieldEffectiveAngleBonus(playerDefender);
 
@@ -452,18 +462,34 @@ public class DamageEvent
             return;
         }
 
-        // base block chance ranges from 5 to 10% based on effective shield level vs effective attack skill
+        // If playerDefender has Phalanx active, 50% chance to convert partial hits into blocks/parries.
+        if (playerDefender is { PhalanxIsActive: true }
+            && PartialEvasion == PartialEvasion.Some
+            && ThreadSafeRandom.Next(0.0f, 1.0f) > 0.5f)
+        {
+            Blocked = true;
+            return;
+        }
+
+        // base block/parry chance is 5%
+        // Blocks (shields) can have up to +5% additional base chance, depending on Shield Level vs Attacker Skill
+        // Parry base chance is always 5%
         const float minBlockChance = 0.05f;
+
         var blockChanceShieldBonus = GetBlockChanceShieldLevelBonus(defender, (int)defender.GetSkillModifiedShieldLevel((equippedShield.ArmorLevel ?? 1)));
         var baseBlockChance = minBlockChance * blockChanceShieldBonus;
 
         // other bonuses are additive then multiplied against base block chance
+        // Spec Phys Def = up to 50%, Jewels = 10% + ratings, Riposte = 100%
         var specPhysicalDefenseBlockChanceBonus = GetSpecPhysicalDefenseBlockChanceBonus();
         var jewelBlockChanceBonus = Jewel.GetJewelEffectMod(playerDefender, PropertyInt.GearBlock);
+        var riposteBlockChanceBonus = 0.0f;
+        if (playerDefender is { RiposteIsActive: true })
+        {
+            riposteBlockChanceBonus = 1.0f;
+        }
 
-        var blockChance = baseBlockChance * (1.0f + specPhysicalDefenseBlockChanceBonus + jewelBlockChanceBonus);
-        var parryActivatedBonus = playerDefender is { RiposteIsActive: true } ? 0.25f : 0.0f;
-        blockChance += parryActivatedBonus;
+        var blockChance = baseBlockChance * (1.0f + specPhysicalDefenseBlockChanceBonus + jewelBlockChanceBonus + riposteBlockChanceBonus);
 
         if ((ThreadSafeRandom.Next(0f, 1f) > blockChance))
         {
@@ -508,10 +534,14 @@ public class DamageEvent
 
         var parryMod = SkillCheck.GetSkillChance((uint)(parrySkillUsed * 1.5), EffectiveAttackSkill);
 
-        // parry chance is 10% * parryMod skillcheck
-        var baseParryChance = 0.1f * parryMod;
-        var parryActivatedBonus = playerDefender is { RiposteIsActive: true } ? 0.25f : 0.0f;
-        var parryChance = baseParryChance + parryActivatedBonus;
+        // parry chance is up to 10%, based on Two-hand or Dual-wield skill levels vs Attack Skill
+        var maxBaseParryChance = 0.1f * parryMod;
+
+        // other bonuses are additive then multiplied against base parry chance
+        // Spec Phys Def = up to 50%, Riposte = 100%
+        var specPhysicalDefenseParryChanceBonus = GetSpecPhysicalDefenseBlockChanceBonus();
+        var riposteActivatedBonus = playerDefender is { RiposteIsActive: true } ? 1.0f : 0.0f;
+        var parryChance = maxBaseParryChance * (1.0 + specPhysicalDefenseParryChanceBonus + riposteActivatedBonus);
 
         if ((ThreadSafeRandom.Next(0f, 1f) > parryChance))
         {
@@ -1127,7 +1157,7 @@ public class DamageEvent
             case Skill.Axe:
             case Skill.Dagger:
 
-                WeaponMasterBleed(playerAttacker, defender, weaponTier, powerLevel);
+                WeaponMasterBleed(playerAttacker, defender, Weapon, powerLevel);
 
                 break;
             case Skill.Mace:
@@ -1145,7 +1175,7 @@ public class DamageEvent
 
                 if (Weapon.Name.Contains("Dagger") || Weapon.Name.Contains("Axe"))
                 {
-                    WeaponMasterBleed(playerAttacker, defender, weaponTier, powerLevel);
+                    WeaponMasterBleed(playerAttacker, defender, Weapon, powerLevel);
                 }
                 else if (Weapon.Name.Contains("Club"))
                 {
@@ -1195,7 +1225,7 @@ public class DamageEvent
 
         var spellCraft = weapon.ItemSpellcraft ?? 1;
 
-        player.TryCastSpell(spell, target, null, weapon, false, false, true, true, spellCraft);
+        player.TryCastSpell(spell, target, null, weapon, false, true, true, true, spellCraft);
 
         player.EnchantedBladeHighStoredSpell = null;
         player.EnchantedBladeMedStoredSpell = null;
@@ -1278,19 +1308,68 @@ public class DamageEvent
         playerAttacker.WeaponMasterSingleUseIsActive = false;
     }
 
-    private void WeaponMasterBleed(Player playerAttacker, Creature defender, int weaponTier, float powerLevel)
+    /// <summary>
+    /// Triggers a bleed damage DoT on the target.
+    /// Base damage of Bleed spell is 500. Damage is reduced depending on weapon damage roll
+    /// and power bar level setting.
+    /// </summary>
+    private void WeaponMasterBleed(Player playerAttacker, Creature defender, WorldObject weapon, float powerLevel)
     {
-        var tierMod = weaponTier switch
+        if (weapon.Damage is null)
         {
-            1 => 1.0f,
-            2 => 3.0f,
-            3 => 7.0f,
-            4 => 10.0f,
-            5 => 16.0f,
-            6 => 24.0f,
-            7 => 32.0f,
+            return;
+        }
+
+        // todo: Add weapon subtypes to all lootgen weapons for higher accuracy
+        // var weaponSubtype = weapon.WeaponSubtype.Value;
+        // var weaponSubtypeMinDamage = weaponSubtype switch
+        // {
+        //     (int)LootTables.WeaponSubtype.AxeLarge => 5,
+        //     (int)LootTables.WeaponSubtype.AxeMedium => 5,
+        //     (int)LootTables.WeaponSubtype.AxeSmall => 4,
+        //     (int)LootTables.WeaponSubtype.DaggerLarge => 5,
+        //     (int)LootTables.WeaponSubtype.DaggerSmall => 4,
+        //     (int)LootTables.WeaponSubtype.ThrownAxe => 11,
+        //     (int)LootTables.WeaponSubtype.ThrownDagger => 10,
+        //     (int)LootTables.WeaponSubtype.TwohandAxe => 5,
+        //     _ => throw new ArgumentOutOfRangeException()
+        // };
+        // var weaponSubtypeMaxDamage = weaponSubtype switch
+        // {
+        //     (int)LootTables.WeaponSubtype.AxeLarge => 132,
+        //     (int)LootTables.WeaponSubtype.AxeMedium => 120,
+        //     (int)LootTables.WeaponSubtype.AxeSmall => 110,
+        //     (int)LootTables.WeaponSubtype.DaggerLarge => 95,
+        //     (int)LootTables.WeaponSubtype.DaggerSmall => 71,
+        //     (int)LootTables.WeaponSubtype.ThrownAxe => 296,
+        //     (int)LootTables.WeaponSubtype.ThrownDagger => 278,
+        //     (int)LootTables.WeaponSubtype.TwohandAxe => 107,
+        //     _ => throw new ArgumentOutOfRangeException()
+        // };
+
+        var weaponType = weapon.WeaponSkill;
+
+        var weaponTypeMinDamage = weaponType switch
+        {
+            Skill.Axe => 9,
+            Skill.Dagger => 4,
+            Skill.ThrownWeapon => 10,
+            Skill.TwoHandedCombat => 5,
             _ => throw new ArgumentOutOfRangeException()
         };
+
+        var weaponTypeMaxDamage = weaponType switch
+        {
+            Skill.Axe => 132,
+            Skill.Dagger => 95,
+            Skill.ThrownWeapon => 296,
+            Skill.TwoHandedCombat => 107,
+            _ => throw new ArgumentOutOfRangeException()
+        };
+
+        var damageRange = weaponTypeMaxDamage - weaponTypeMinDamage;
+        var weaponDamageRoll = weapon.Damage.Value - weaponTypeMinDamage;
+        var weaponDamageRollPercentile = (float)weaponDamageRoll / damageRange;
 
         var spell = new Spell(SpellId.Bleed);
 
@@ -1299,7 +1378,7 @@ public class DamageEvent
             return;
         }
 
-        spell.SpellStatModVal *= powerLevel * tierMod;
+        spell.SpellStatModVal = powerLevel * weaponDamageRollPercentile;
 
         defender.EnchantmentManager.Add(spell, playerAttacker, Weapon);
         defender.EnqueueBroadcast(new GameMessageScript(defender.Guid, PlayScript.DirtyFightingDamageOverTime));
@@ -1631,6 +1710,11 @@ public class DamageEvent
             return;
         }
 
+        if (damageSource is null)
+        {
+            return;
+        }
+
         SetCombatSources(attacker, defender, defender.GetEquippedWeapon());
         SetBaseDamage(attacker, defender, damageSource);
         SetDamageModifiers(attacker, defender);
@@ -1672,27 +1756,35 @@ public class DamageEvent
             return;
         }
 
-        SetCombatSources(attacker, defender, defender.GetEquippedWeapon());
-        SetBaseDamage(defender, attacker, defender.GetEquippedWeapon());
-        SetDamageModifiers(defender, attacker);
-
-        var baseDamage = GetNonCriticalDamageBeforeMitigation();
-        var mitigation = GetMitigation(attacker, defender);
-
-        var damage = baseDamage * mitigation;
-
-        if (damage is < int.MinValue or > int.MaxValue)
+        if (defender.GetEquippedWeapon() is null)
         {
-            _log.Error("CheckForRiposte({Attacker}, {Defender}) - damage could not be converted to Int.", attacker.Name, defender.Name);
             return;
         }
 
-        attacker.UpdateVitalDelta(attacker.Health, -Convert.ToInt32(damage));
-        attacker.DamageHistory.Add(playerDefender, DamageType.Health, (uint)damage);
+        SetCombatSources(defender, attacker, defender.GetEquippedWeapon());
+        SetBaseDamage(defender, attacker, defender.GetEquippedWeapon());
+        SetDamageModifiers(defender, attacker);
+
+        _powerMod = 1.0f;
+        var baseDamage = GetNonCriticalDamageBeforeMitigation();
+        var mitigation = GetMitigation(defender, attacker);
+
+        var damage = baseDamage * mitigation;
+
+        if (damage is float.NaN or < int.MinValue or > int.MaxValue)
+        {
+            _log.Error("CheckForRiposte({Attacker}, {Defender}) - damage ({Damage}) could not be converted to Int.", attacker.Name, defender.Name, damage);
+            return;
+        }
+
+        var intDamage = (int)damage;
+
+        attacker.UpdateVitalDelta(attacker.Health, -intDamage);
+        attacker.DamageHistory.Add(playerDefender, DamageType.Health, (uint)intDamage);
 
         var parryType = Parried ? "parry" : "block";
 
-        var msg = $"You follow up your {parryType} with a quick riposte, dealing {Convert.ToInt32(damage)} {_damageSource.W_DamageType} damage!";
+        var msg = $"You follow up your {parryType} with a quick riposte, dealing {intDamage} {_damageSource.W_DamageType} damage to {attacker.Name}!";
         playerDefender.Session.Network.EnqueueSend(new GameMessageSystemChat(msg, ChatMessageType.CombatSelf));
 
         if (!attacker.IsDead)
@@ -1955,7 +2047,7 @@ public class DamageEvent
     }
 
     /// <summary>
-    /// SPEC BONUS - Physical Defense: Increase shield block chance up to 50% (multiplicatively).
+    /// SPEC BONUS - Physical Defense: Increase block/parry chance up to 50% (multiplicatively).
     /// Based on defender 'defense skill' and attacker 'attack skill'.
     /// </summary>
     private float GetSpecPhysicalDefenseBlockChanceBonus()
