@@ -414,6 +414,8 @@ partial class Player
         HandleGearAttributeRatings(item, SpellId.RatingQuickness, PropertyInt.GearQuickness, SpellCategory.GearRatingQuickness);
         HandleGearAttributeRatings(item, SpellId.RatingFocus, PropertyInt.GearFocus, SpellCategory.GearRatingFocus);
         HandleGearAttributeRatings(item, SpellId.RatingSelf, PropertyInt.GearSelf, SpellCategory.GearRatingSelf);
+        HandleGearSkillRatings(item, SpellId.RatingPhysicalDefense, PropertyInt.GearToughness, SpellCategory.RatingPhysicalDefense, 20);
+        HandleGearSkillRatings(item, SpellId.RatingMagicDefense, PropertyInt.GearResistance, SpellCategory.RatingMagicDefense, 20);
 
         return true;
     }
@@ -464,6 +466,42 @@ partial class Player
             foreach (var enchantment in allEnchantments)
             {
                 enchantment.StatModValue = 10 + totalRating;
+                enchantment.Duration = -1;
+                Session.Network.EnqueueSend(
+                    new GameEventMagicUpdateEnchantment(Session, new Enchantment(this, enchantment)));
+            }
+        }
+    }
+
+    private void HandleGearSkillRatings(WorldObject item, SpellId spellId, PropertyInt propertyInt, SpellCategory spellCategory, int baseAmount = 0)
+    {
+        if (ItemDoesNotHaveGearRating(item, propertyInt))
+        {
+            return;
+        }
+
+        var totalRating = GetEquippedAndActivatedItemRatingSum(propertyInt);
+
+        if (totalRating > 0 && EnchantmentManager.GetEnchantment((uint)spellId) is null)
+        {
+            CreateItemSpell(item, (uint)spellId);
+        }
+
+        var allEnchantments = EnchantmentManager.GetEnchantments(spellCategory);
+        if (totalRating == 0)
+        {
+            foreach (var enchantment in allEnchantments)
+            {
+                EnchantmentManager.Dispel(enchantment);
+            }
+
+            return;
+        }
+
+        {
+            foreach (var enchantment in allEnchantments)
+            {
+                enchantment.StatModValue = baseAmount + totalRating;
                 enchantment.Duration = -1;
                 Session.Network.EnqueueSend(
                     new GameEventMagicUpdateEnchantment(Session, new Enchantment(this, enchantment)));
@@ -648,6 +686,8 @@ partial class Player
         HandleGearAttributeRatings(item, SpellId.RatingQuickness, PropertyInt.GearQuickness, SpellCategory.GearRatingQuickness);
         HandleGearAttributeRatings(item, SpellId.RatingFocus, PropertyInt.GearFocus, SpellCategory.GearRatingFocus);
         HandleGearAttributeRatings(item, SpellId.RatingSelf, PropertyInt.GearSelf, SpellCategory.GearRatingSelf);
+        HandleGearSkillRatings(item, SpellId.RatingPhysicalDefense, PropertyInt.GearToughness, SpellCategory.RatingPhysicalDefense, 20);
+        HandleGearSkillRatings(item, SpellId.RatingMagicDefense, PropertyInt.GearResistance, SpellCategory.RatingMagicDefense, 20);
 
         return true;
     }

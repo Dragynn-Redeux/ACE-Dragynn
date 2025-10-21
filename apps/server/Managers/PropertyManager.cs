@@ -867,7 +867,9 @@ public static class DefaultPropertyManager
         ("vitae_penalty_max", new Property<double>(0.40, "the maximum vitae penalty a player can have")),
         ("void_pvp_modifier", new Property<double>(0.5, "Scales the amount of damage players take from Void Magic. Defaults to 0.5, as per retail. For earlier content where DRR isn't as readily available, this can be adjusted for balance.")),
         ("xp_modifier", new Property<double>(1.0, "scales the amount of xp received by players")),
-        ("mana_cost_multiplier", new Property<double>(1.0, "scales mana costs for spells")));
+        ("mana_cost_multiplier", new Property<double>(1.0, "scales mana costs for spells")),
+        ("player_spell_damage_multiplier", new Property<double>(1.0, "scales damage for player spells")),
+        ("monster_spell_damage_multiplier", new Property<double>(1.0, "scales damage for monster spells")));
 
     public static readonly ReadOnlyDictionary<string, Property<string>> DefaultStringProperties = DictOf(
         ("content_folder", new Property<string>("Content", "for content creators to live edit weenies. defaults to Content folder found in same directory as ACE.Server.dll")),

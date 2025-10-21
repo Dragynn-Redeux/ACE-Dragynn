@@ -79,6 +79,11 @@ partial class Jewel
         CheckForRatingHealthToMana(playerDefender, attacker, damage);
     }
 
+    public static void HandlePlayerHealerBonuses(Player playerHealer, Creature targetPlayer)
+    {
+        CheckForRatingHealBubbleHotspot(playerHealer, targetPlayer);
+    }
+
     public static void HandleMeleeMissileAttackerRampingQuestStamps(Player playerAttacker, Creature defender, DamageType damageType)
     {
         var scaledStamps = GetMeleeMissileScaledStamps(playerAttacker);
@@ -254,6 +259,26 @@ partial class Jewel
     }
 
     /// <summary>
+    /// RATING - Healing: Chance to generate heal bubble hotspot on hit.
+    /// (JEWEL - )
+    /// </summary>
+    private static void CheckForRatingHealBubbleHotspot(Player playerHealer, Creature defender)
+    {
+        if (playerHealer.GetEquippedAndActivatedItemRatingSum(PropertyInt.GearHealBubble) <= 0)
+        {
+            return;
+        }
+
+        if (playerHealer.Level == null)
+        {
+            return;
+        }
+
+        var tier = Math.Round((float)playerHealer.Level / 10);
+        Hotspot.TryGenHotspot(playerHealer, defender, (int)tier, DamageType.Health);
+    }
+
+    /// <summary>
     /// RATING - Self Harm: 10% chance to damage self when dealing damage. (Also grants bonus damage from a different function)
     /// (JEWEL - Hematite)
     /// </summary>
@@ -302,7 +327,9 @@ partial class Jewel
     /// </summary>
     private static void CheckForRatingManaOnHit(Player playerAttacker, Creature defender, float damage)
     {
-        if (damage is <= 0 or > uint.MaxValue)
+        var absDamage = Math.Abs(damage);
+
+        if (absDamage is <= 0 or > uint.MaxValue)
         {
             return;
         }
@@ -314,7 +341,7 @@ partial class Jewel
             return;
         }
 
-        var restoreAmount = (uint)Math.Round(damage * 0.1f);
+        var restoreAmount = (uint)Math.Round(absDamage * 0.1f);
 
         playerAttacker.UpdateVitalDelta(playerAttacker.Mana, restoreAmount);
         playerAttacker.DamageHistory.OnHeal(restoreAmount);
@@ -1380,6 +1407,8 @@ partial class Jewel
         { ACE.Entity.Enum.MaterialType.Aquamarine, EquipMask.WeaponAndArmor },
         { ACE.Entity.Enum.MaterialType.WhiteSapphire, EquipMask.WeaponAndArmor },
         { ACE.Entity.Enum.MaterialType.Emerald, EquipMask.WeaponAndArmor },
+        { ACE.Entity.Enum.MaterialType.Amber, EquipMask.WeaponAndArmor },
+        { ACE.Entity.Enum.MaterialType.LapisLazuli, EquipMask.WeaponAndArmor },
         // shield only
         { ACE.Entity.Enum.MaterialType.WhiteQuartz, EquipMask.Shield },
         { ACE.Entity.Enum.MaterialType.Turquoise, EquipMask.Shield },
@@ -1393,9 +1422,7 @@ partial class Jewel
         { ACE.Entity.Enum.MaterialType.Agate, EquipMask.WristWear },
         { ACE.Entity.Enum.MaterialType.Moonstone, EquipMask.WristWear },
         { ACE.Entity.Enum.MaterialType.Citrine, EquipMask.WristWear },
-        { ACE.Entity.Enum.MaterialType.LapisLazuli, EquipMask.WristWear },
         { ACE.Entity.Enum.MaterialType.Malachite, EquipMask.WristWear },
-        { ACE.Entity.Enum.MaterialType.Amber, EquipMask.WristWear },
         // bracelet only (right rest)
         { ACE.Entity.Enum.MaterialType.Onyx, EquipMask.WristWear },
         { ACE.Entity.Enum.MaterialType.Zircon, EquipMask.WristWear },

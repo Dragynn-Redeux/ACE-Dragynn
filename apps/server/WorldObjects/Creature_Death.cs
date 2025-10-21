@@ -369,7 +369,7 @@ partial class Creature
         switch (killerLevel)
         {
             case < 10:
-                baseXp = levelTotalXP * 0.05f;
+                baseXp = levelTotalXP * 0.02f;
                 break;
             case < 20:
                 baseXp = levelTotalXP * 0.01f;

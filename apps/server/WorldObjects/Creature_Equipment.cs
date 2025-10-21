@@ -1765,5 +1765,27 @@ partial class Creature
 
             worldObject.SetProperty(PropertyInt.Damage, baseDamage);
         }
+
+        if (worldObject is { WeenieType: WeenieType.Missile })
+        {
+            var variance = worldObject.DamageVariance ?? 1.0f;
+            var baseDamage = Math.Max((int)(avgDamage / (1.0f - (variance / 2))), 1);
+
+            worldObject.SetProperty(PropertyInt.Damage, baseDamage);
+        }
+
+        if (worldObject is { WeenieType: WeenieType.MissileLauncher })
+        {
+            var ammo = GetEquippedAmmo();
+            if (ammo is null)
+            {
+                return;
+            }
+
+            var variance = ammo.DamageVariance ?? 1.0f;
+            var baseDamage = Math.Max((int)(avgDamage / (1.0f - (variance / 2))), 1);
+
+            ammo.SetProperty(PropertyInt.Damage, baseDamage);
+        }
     }
 }

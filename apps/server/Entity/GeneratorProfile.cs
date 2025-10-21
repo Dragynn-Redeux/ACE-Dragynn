@@ -678,6 +678,11 @@ public class GeneratorProfile
                 deathTreasure.LootQualityMod = (float)Generator.LootQualityMod;
             }
 
+            if (Generator.CurrentLandblock is { LandblockLootQualityMod: > 0 } landblock)
+            {
+                deathTreasure.LootQualityMod += (float)landblock.LandblockLootQualityMod;
+            }
+
             // _log.Debug("{GeneratorName}.TreasureGenerator(): found death treasure {BiotaWcid}", Generator.Name, Biota.WeenieClassId);
             var generatedLoot = LootGenerationFactory.CreateRandomLootObjects(deathTreasure);
 

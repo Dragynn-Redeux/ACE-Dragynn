@@ -313,7 +313,7 @@ partial class Creature
             Console.WriteLine($"{Name} ({Guid}) - UpdatePosition: {Location.ToLOCString()}");
         }
 
-        if (MonsterState == State.Return && PhysicsObj.MovementManager.MoveToManager.PendingActions.Count == 0)
+        if (MonsterState == State.Return && PhysicsObj?.MovementManager.MoveToManager.PendingActions.Count == 0)
         {
             Sleep();
         }
@@ -321,7 +321,7 @@ partial class Creature
         if (
             MonsterState == State.Awake
             && IsMoving
-            && PhysicsObj.MovementManager.MoveToManager.PendingActions.Count == 0
+            && PhysicsObj?.MovementManager.MoveToManager.PendingActions.Count == 0
         )
         {
             IsMoving = false;

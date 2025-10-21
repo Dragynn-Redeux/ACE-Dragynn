@@ -6439,6 +6439,8 @@ public enum SpellId : uint
     DungeonFester,
     DungeonEnraged,
     DungeonInspired,
+    RatingPhysicalDefense,
+    RatingMagicDefense,
 
     NumSpells = 8192,
 

@@ -53,6 +53,11 @@ public class SpellProjectile : WorldObject
     public int DebugVelocity;
 
     /// <summary>
+    /// Assigned from emote CastSpellInstant/CastSpell (emote.Percent)
+    /// </summary>
+    public double DamageMultiplier = 1.0;
+
+    /// <summary>
     /// A new biota be created taking all of its values from weenie.
     /// </summary>
     public SpellProjectile(Weenie weenie, ObjectGuid guid)
@@ -609,9 +614,23 @@ public class SpellProjectile : WorldObject
 
         var resistSource = IsWeaponSpell ? weapon : source;
 
-        resisted = source.TryResistSpell(target, Spell, out var partialEvasion, resistSource, true, WeaponSpellcraft);
+        var weaponAttackMod = 1.0;
+        if (sourcePlayer is not null)
+        {
+            weaponAttackMod = sourcePlayer.GetEquippedWeapon().WeaponOffense ?? 1.0;
+        }
 
-        CheckForCombatAbilityReflectSpell(partialEvasion is PartialEvasion.All or PartialEvasion.Some, targetPlayer, sourceCreature);
+        resisted = source.TryResistSpell(target, Spell, out var partialEvasion, resistSource, true, WeaponSpellcraft, weaponAttackMod);
+
+        if (targetPlayer is { ReflectIsActive: true, ReflectFirstSpell: true })
+        {
+            CheckForCombatAbilityReflectSpell(true, targetPlayer, sourceCreature);
+            targetPlayer.ReflectFirstSpell = false;
+        }
+        else
+        {
+            CheckForCombatAbilityReflectSpell(partialEvasion is PartialEvasion.All or PartialEvasion.Some, targetPlayer, sourceCreature);
+        }
 
         var resistedMod = 1.0f;
         _partialEvasion = partialEvasion;
@@ -740,6 +759,27 @@ public class SpellProjectile : WorldObject
 
         var levelScalingMod = GetLevelScalingMod(sourceCreature, target, targetPlayer);
 
+        var damageMultiplier = (float)DamageMultiplier;
+
+        var spellcraftMod = 1.0f;
+        if (FromProc && weapon?.ItemSpellcraft != null)
+        {
+            spellcraftMod = (weapon.ItemSpellcraft ?? 1) * 0.01f;
+        }
+
+        // for traps and creatures that don't have a lethality mod,
+        // make sure they receive multipliers from landblock mods
+        var landblockScalingMod = 1.0f;
+        if (source is {ArchetypeLethality: null})
+        {
+            var sourceLandblock = source.CurrentLandblock;
+
+            if (sourceLandblock is not null)
+            {
+                landblockScalingMod *= (1.0f + (float)sourceLandblock.GetLandblockLethalityMod());
+            }
+        }
+
         // life magic projectiles: ie., martyr's hecatomb
         if (Spell.MetaSpellType == ACE.Entity.Enum.SpellType.LifeProjectile)
         {
@@ -785,7 +825,10 @@ public class SpellProjectile : WorldObject
                 * jewelBlueFury
                 * jewelSelfHarm
                 * lethalityMod
-                * levelScalingMod;
+                * levelScalingMod
+                * damageMultiplier
+                * spellcraftMod
+                * landblockScalingMod;
         }
         // war/void magic projectiles
         else
@@ -900,7 +943,21 @@ public class SpellProjectile : WorldObject
                 * resistedMod
                 * specDefenseMod
                 * ratingDamageTypeWard
-                * levelScalingMod;
+                * levelScalingMod
+                * damageMultiplier
+                * spellcraftMod;
+
+            // balance testing. TODO: update base spells damage and ward levels once ideal balance is found
+            if (sourcePlayer is not null)
+            {
+                var playerSpellDamageMultiplier = (float)PropertyManager.GetDouble("player_spell_damage_multiplier").Item;
+                finalDamage *= playerSpellDamageMultiplier;
+            }
+            else
+            {
+                var monsterSpellDamageMultiplier = (float)PropertyManager.GetDouble("monster_spell_damage_multiplier").Item;
+                finalDamage *= monsterSpellDamageMultiplier;
+            }
 
             if (sourcePlayer != null)
             {
@@ -1479,9 +1536,11 @@ public class SpellProjectile : WorldObject
             {
                 amount = Player.CombatAbilityManaBarrier(targetPlayer, amount, targetPlayer, Spell.DamageType);
             }
-
-            target.UpdateVitalDelta(target.Health, (int)-Math.Round(damage));
-            target.DamageHistory.Add(ProjectileSource, Spell.DamageType, amount);
+            else
+            {
+                target.UpdateVitalDelta(target.Health, (int)-Math.Round(damage));
+                target.DamageHistory.Add(ProjectileSource, Spell.DamageType, amount);
+            }
         }
 
         // add threat to damaged targets

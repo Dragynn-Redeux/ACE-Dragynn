@@ -140,6 +140,7 @@ public class BezelTool : WorldObject
         {
             case Skill.Blacksmithing:
                 if (target is not {WeenieType: WeenieType.MeleeWeapon}
+                    && target is not {CombatUse: ACE.Entity.Enum.CombatUse.Shield}
                     && target is not {WeenieType: WeenieType.Missile, WeaponSkill: Skill.ThrownWeapon}
                     && target is not {WeenieType: WeenieType.Clothing, ArmorWeightClass: (int)ACE.Entity.Enum.ArmorWeightClass.Heavy})
                 {

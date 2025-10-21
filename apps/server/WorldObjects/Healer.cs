@@ -43,7 +43,7 @@ public class Healer : WorldObject
     private void SetEphemeralValues()
     {
         ObjectDescriptionFlags |= ObjectDescriptionFlag.Healer;
-        CooldownDuration = 12;
+        CooldownDuration = 10;
     }
 
     public override void HandleActionUseOnTarget(Player healer, WorldObject target)
@@ -164,9 +164,9 @@ public class Healer : WorldObject
         DoHealMotion(healer, targetPlayer, true);
     }
 
-    public const float Healing_MaxMove = 5.0f;
+    private const float Healing_MaxMove = 5.0f;
 
-    public void DoHealMotion(Player healer, Player target, bool success)
+    private void DoHealMotion(Player healer, Player target, bool success)
     {
         if (!success || target.IsDead || target.Teleporting || target.suicideInProgress)
         {
@@ -227,7 +227,7 @@ public class Healer : WorldObject
         healer.NextUseTime = DateTime.UtcNow.AddSeconds(animLength);
     }
 
-    public void DoHealing(Player healer, Player target, uint missingVital)
+    private void DoHealing(Player healer, Player target, uint missingVital)
     {
         if (target.IsDead || target.Teleporting)
         {
@@ -296,10 +296,12 @@ public class Healer : WorldObject
             }
 
             var healingSkillCurrent = healer.GetCreatureSkill(Skill.Healing).Current;
-            var healingSkillMod = healingSkillCurrent * 0.05f;
-            var healkitMod = (float)(HealkitMod ?? 1.0) * 0.5f;
+            var normalized = 1 - Math.Exp(-0.001 * healingSkillCurrent);
+            var healingSkillMod = 0.1 + (10.0 - 0.1) * normalized;
 
-            spell.SpellStatModVal *= healkitMod * healingSkillMod;
+            var healkitMod = (HealkitMod ?? 1.0);
+
+            spell.SpellStatModVal = (float)healkitMod * (float)healingSkillMod;
 
             healer.TryCastSpell_Inner(spell, target);
         }
@@ -330,29 +332,9 @@ public class Healer : WorldObject
     }
 
     /// <summary>
-    /// Determines if healer successfully heals target for attempt
-    /// </summary>
-    public bool DoSkillCheck(Player healer, Player target, uint missingVital, ref int difficulty)
-    {
-        // skill check:
-        // (healing skill + healing kit boost) * trainedMod
-        // vs. damage * 2 * combatMod
-        var healingSkill = healer.GetCreatureSkill(Skill.Healing);
-        var trainedMod = healingSkill.AdvancementClass == SkillAdvancementClass.Specialized ? 1.5f : 1.1f;
-
-        var combatMod = healer.CombatMode == CombatMode.NonCombat ? 1.0f : 1.1f;
-
-        var effectiveSkill = (int)Math.Round((healingSkill.Current + BoostValue) * trainedMod);
-        difficulty = (int)Math.Round(missingVital * 2 * combatMod);
-
-        var skillCheck = SkillCheck.GetSkillChance(effectiveSkill, difficulty);
-        return skillCheck > ThreadSafeRandom.Next(0.0f, 1.0f);
-    }
-
-    /// <summary>
     /// Returns the healing amount for this attempt
     /// </summary>
-    public uint GetHealAmount(
+    private uint GetHealAmount(
         Player healer,
         Player target,
         uint missingVital,
@@ -362,11 +344,12 @@ public class Healer : WorldObject
     {
         // factors: healing skill, healing kit bonus, stamina, critical chance
         var healingSkill = healer.GetCreatureSkill(Skill.Healing).Current;
+        var normalized = 1 - Math.Exp(-0.001 * healingSkill);
+        var healingSkillMod = 0.1 + (10.0 - 0.1) * normalized;
 
-        // todo: determine applicable range from pcaps
-        var healMin = healingSkill * 0.5f;
-        var healMax = healingSkill * 1.0f;
-        var healAmount = ThreadSafeRandom.Next(healMin, healMax);
+        var healMin = 50 * healingSkillMod * 0.5f;
+        var healMax = 50 * healingSkillMod;
+        var healAmount = ThreadSafeRandom.Next((float)healMin, (float)healMax);
 
         var healKitMod = (float)(HealkitMod ?? 1.0);
         healAmount *= healKitMod;

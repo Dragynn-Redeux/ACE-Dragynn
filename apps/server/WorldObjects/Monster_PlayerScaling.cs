@@ -1,4 +1,5 @@
-﻿using ACE.Entity.Enum;
+﻿using System.Linq;
+using ACE.Entity.Enum;
 using ACE.Entity.Enum.Properties;
 using ACE.Entity.Models;
 using ACE.Server.WorldObjects.Entity;
@@ -30,7 +31,16 @@ partial class Creature
             return;
         }
 
-        var numberOfNearbyPlayers = GetAttackTargets().Count;
+        var attackTargets = GetAttackTargets();
+        foreach (var attackTarget in attackTargets.ToList())
+        {
+            if (attackTarget is not Player)
+            {
+                attackTargets.Remove(attackTarget);
+            }
+        }
+
+        var numberOfNearbyPlayers = attackTargets.Count;
 
         if (numberOfNearbyPlayers <= LastNumberOfNearbyPlayers)
         {

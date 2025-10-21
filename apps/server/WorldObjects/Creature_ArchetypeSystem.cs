@@ -12,9 +12,9 @@ partial class Creature
     private static bool DebugArchetypeSystem = false;
 
     // Stat ranges by tier
-    private static readonly int[] enemyHealth = { 10, 40, 100, 200, 300, 400, 500, 1000, 2000 };
+    private static readonly int[] enemyHealth = { 10, 75, 150, 250, 400, 600, 800, 1000, 2000 };
     private static readonly int[] enemyStaminaMana = { 20, 100, 150, 225, 325, 450, 650, 950, 1250 };
-    private static readonly int[] enemyHealthRegen = { 1, 2, 5, 10, 15, 20, 25, 30, 50 };
+    private static readonly int[] enemyHealthRegen = { 1, 2, 5, 10, 20, 30, 40, 50, 100 };
     private static readonly int[] enemyStaminaManaRegen = { 1, 2, 5, 10, 15, 20, 25, 30, 50 };
 
     private static readonly int[] enemyArmorWard = { 10, 20, 45, 68, 101, 152, 228, 342, 513 };
@@ -23,9 +23,9 @@ partial class Creature
     private static readonly int[] enemyAssessDeception = { 10, 50, 100, 150, 200, 250, 300, 350, 400 };
     private static readonly int[] enemyRun = { 10, 100, 150, 200, 250, 300, 400, 500, 600 };
 
-    private static readonly float[] enemyDamage = { 1.0f, 1.5f, 2.0f, 3.0f, 4.0f, 5.0f, 7.5f, 10.0f, 15.0f }; // percentage of player health to be taken per second after all stats (of player and enemy) are considered
+    private static readonly float[] enemyDamage = { 1.0f, 2.0f, 3.0f, 4.0f, 6.0f, 7.0f, 7.5f, 8.0f, 10.0f }; // percentage of player health to be taken per second after all stats (of player and enemy) are considered
 
-    private static readonly int[] avgPlayerHealth = { 25, 45, 95, 125, 155, 185, 215, 245, 320 };
+    private static readonly int[] avgPlayerHealth = { 25, 60, 120, 150, 180, 210, 250, 300, 350 };
     private static readonly float[] avgPlayerArmorReduction = { 0.75f, 0.57f, 0.40f, 0.31f, 0.25f, 0.21f, 0.18f, 0.16f, 0.1f };
     private static readonly float[] avgPlayerLifeProtReduction = { 1.0f, 0.9f, 0.9f, 0.85f, 0.85f, 0.8f, 0.8f, 0.75f, 0.75f };
     private static readonly int[] avgPlayerPhysicalMagicDefense = { 10, 75, 150, 175, 200, 225, 275, 350, 500 };
@@ -419,6 +419,11 @@ partial class Creature
             if (GetEquippedWeapon() is not null && Damage is not null)
             {
                 MutateWeaponForArchetype(GetEquippedWeapon(), Damage.Value);
+            }
+
+            if (GetEquippedOffHand() is not null && Damage is not null)
+            {
+                MutateWeaponForArchetype(GetEquippedOffHand(), Damage.Value);
             }
 
             // Set Spell Damage Multiplier
@@ -1095,7 +1100,7 @@ partial class Creature
     private double GetNewHealthRegenLevel(int tier, float statWeight, double toughness, double physicality)
     {
         var target = enemyHealthRegen[tier] + (enemyHealthRegen[tier + 1] - enemyHealthRegen[tier]) * statWeight;
-        var multiplier = toughness;
+        var multiplier = 1.0 + (toughness * 0.1);
         var newVital = (target * multiplier);
 
         if (DebugArchetypeSystem)
@@ -1233,7 +1238,7 @@ partial class Creature
         var weightedEnemyDamage = (enemyDamage[tier] + (enemyDamage[tier + 1] - enemyDamage[tier]) * statWeight);
         if (UseNearbyPlayerScaling is true && weightedEnemyDamage < 5.0f)
         {
-            weightedEnemyDamage = 5.0f; // level 50 enemy dps
+            weightedEnemyDamage = 7.0f; // level 50 enemy dps
         }
 
         var weightedPlayerHealth = (
@@ -1259,8 +1264,31 @@ partial class Creature
         var playerLifeProtReduction = avgPlayerLifeProtReduction[tier];
 
         // enemy attack speed
-        var enemyAvgAttackSpeed =
-            1 / (MonsterAverageAnimationLength.GetValueMod(CreatureType) / GetAnimSpeed() + ((PowerupTime ?? 1.0) / 2));
+        var animSpeed = GetAnimSpeed();
+        var weapon = GetEquippedWeapon();
+        var creatureAnimLength = MonsterAverageAnimationLength.GetValueMod(CreatureType);
+
+        var enemyAvgAttackSpeed = 1 / (creatureAnimLength / animSpeed + ((PowerupTime ?? 1.0) / 2));
+
+        if (weapon is not null
+            && (weapon.W_AttackType.HasFlag(AttackType.TripleStrike)
+                || weapon.W_AttackType.HasFlag(AttackType.TripleSlash)
+                || weapon.W_AttackType.HasFlag(AttackType.TripleThrust)
+                || weapon.W_AttackType.HasFlag(AttackType.OffhandTripleSlash)
+                || weapon.W_AttackType.HasFlag(AttackType.OffhandTripleThrust)))
+        {
+            enemyAvgAttackSpeed *= 3.0f;
+        }
+        else if (weapon is not null
+                && (weapon.IsTwoHanded
+                    || weapon.W_AttackType.HasFlag(AttackType.DoubleStrike)
+                    || weapon.W_AttackType.HasFlag(AttackType.DoubleSlash)
+                    || weapon.W_AttackType.HasFlag(AttackType.DoubleThrust)
+                    || weapon.W_AttackType.HasFlag(AttackType.OffhandDoubleSlash)
+                    || weapon.W_AttackType.HasFlag(AttackType.OffhandDoubleThrust)))
+        {
+            enemyAvgAttackSpeed *= 2.0f;
+        }
 
         // enemy attribute mod
         var strength = (int)Strength.Base;

@@ -31,19 +31,19 @@ public static class LevelScaling
 
     private static readonly ILogger _log = Log.ForContext(typeof(LevelScaling));
 
-    private static readonly int[] AvgPlayerHealthPerTier = [50, 100, 130, 160, 190, 220, 250, 350];
-    private static readonly int[] AvgPlayerArmorWardPerTier = [50, 100, 200, 300, 400, 500, 600, 700];
-    private static readonly int[] AvgPlayerAttributePerTier = [125, 175, 200, 215, 230, 250, 270, 290];
-    private static readonly int[] AvgPlayerAttackSkillPerTier = [75, 150, 175, 200, 225, 275, 350, 500];
-    private static readonly int[] AvgPlayerDefenseSkillPerTier = [75, 150, 175, 200, 225, 275, 350, 500];
+    private static readonly int[] AvgPlayerHealthPerTier = [25, 60, 120, 150, 180, 210, 250, 300, 350];
+    private static readonly int[] AvgPlayerArmorWardPerTier = [50, 100, 200, 300, 400, 500, 600, 700, 800];
+    private static readonly int[] AvgPlayerAttributePerTier = [125, 175, 200, 215, 230, 250, 270, 290, 300];
+    private static readonly int[] AvgPlayerAttackSkillPerTier = [75, 150, 175, 200, 225, 275, 350, 500, 700];
+    private static readonly int[] AvgPlayerDefenseSkillPerTier = [75, 150, 175, 200, 225, 275, 350, 500, 700];
     private static readonly float[] AvgPlayerResistancePerTier = [1.0f, 0.9f, 0.9f, 0.85f, 0.85f, 0.8f, 0.8f, 0.75f, 0.75f];
-    private static readonly int[] AvgPlayerBoostPerTier = [10, 15, 20, 25, 30, 35, 40, 40];
+    private static readonly int[] AvgPlayerBoostPerTier = [10, 15, 20, 25, 30, 35, 40, 40, 40];
 
-    private static readonly int[] AvgMonsterArmorWardPerTier = [20, 45, 68, 101, 152, 228, 342, 513];
-    private static readonly int[] AvgMonsterHealthPerTier = [40, 100, 200, 300, 400, 500, 1000, 2000];
+    private static readonly int[] AvgMonsterArmorWardPerTier = [20, 45, 68, 101, 152, 228, 342, 513, 600];
+    private static readonly int[] AvgMonsterHealthPerTier = [10, 75, 150, 250, 400, 600, 800, 1000, 2000 ];
 
     private static readonly float[] AvgTimeToKillMonster = [9.0f, 10.7f, 12.9f, 16.1f, 17.2f, 17.4f, 24.6f, 44.1f];
-    private static readonly float[] AvgEnemyDpsPerTier = [ 1.0f, 1.5f, 2.0f, 3.0f, 4.0f, 5.0f, 7.5f, 10.0f, 15.0f ];
+    private static readonly float[] AvgEnemyDpsPerTier = [ 1.0f, 2.0f, 3.0f, 4.0f, 6.0f, 7.0f, 7.5f, 8.0f, 10.0f];
 
     public static float GetMonsterDamageDealtHealthScalar(Creature player, Creature monster)
     {
@@ -72,7 +72,7 @@ public static class LevelScaling
         {
             Console.WriteLine(
                 $"\nGetMonsterDamageDealtHealthScalar(Player {player.Name}, Monster {monster.Name})"
-                + $"\n  statAtPlayerLevel: {statAtPlayerLevel}, statAtMonsterLevel: {statAtMonsterLevel}, scalarMod: {(float)statAtPlayerLevel / statAtMonsterLevel}"
+                + $"\n  statAtPlayerLevel ({player.Level}): {statAtPlayerLevel}, statAtMonsterLevel ({monster.Level}): {statAtMonsterLevel}, scalarMod: {(float)statAtPlayerLevel / statAtMonsterLevel}"
             );
         }
 
@@ -518,32 +518,36 @@ public static class LevelScaling
 
         switch (level)
         {
-            case < 20:
+            case < 10:
                 range = 0;
+                statweight = (level - 10.0f) / 9 * playerScalar;
+                break;
+            case < 20:
+                range = 1;
                 statweight = (level - 10.0f) / 10 * playerScalar;
                 break;
             case < 30:
-                range = 1;
+                range = 2;
                 statweight = (level - 20.0f) / 10 * playerScalar;
                 break;
             case < 40:
-                range = 2;
+                range = 3;
                 statweight = (level - 30.0f) / 10 * playerScalar;
                 break;
             case < 50:
-                range = 3;
+                range = 4;
                 statweight = (level - 40.0f) / 10 * playerScalar;
                 break;
             case < 75:
-                range = 4;
+                range = 5;
                 statweight = (level - 50.0f) / 25 * playerScalar;
                 break;
             case < 100:
-                range = 5;
+                range = 6;
                 statweight = (level - 75.0f) / 25 * playerScalar;
                 break;
             default:
-                range = 6;
+                range = 7;
                 statweight = (level - 100.0f) / 26 * playerScalar;
                 break;
         }

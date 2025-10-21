@@ -8473,7 +8473,7 @@ public static class SpellLevelProgression
         return spellProgression.TryGetValue(spellId, out var progression) ? progression : null;
     }
 
-    public static SpellId GetLevel1SpellId(SpellId spellId)
+    public static SpellId GetLevel1SpellId(SpellId spellId, bool returnSameSpellIfNoSpellProgression = false)
     {
         foreach (var spellProgressionEntry in spellProgression)
         {
@@ -8486,19 +8486,30 @@ public static class SpellLevelProgression
             }
         }
 
+        if (returnSameSpellIfNoSpellProgression)
+        {
+            return spellId;
+        }
+
         return SpellId.Undef;
     }
 
     public static SpellId GetSpellAtLevel(
         SpellId level1SpellId,
         int level,
-        bool ifNoMatchReturnLowestPossibleLevel = false
+        bool ifNoMatchReturnLowestPossibleLevel = false,
+        bool returnSameSpellIfNoSpellLevels = false
     )
     {
         var spellLevels = GetSpellLevels(level1SpellId);
 
         if (spellLevels == null)
         {
+            if (returnSameSpellIfNoSpellLevels)
+            {
+                return level1SpellId;
+            }
+
             return SpellId.Undef;
         }
 
