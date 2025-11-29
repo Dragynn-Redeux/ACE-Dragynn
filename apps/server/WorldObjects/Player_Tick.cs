@@ -14,11 +14,14 @@ using ACE.Server.Network.Motion;
 using ACE.Server.Network.Sequence;
 using ACE.Server.Physics;
 using ACE.Server.Physics.Common;
+using ACE.Server.WorldObjects.Managers;
 
 namespace ACE.Server.WorldObjects;
 
 partial class Player
 {
+    private static readonly ShroudZoneService ShroudZoneService = ShroudZoneService.CreateFromConfig();
+
     private readonly ActionQueue actionQueue = new ActionQueue();
 
     private int initialAge;
@@ -405,6 +408,8 @@ partial class Player
         //Console.WriteLine($"{PhysicsObj.Position.Frame.get_heading()}");
 
         PhysicsObj.update_object();
+
+        ShroudZoneService.TryHandlePlayer(this);
 
         // sync ace position?
         Location.Rotation = PhysicsObj.Position.Frame.Orientation;

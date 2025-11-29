@@ -301,6 +301,8 @@ __pycache__/
 
 # ACEmulator specific folders
 Config/
+!apps/server/Config/
+!apps/server/Config/*.cs
 Dats/
 Logs/
 db-data/
