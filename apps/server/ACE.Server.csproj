@@ -291,7 +291,7 @@
     <None Include="..\..\Database\Updates\**" CopyToOutputDirectory="PreserveNewest" LinkBase="DatabaseSetupScripts\Updates\" />
     <None Include="..\..\Database\Optional\**" CopyToOutputDirectory="PreserveNewest" LinkBase="DatabaseSetupScripts\Optional\" />
   </ItemGroup>
-    
+   
   <ItemGroup>
     <Content Include="recipe_to_emote_wcid_whitelist.json">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>

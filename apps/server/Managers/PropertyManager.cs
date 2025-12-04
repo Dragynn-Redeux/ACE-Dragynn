@@ -7,6 +7,8 @@ using System.Timers;
 using ACE.Database;
 using ACE.Server.Factories.Tables.Cantrips;
 using Serilog;
+using ACE.Server.Config;
+
 
 namespace ACE.Server.Managers;
 
@@ -807,7 +809,10 @@ public static class DefaultPropertyManager
         ("pop_show_current", new Property<bool>(true, "")),
         ("pop_show_24_hours", new Property<bool>(true, "")),
         ("pop_show_7_days", new Property<bool>(true, "")),
-        ("pop_show_30_days", new Property<bool>(true, "")));
+        ("pop_show_30_days", new Property<bool>(true, "")),
+        ("sz_global",  new Property<bool>(true, "Global enable for Shroud zones")),
+        ("ps_global", new Property<bool>(true, "Global enable for Portal Storm zones"))
+        );
 
 
     public static readonly ReadOnlyDictionary<string, Property<long>> DefaultLongProperties = DictOf(
@@ -869,7 +874,20 @@ public static class DefaultPropertyManager
         ("xp_modifier", new Property<double>(1.0, "scales the amount of xp received by players")),
         ("mana_cost_multiplier", new Property<double>(1.0, "scales mana costs for spells")),
         ("player_spell_damage_multiplier", new Property<double>(1.0, "scales damage for player spells")),
-        ("monster_spell_damage_multiplier", new Property<double>(1.0, "scales damage for monster spells")));
+        ("monster_spell_damage_multiplier", new Property<double>(1.0, "scales damage for monster spells")),
+        (ShroudZoneConfig.RadiusKey, new Property<double>(50, "Radius (meters) around configured shroud zone positions")),
+        (ShroudZoneConfig.EjectionDistanceKey, new Property<double>(100, "Maximum distance (meters) for ejecting non-shrouded players from shroud zones")),
+        (ShroudZoneConfig.ShroudedSwirlMinKey, new Property<double>(120, "Minimum seconds between portal swirl procs on shrouded players in shroud zones")),
+        (ShroudZoneConfig.ShroudedSwirlMaxKey, new Property<double>(300, "Maximum seconds between portal swirl procs on shrouded players in shroud zones")),
+        (ShroudZoneConfig.TeleportCooldownKey, new Property<double>(30, "Cooldown in seconds before a non-shrouded player can be teleported again from a shroud zone")),
+        ("sz_warnmsg", new Property<double>(10, "Seconds between unshrouded warning messages")),
+        ("sz_shroudmsg", new Property<double>(60, "Seconds between shrouded reminder messages")),
+        ("sz_warnswirl", new Property<double>(2.5, "Seconds between outer warning swirls")),
+        ("ps_cap", new Property<double>(8,   "Max players in a storm zone before PortalStorm starts")),
+        ("ps_interval", new Property<double>(60,  "Seconds between storm teleports while above cap")),
+        ("ps_cooldown", new Property<double>(120, "Seconds before the same player can be storm-teleported again"))
+
+    );
 
     public static readonly ReadOnlyDictionary<string, Property<string>> DefaultStringProperties = DictOf(
         ("content_folder", new Property<string>("Content", "for content creators to live edit weenies. defaults to Content folder found in same directory as ACE.Server.dll")),
@@ -880,6 +898,7 @@ public static class DefaultPropertyManager
         ("popup_welcome_olthoi", new Property<string>("Welcome to the Olthoi hive! Be sure to talk to the Olthoi Queen to receive the Olthoi protections granted by the energies of the hive.", "Welcome message displayed on the first login for an Olthoi Player")),
         ("popup_motd", new Property<string>("", "Popup message of the day")),
         ("server_motd", new Property<string>("", "Server message of the day")),
-        ("recipe_tool_use_emote_whitelist", new Property<string>("", "Comma-separated WCIDs that should fire the tool's Use emote after a successful recipe (opt-in)."))
+        ("recipe_tool_use_emote_whitelist", new Property<string>("", "Comma-separated WCIDs that should fire the tool's Use emote after a successful recipe (opt-in).")),
+        (ShroudZoneConfig.ZonesKey, new Property<string>(string.Empty, "Shroud zone definitions (one per line): <landcell> [x y z] rotX rotY rotZ rotW"))
     );
 }

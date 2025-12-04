@@ -20,6 +20,7 @@ using Microsoft.Extensions.Configuration;
 using Serilog;
 
 
+
 namespace ACE.Server;
 
 partial class Program
@@ -262,7 +263,9 @@ partial class Program
 
         _log.Information("Starting PropertyManager...");
         PropertyManager.Initialize();
-        // ...
+        
+        _log.Information("Initializing ShroudManager...");
+        ShroudManager.Initialize();
 
                 try
         {
@@ -270,7 +273,7 @@ partial class Program
             var json   = Path.Combine(exeDir, "recipe_to_emote_wcid_whitelist.json");
             var txt    = Path.Combine(exeDir, "recipe_to_emote_wcid_whitelist.txt");
 
-            string? valueFromFile = null;
+            string valueFromFile = null;
 
             if (File.Exists(json))
             {
