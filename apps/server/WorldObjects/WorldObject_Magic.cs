@@ -765,6 +765,7 @@ partial class WorldObject
         // weird itemCaster -> caster collapsing going on here -- fixme
 
         var player = this as Player;
+        var targetCreature = target as Creature;
 
         var aetheriaProc = false;
         var cloakProc = false;
@@ -794,6 +795,17 @@ partial class WorldObject
 
         // create enchantment
         var addResult = target.EnchantmentManager.Add(spell, caster, weapon, equip);
+
+        // Nether Dot Mod
+        if (player != null && caster != null && targetCreature != null && spell.School is MagicSchool.VoidMagic)
+        {
+            var casterWeapon = weapon ?? caster;
+            var wielderCreature = caster as Creature ?? this as Creature;
+
+            var netherDamageMod = GetCasterElementalDamageModifier(casterWeapon, wielderCreature, targetCreature, W_DamageType);
+
+            addResult.Enchantment.StatModValue = (int)(addResult.Enchantment.StatModValue * netherDamageMod);
+        }
 
         // Ward reduction of Creature and Life debuffs
         if (target is Player && spell.Id != (uint)SpellId.Vitae)
@@ -3794,7 +3806,7 @@ partial class WorldObject
         return Math.Clamp(mod, 0.5f, 2.0f);
     }
 
-    private float GetWardMod(Creature caster, Creature target, float ignoreWardMod)
+    public float GetWardMod(Creature caster, Creature target, float ignoreWardMod)
     {
         var wardLevel = target.GetWardLevel();
 

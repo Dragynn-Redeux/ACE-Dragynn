@@ -793,5 +793,6 @@ public enum SpellCategory : uint
     DungeonEnraged = 795,
     DungeonInspired = 796,
     RatingPhysicalDefense = 797,
-    RatingMagicDefense = 798
+    RatingMagicDefense = 798,
+    Shrouded = 799
 }

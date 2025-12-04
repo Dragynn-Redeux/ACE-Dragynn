@@ -6441,6 +6441,7 @@ public enum SpellId : uint
     DungeonInspired,
     RatingPhysicalDefense,
     RatingMagicDefense,
+    Shrouded,
 
     NumSpells = 8192,
 

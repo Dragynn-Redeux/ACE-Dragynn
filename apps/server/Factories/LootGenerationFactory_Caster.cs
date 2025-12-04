@@ -69,6 +69,7 @@ public static partial class LootGenerationFactory
             wo.WeaponSkill = Skill.LifeMagic;
             wo.W_DamageType = DamageType.Nether;
             wo.UiEffects = UiEffects.Nether;
+            SetLifeText(wo);
         }
         else
         {
@@ -174,6 +175,38 @@ public static partial class LootGenerationFactory
         wo.BaseManaConversionMod = (wo.ManaConversionMod == null ? 0 : wo.ManaConversionMod);
         wo.BaseWeaponWarMagicMod = (wo.WeaponWarMagicMod == null ? 0 : wo.WeaponWarMagicMod);
         wo.BaseWeaponLifeMagicMod = (wo.WeaponLifeMagicMod == null ? 0 : wo.WeaponLifeMagicMod);
+    }
+
+    private static void SetLifeText(WorldObject wo)
+    {
+        if (wo.Name.Contains("Slashing"))
+        {
+            wo.Name = wo.Name.Replace("Slashing", "Life");
+        }
+        else if (wo.Name.Contains("Blunt"))
+        {
+            wo.Name = wo.Name.Replace("Blunt", "Life");
+        }
+        else if (wo.Name.Contains("Piercing"))
+        {
+            wo.Name = wo.Name.Replace("Piercing", "Life");
+        }
+        else if (wo.Name.Contains("Acid"))
+        {
+            wo.Name = wo.Name.Replace("Acid", "Life");
+        }
+        else if (wo.Name.Contains("Fire"))
+        {
+            wo.Name = wo.Name.Replace("Fire", "Life");
+        }
+        else if (wo.Name.Contains("Frost"))
+        {
+            wo.Name = wo.Name.Replace("Frost", "Life");
+        }
+        else if (wo.Name.Contains("Electric"))
+        {
+            wo.Name = wo.Name.Replace("Electric", "Life");
+        }
     }
 
     private static void MutateCaster_SpellDID(WorldObject wo, TreasureDeath profile)
