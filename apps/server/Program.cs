@@ -259,6 +259,9 @@ partial class Program
 
         _log.Information("Starting PropertyManager...");
         PropertyManager.Initialize();
+        
+        _log.Information("Initializing ShroudManager...");
+        ShroudManager.Initialize();
 
         _log.Information("Initializing GuidManager...");
         GuidManager.Initialize();
