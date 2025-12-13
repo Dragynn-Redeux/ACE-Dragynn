@@ -565,7 +565,7 @@ partial class Creature
     /// Returns the attribute damage bonus for a physical and magical attacks
     /// </summary>
     /// <param name="attackType">Uses strength for melee, coordination for missile</param>
-    public float GetAttributeMod(WorldObject weapon, bool isSpell, Creature target)
+    public float GetAttributeMod(WorldObject weapon, bool isSpell)
     {
         Entity.CreatureAttribute attribute;
 
@@ -603,10 +603,7 @@ partial class Creature
 
         var skill = GetCurrentWeaponSkill();
 
-        // LEVEL SCALING - Attribute Mod
-        var currentAttribute = (int)(attribute.Current * LevelScaling.GetPlayerAttributeScalar(this, target));
-
-        return SkillFormula.GetAttributeMod(currentAttribute, skill);
+        return SkillFormula.GetAttributeMod((int)attribute.Current, skill);
     }
 
     /// <summary>
@@ -704,7 +701,7 @@ partial class Creature
 
         if (this as Player is { SteadyStrikeIsActive: true })
         {
-            animSpeed *= 0.75f;
+            animSpeed *= 0.9f;
         }
 
         return animSpeed;

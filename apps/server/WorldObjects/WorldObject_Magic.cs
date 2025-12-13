@@ -1098,7 +1098,7 @@ partial class WorldObject
             tryBoost = Convert.ToInt32(tryBoost * (1.0f + Jewel.GetJewelBlueFury(player)));
             tryBoost = Convert.ToInt32(tryBoost * (1.0f + Jewel.GetJewelEffectMod(player, PropertyInt.GearSelfHarm)));
 
-            var attributeMod = creature.GetAttributeMod(weapon, true, targetCreature);
+            var attributeMod = creature?.GetAttributeMod(weapon, true) ?? 1.0f;
             tryBoost = Convert.ToInt32(tryBoost * attributeMod);
 
             // reductions

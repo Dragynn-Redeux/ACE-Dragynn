@@ -648,7 +648,7 @@ public class DamageEvent
         var playerDefender = defender as Player;
 
         _powerMod = powerMod ?? attacker.GetPowerMod(Weapon);
-        _attributeMod = attacker.GetAttributeMod(Weapon, false, defender);
+        _attributeMod = attacker.GetAttributeMod(Weapon, false);
         _slayerMod = WorldObject.GetWeaponCreatureSlayerModifier(Weapon, attacker, defender);
         _damageRatingMod = Creature.GetPositiveRatingMod(attacker.GetDamageRating());
         _dualWieldDamageBonus = GetDualWieldDamageBonus(playerAttacker, defender);

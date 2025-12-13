@@ -868,6 +868,8 @@ public enum PropertyInt : ushort
     StaminaOverTime = 509,
     ManaOverTime = 510,
     MonsterRank = 511,
+    CombatFocusSkill3SpellRemoved = 512,
+    CombatFocusSkill3SpellAdded = 513,
 
     [ServerOnly]
     PCAPRecordedAutonomousMovement = 8007,

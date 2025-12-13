@@ -739,7 +739,7 @@ public class SpellProjectile : WorldObject
 
         if (sourceCreature is not null)
         {
-            attributeMod = sourceCreature.GetAttributeMod(weapon, true, target);
+            attributeMod = sourceCreature.GetAttributeMod(weapon, true);
         }
 
         var specDefenseMod = CheckForMagicDefenseSpecDefenseMod(targetPlayer, sourceCreature);
