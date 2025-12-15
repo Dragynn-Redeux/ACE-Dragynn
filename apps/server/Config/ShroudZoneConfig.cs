@@ -106,7 +106,7 @@ public class ShroudZoneConfig
             Log.Warning("Unable to parse shroud zone position: {Entry}", line);
             return false;
         }
-
+        
         if (!float.TryParse(segments[1], NumberStyles.Float, CultureInfo.InvariantCulture, out var radius) || radius <= 0)
         {
             Log.Warning("Unable to parse shroud zone radius: {Entry}", line);

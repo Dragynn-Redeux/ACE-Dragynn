@@ -7,7 +7,7 @@ using ACE.Server.Config;
 using ACE.Entity.Enum;
 using ACE.Server.Managers;
 using ACE.Server.Network.GameMessages.Messages;
-
+using System.Linq;
 
 namespace ACE.Server.WorldObjects.Managers;
 
@@ -244,7 +244,7 @@ public class ShroudZoneService
 
         foreach (var zone in zones)
         {
-            var lb = zone.Landblock;
+            var lb = zone.Location.Landblock;
 
             // Decode landblock into grid coords: hi byte = X, low byte = Y
             var blockX = (int)((lb >> 8) & 0xFF);
@@ -377,100 +377,121 @@ public class ShroudZoneService
         var config = ShroudZoneConfig.FromProperties();
         return new ShroudZoneService(config);
     }
-
     public void TryHandlePlayer(Player player, double currentUnixTime)
     {
         var hasZones = _zonesByLandblock.TryGetValue(player.Location.Landblock, out var zones);
-
-        _log.Information(
-            "TryHandlePlayer: player={Player} lb={Landblock:X4} zonesFound={Found} zonesCount={Count}",
-            player.Name,
-            player.Location.Landblock,
-            hasZones,
-            zones?.Count ?? 0
-        );
-
         if (!hasZones || zones.Count == 0)
         {
             ClearAllStateFor(player);
             return;
         }
 
-        // Convert player to world coords once
         var playerWorld = ToWorld2D(player.Location);
+
+        ShroudZoneEntry chosenZone = null;
+        float chosenDistSq = float.MaxValue;
+
+        // track overlaps (eligible zones only)
+        List<(string name, float distSq)> overlaps = null;
 
         foreach (var zone in zones)
         {
-            // NEW: skip zones whose event is currently OFF
             if (!IsZoneEventActive(zone))
-            {    
+            {
                 _log.Information("Zone skipped (event inactive): player={Player} zone={Zone}", player.Name, zone.Name);
                 continue;
             }
 
-            var zoneWorld  = ToWorld2D(zone.Location);
-            var diff       = playerWorld - zoneWorld;
+            var zoneWorld = ToWorld2D(zone.Location);
+            var diff = playerWorld - zoneWorld;
             var distanceSq = diff.LengthSquared();
 
             var innerRadiusSq = zone.Radius * zone.Radius;
-            var maxDistSq     = zone.MaxDistance * zone.MaxDistance;
+
+            // IMPORTANT: if MaxDistance is 0/unset, fall back to Radius
+            var maxDist = (zone.MaxDistance > 0) ? zone.MaxDistance : zone.Radius;
+            var maxDistSq = maxDist * maxDist;
 
             if (distanceSq > maxDistSq)
-            {    
-                continue;
+                {
+                    continue; // not eligible
+                }
+            // eligible zone (within max distance + event active)
+            if (chosenZone == null || distanceSq < chosenDistSq)
+            {
+                chosenZone = zone;
+                chosenDistSq = distanceSq;
             }
 
-
-            var insideInner = distanceSq <= innerRadiusSq;
-
-            var shroudActive      = IsShroudZoneActive(zone);
-            var portalStormActive = IsPortalStormZoneActive(zone);
-            _log.Information(
-                "ShroudZoneCheck: player={Player} zone={Zone} lb={Landblock:X4} dist2={DistSq} inner2={InnerSq} max2={MaxSq} shroudActive={Shroud} portalActive={Portal}",
-                player.Name,
-                zone.Name,
-                player.Location.Landblock,
-                distanceSq,
-                innerRadiusSq,
-                maxDistSq,
-                shroudActive,
-                portalStormActive
-            );
-            var isShrouded = player.IsShrouded();
-            _log.Information(
-                "ZoneShroudStateCheck: player={Player} isShrouded={IsShrouded}",
-                player.Name,
-                isShrouded
-            );
-
-                if (player.IsShrouded())
-                {
-                    if (shroudActive)
-                    {
-                        HandleShroudedPlayer(player, currentUnixTime);
-                    }
-                }
-                else
-                {
-                    if (shroudActive)
-                    {
-                        HandleOuterWarning(player, currentUnixTime);
-
-                        if (insideInner)
-                        {
-                            HandleTeleport(player, zone, currentUnixTime);
-                        }
-                    }
-             }
-
-
-            return; // handled one zone this tick
+            overlaps ??= new List<(string, float)>();
+            overlaps.Add((zone.Name, distanceSq));
         }
 
+        if (chosenZone == null)
+        {
+            // In same landblock but outside all zones
+            ClearAllStateFor(player);
+            return;
+        }
 
-        // In same landblock but outside all zones
-        ClearAllStateFor(player);
+        // Admin warning if overlap/misconfig: more than one eligible zone
+        if (overlaps != null && overlaps.Count > 1)
+        {
+            // TODO: if you already have an admin/audit rate limiter, use it here.
+            // Keep it simple for now; you can add a per-player cooldown dict later.
+            _log.Warning(
+                "SHROUD ZONE OVERLAP: player={Player} lb={Landblock:X4} eligibleZones={Zones}",
+                player.Name,
+                player.Location.Landblock,
+                string.Join(", ", overlaps.OrderBy(z => z.distSq).Select(z => $"{z.name}(dist2={z.distSq:0.##})"))
+            );
+        }
+
+        // Existing behavior, applied to chosen zone only
+        var chosenInnerSq = chosenZone.Radius * chosenZone.Radius;
+        var insideInner = chosenDistSq <= chosenInnerSq;
+
+        var shroudActive = IsShroudZoneActive(chosenZone);
+        var portalStormActive = IsPortalStormZoneActive(chosenZone);
+
+        _log.Information(
+            "ShroudZoneCheck: player={Player} zone={Zone} lb={Landblock:X4} dist2={DistSq} inner2={InnerSq} max2={MaxSq} shroudActive={Shroud} portalActive={Portal}",
+            player.Name,
+            chosenZone.Name,
+            player.Location.Landblock,
+            chosenDistSq,
+            chosenInnerSq,
+            ((chosenZone.MaxDistance > 0 ? chosenZone.MaxDistance : chosenZone.Radius) *
+            (chosenZone.MaxDistance > 0 ? chosenZone.MaxDistance : chosenZone.Radius)),
+            shroudActive,
+            portalStormActive
+        );
+
+        var isShrouded = player.IsShrouded();
+        _log.Information("ZoneShroudStateCheck: player={Player} isShrouded={IsShrouded}", player.Name, isShrouded);
+
+        if (isShrouded)
+        {
+            if (shroudActive)
+            {
+                    HandleShroudedPlayer(player, currentUnixTime);
+            }        
+        }
+        else
+        {
+            if (shroudActive)
+            {
+                HandleOuterWarning(player, currentUnixTime);
+
+                if (insideInner)
+                {   
+                     HandleTeleport(player, chosenZone, currentUnixTime);
+                }
+
+            }
+        }
     }
+
 
     private void HandleTeleport(Player player, ShroudZoneEntry zone, double currentUnixTime)
     {
