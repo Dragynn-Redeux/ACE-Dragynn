@@ -36,6 +36,10 @@ public class ShroudZoneService
     private readonly Dictionary<uint, double> _psNextWarnForLandblock = new();
     private readonly Dictionary<uint, double> _psPendingTeleportAtForLandblock = new();
     private readonly Dictionary<uint, ShroudZoneEntry> _psPendingZoneForLandblock = new();
+    // PortalStorm warning throttles (per landblock)
+    private readonly Dictionary<uint, double> _psWarnNextSwirlForLandblock = new();
+    private readonly Dictionary<uint, double> _psWarnNextMessageForLandblock = new();
+
 
 
 
@@ -245,27 +249,39 @@ public class ShroudZoneService
         List<Player> playersInRegion,
         double currentUnixTime)
     {
-        // throttle warning per landblock 
-        if (_psNextWarnForLandblock.TryGetValue(landblock, out var nextWarn) &&
-            currentUnixTime < nextWarn)
+        // Swirl throttle (reuse shroud outer-warn swirl interval)
+        if (_psWarnNextSwirlForLandblock.TryGetValue(landblock, out var nextSwirl) &&
+            currentUnixTime < nextSwirl)
         {
-            return;
+            return; // no swirl this tick, and no message either (same pattern as shroud)
         }
 
+        // Swirl now
         foreach (var p in playersInRegion)
         {
             p.PlayParticleEffect(PlayScript.PortalStorm, p.Guid);
-            p.Session.Network.EnqueueSend(
-                new GameMessageSystemChat(
-                    "A rising pull gathers around you, tugging at your center as if trying to draw you into a drifting current.",
-                    ChatMessageType.System
-                )
-            );
         }
 
-        // small cooldown so it doesn’t spam every tick
-        _psNextWarnForLandblock[landblock] = currentUnixTime + 5;
+        _psWarnNextSwirlForLandblock[landblock] = currentUnixTime + GetOuterWarnSwirlInterval();
+
+        // Message throttle (reuse shroud outer-warn message interval)
+        if (!_psWarnNextMessageForLandblock.TryGetValue(landblock, out var nextMsg) ||
+            currentUnixTime >= nextMsg)
+        {
+            foreach (var p in playersInRegion)
+            {
+                p.Session.Network.EnqueueSend(
+                    new GameMessageSystemChat(
+                        "A rising pull gathers around you, tugging at your center as if trying to draw you into a drifting current. The pressure sharpens, and you feel moments away from being pulled away.",
+                        ChatMessageType.System
+                    )
+                );
+            }
+
+            _psWarnNextMessageForLandblock[landblock] = currentUnixTime + GetOuterWarnMessageInterval();
+        }
     }
+
 
     private void FireStormOnce(
         ShroudZoneEntry zone,
