@@ -20,6 +20,10 @@ dist
 *.userosscache
 *.sln.docstates
 
+# local-only config for debugging
+apps/server/Config.js
+apps/server/Config.dev.js
+
 # User-specific files (MonoDevelop/Xamarin Studio)
 *.userprefs
 

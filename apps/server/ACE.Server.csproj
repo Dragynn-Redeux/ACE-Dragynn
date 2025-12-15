@@ -291,6 +291,22 @@
     <None Include="..\..\Database\Updates\**" CopyToOutputDirectory="PreserveNewest" LinkBase="DatabaseSetupScripts\Updates\" />
     <None Include="..\..\Database\Optional\**" CopyToOutputDirectory="PreserveNewest" LinkBase="DatabaseSetupScripts\Optional\" />
   </ItemGroup>
+    
+  <ItemGroup>
+    <Content Include="recipe_to_emote_wcid_whitelist.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <CopyToPublishDirectory>Always</CopyToPublishDirectory>
+    </Content>
+  </ItemGroup>
+  <ItemGroup>
+    <!-- Copy your local dev config into the output as Config.js when building Debug -->
+    <None Include="Config.dev.js" Condition=" '$(Configuration)' == 'Debug' and Exists('Config.dev.js') " />
+  </ItemGroup>
+
+  <Target Name="CopyDevConfigAsConfig" AfterTargets="Build"
+          Condition=" '$(Configuration)' == 'Debug' and Exists('Config.dev.js') ">
+    <Copy SourceFiles="Config.dev.js" DestinationFiles="$(OutDir)Config.js" />
+  </Target>
 
   <ItemGroup>
     <Compile Remove="WorldObjects\SpellConduit.cs" />

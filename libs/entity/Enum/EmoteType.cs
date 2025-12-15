@@ -154,5 +154,6 @@ public enum EmoteType
     InqServerPropertyLong = 10016,
     ResetAttributeXp = 10017,
     ResetVitalXp = 10018,
-    CreateSigilTrinket = 10019
+    CreateSigilTrinket = 10019,
+    CheckEnchantments = 10020,
 }

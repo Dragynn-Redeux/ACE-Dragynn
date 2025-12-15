@@ -1,0 +1,93 @@
+Detailed change log
+
+.gitignore now ignores both apps/server/Config.js and apps/server/Config.dev.js so local server configuration files stay out of version control.
+
+ACE.Server.csproj copies recipe_to_emote_wcid_whitelist.json into every build/publish and, in Debug builds, copies a developer-only Config.dev.js into the output as Config.js, letting you keep local defaults without committing them.
+
+TreasureProfile_Item.cs introduces itemProfileGemsOnly21 and adds it to the profile list, enabling treasure tables to request an “all gems” drop profile.
+
+PropertyManager registers a new string property named recipe_tool_use_emote_whitelist, described as a comma-separated list of tool WCIDs that should trigger their “use” emote after a successful recipe.
+
+Program.cs imports LINQ and System.Text.Json, then reads recipe_to_emote_wcid_whitelist.json immediately after PropertyManager.Initialize(), updates the new whitelist property, persists it, and logs the value while catching any parsing errors so startup continues cleanly.
+
+RecipeManager now, on craft success, parses the whitelist, logs the outcome, and invokes EmoteManager.OnUse only for whitelisted tools; later it suppresses blank craft chat lines for those tools while logging whether a message was sent or skipped.
+
+EmoteManager’s Enqueue/DoEnqueue pipeline is wrapped in try/finally, tracks whether work was handed off to delayed chains, logs busy-state entry/exit, and funnels cleanup through a new ReleaseBusyState() helper so nested chains reliably clear the busy flag even when exceptions occur.
+
+ManaHelpers.cs is a new utility that distributes a mana pool across equipped items using the Mana Stone “ration in rounds” behavior, includes optional luminance augment handling, and exposes a helper for computing pools from total equipped mana.
+
+apps/server/recipe_to_emote_wcid_whitelist.json ships with two sample WCIDs, seeding the whitelist for the new behavior.
+
+RIMS_vs_main_changes.txt
+
+[.gitignore]
+branch: # local-only config for debugging                               // added - marks new ignore section
+branch: apps/server/Config.js                                           // added - keep runtime config out of git
+branch: apps/server/Config.dev.js                                       // added - keep personal debug config local
+
+[apps/server/ACE.Server.csproj]
+branch:   <Content Include="recipe_to_emote_wcid_whitelist.json">       // added - ship whitelist JSON with builds
+branch:     <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory> // added - ensure latest file in bin folder
+branch:     <CopyToPublishDirectory>Always</CopyToPublishDirectory>     // added - include in publish output
+branch:   <None Include="Config.dev.js" Condition="...">                // added - optionally copy local debug config
+branch: <Target Name="CopyDevConfigAsConfig" ...>                       // added - rename Config.dev.js to Config.js in Debug
+
+[apps/server/Factories/Tables/TreasureProfile_Item.cs]
+branch: // Gems Only Profile                                            // added - documentation for new profile
+branch: private static ChanceTable... itemProfileGemsOnly21 = ...       // added - profile pointing exclusively at gems
+branch: (TreasureItemType_Orig.Gem, 1.0f),                              // added - 100% gem weighting
+branch: itemProfileGemsOnly21,                                          // added - appended to master profile list
+
+[apps/server/Managers/PropertyManager.cs]
+branch: ("recipe_tool_use_emote_whitelist", new Property<string>(...))  // added - new server setting for tool IDs
+
+[apps/server/Managers/RecipeManager.cs]
+branch: // Fire the tool's Use emote only for whitelisted WCIDs...      // added - comment describing new logic
+branch: if (success)                                                    // added - run only on successful craft
+branch:     try                                                         // added - guard against bad data
+branch:         var cfg = PropertyManager.GetString(...);               // added - read whitelist setting
+branch:         var allowed = new HashSet<int>(...);                    // added - parse IDs
+branch:         _log.Information("[RIMS] ...");                         // added - log whitelist decision
+branch:         if (isAllowed) source.EmoteManager?.OnUse(player);      // added - trigger tool use emote
+branch:     catch                                                       // added - swallow parse or emote errors
+branch: // Suppress blank craft message only for whitelisted tools      // added - comment for chat handling
+branch: var suppress = false;                                           // added - track whether to skip chat line
+branch: if (allowed.Contains(...) && string.IsNullOrWhiteSpace(message)) // added - only suppress empty messages
+branch: if (!suppress) player.Session.Network.EnqueueSend(...);         // rewritten - send chat only when needed
+branch: else _log.Debug("... (message suppressed ... )");               // added - log skipped message
+
+[apps/server/Program.cs]
+main:     _log.Information("Initializing GuidManager...");              // deleted - moved below new whitelist loader​:codex-terminal-citation[codex-terminal-citation]{line_range_start=1 line_range_end=80 terminal_chunk_id=eb1505}​
+branch:     // ...                                                      // added - placeholder comment marking new block
+branch:     try                                                         // added - begin whitelist file loader
+branch:         var json = Path.Combine(..., "recipe_to_emote_wcid_whitelist.json"); // added - locate JSON file
+branch:         using var doc = JsonDocument.Parse(...);                // added - parse whitelist JSON
+branch:         PropertyManager.ModifyString("recipe_tool_use_emote_whitelist", valueFromFile); // added - store IDs
+branch:         PropertyManager.ResyncVariables();                      // added - persist immediately
+branch:         Serilog.Log.Information("tool-use-emote whitelist loaded: {Value}", valueFromFile); // added - log success
+branch:     catch (Exception ex) Serilog.Log.Warning(...);              // added - log failure but continue startup
+branch:     _log.Information("Initializing GuidManager...");            // rewritten - resumes normal startup after load
+
+[apps/server/WorldObjects/Managers/EmoteManager.cs]
+main:         Nested--;                                                 // deleted - inline cleanup in old version​:codex-terminal-citation[codex-terminal-citation]{line_range_start=1 line_range_end=64 terminal_chunk_id=4c8f48}​
+main:         if (Nested == 0) IsBusy = false;                          // deleted - inline busy reset in old version​:codex-terminal-citation[codex-terminal-citation]{line_range_start=1 line_range_end=64 terminal_chunk_id=4c8f48}​
+branch:         var handedOff = false;                                  // added - track whether work continues elsewhere
+branch:         try { ... }                                             // added - wrap enqueue logic for exception safety
+branch:         if (!IsBusy) _log.Debug("... Busy state engaged");      // added - log busy entry
+branch:         IsBusy = true;                                          // rewritten - moved inside try block
+branch:         if (delay + emote.Delay > 0) { ... handedOff = true; }  // rewritten - mark when chain owns cleanup
+branch:         catch (Exception ex) _log.Error(...);                   // added - log unexpected errors
+branch:         finally if (!handedOff) ReleaseBusyState();             // added - guarantee cleanup when not chained
+main:             delayChain.AddAction(... Nested-- / IsBusy = false ); // deleted - inline cleanup replaced​:codex-terminal-citation[codex-terminal-citation]{line_range_start=1 line_range_end=80 terminal_chunk_id=42e107}​
+branch:             delayChain.AddAction(WorldObject, ReleaseBusyState); // added - defer cleanup to shared helper
+branch:             ReleaseBusyState();                                 // added - immediate cleanup helper
+branch:     private void ReleaseBusyState() { ... }                     // added - centralizes Nested/IsBusy reset with logging
+
+[apps/server/WorldObjects/ManaHelpers.cs]
+branch: public static class ManaHelpers { ... }                         // added - new helper for distributing mana
+branch: public sealed class ChargeResult ...                            // added - result container for mana distribution
+branch: public static ChargeResult DistributePoolLikeManaStone(... )    // added - Mana Stone-style sharing logic
+branch: public static int ComputePoolFromEquippedMax(... )              // added - helper to size mana pool by gear
+
+[apps/server/recipe_to_emote_wcid_whitelist.json]
+branch: { "recipe_tool_use_emote_whitelist": [2023138, 2023139] }       // added - default whitelist entries

@@ -355,6 +355,28 @@ public class EmoteManager
                 }
                 break;
 
+            case EmoteType.CheckEnchantments: // Example Use: (@parent_id, 0, 10019, 0, 0, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, 5379, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+            {
+                // guardrails
+                if (targetObject is Creature target &&
+                    target.EnchantmentManager != null &&
+                    emote.SpellId.HasValue &&
+                    emote.SpellId.Value > 0)
+                {
+                    var active = target.EnchantmentManager.GetEnchantment((uint)emote.SpellId.Value);
+
+                    // branch only. no messages to player
+                    ExecuteEmoteSet(
+                        active != null ? EmoteCategory.TestSuccess : EmoteCategory.TestFailure,
+                        emote.Message,
+                        targetObject,
+                        true);
+                }
+                break;
+            }
+
+
+
             case EmoteType.CloseMe:
 
                 // animation delay?
@@ -2914,55 +2936,79 @@ public class EmoteManager
         }
 
         var emote = actionsList[emoteIdx];
+        var handedOff = false; // [2025-08-29 20:14:59 UTC] track if work was delegated for cleanup
 
-        if (
-            Nested > 75
-            && !string.IsNullOrEmpty(emoteSet.Quest)
-            && emoteSet.Quest == emote.Message
-            && EmoteIsBranchingType(emote)
-        )
+        try // [2025-08-29 20:14:59 UTC] ensure cleanup around early returns and exceptions
         {
-            var emoteStack = $"{emoteSet.Category}: {emoteSet.Quest}\n";
-            foreach (var e in emoteSet.PropertiesEmoteAction)
+            if (emoteSet == null)
             {
-                emoteStack +=
-                    $"       - {(EmoteType)emote.Type}{(string.IsNullOrEmpty(emote.Message) ? "" : $": {emote.Message}")}\n";
+                return;
             }
 
-            _log.Error(
-                $"[EMOTE] {WorldObject.Name}.EmoteManager.Enqueue(): Nested > 75, possible Infinite loop detected and aborted on 0x{WorldObject.Guid}:{WorldObject.WeenieClassId}\n-> {emoteStack}"
-            );
-
-            Nested--;
-
-            if (Nested == 0)
+            if (!IsBusy)
             {
-                IsBusy = false;
+                _log.Debug(
+                    $"[EMOTE] {WorldObject.Name}.EmoteManager.Enqueue(): Busy state engaged"
+                ); // [2025-08-29 20:14:59 UTC] log busy-state entry
             }
 
-            return;
-        }
+            IsBusy = true; // [2025-08-29 20:14:59 UTC] mark busy before processing
 
-        if (delay + emote.Delay > 0)
-        {
-            var actionChain = new ActionChain();
-
-            if (Debug)
+            if (
+                Nested > 75
+                && !string.IsNullOrEmpty(emoteSet.Quest)
+                && emoteSet.Quest == emote.Message
+                && EmoteIsBranchingType(emote)
+            )
             {
-                actionChain.AddAction(WorldObject, () => Console.Write($"{emote.Delay} - "));
+                var emoteStack = $"{emoteSet.Category}: {emoteSet.Quest}\n";
+                foreach (var e in emoteSet.PropertiesEmoteAction)
+                {
+                    emoteStack +=
+                        $"       - {(EmoteType)emote.Type}{(string.IsNullOrEmpty(emote.Message) ? "" : $": {emote.Message}")}\n";
+                }
+
+                _log.Error(
+                    $"[EMOTE] {WorldObject.Name}.EmoteManager.Enqueue(): Nested > 75, possible Infinite loop detected and aborted on 0x{WorldObject.Guid}:{WorldObject.WeenieClassId}\n-> {emoteStack}"
+                );
+
+                return;
             }
 
-            // delay = post-delay from actual time of previous emote
-            // emote.Delay = pre-delay for current emote
-            actionChain.AddDelaySeconds(delay + emote.Delay);
+            if (delay + emote.Delay > 0)
+            {
+                var actionChain = new ActionChain();
 
-            actionChain.AddAction(WorldObject, () => DoEnqueue(emoteSet, targetObject, emoteIdx, emote));
-            actionChain.EnqueueChain();
+                if (Debug)
+                {
+                    actionChain.AddAction(WorldObject, () => Console.Write($"{emote.Delay} - "));
+                }
+
+                // delay = post-delay from actual time of previous emote
+                // emote.Delay = pre-delay for current emote
+                actionChain.AddDelaySeconds(delay + emote.Delay);
+
+                actionChain.AddAction(WorldObject, () => DoEnqueue(emoteSet, targetObject, emoteIdx, emote));
+                actionChain.EnqueueChain();
+                handedOff = true;
+            }
+            else
+            {
+                DoEnqueue(emoteSet, targetObject, emoteIdx, emote);
+                handedOff = true;
+            }
         }
-        else
+        catch (Exception ex)
         {
-            DoEnqueue(emoteSet, targetObject, emoteIdx, emote);
+            _log.Error(ex, $"[EMOTE] {WorldObject.Name}.EmoteManager.Enqueue(): exception");
         }
+        finally
+        {
+            if (!handedOff)
+            {
+                ReleaseBusyState();
+            }
+        } // [2025-08-29 20:14:59 UTC] guarantee busy-state reset when not handed off
     }
 
     /// <summary>
@@ -2980,59 +3026,70 @@ public class EmoteManager
             Console.Write($"{(EmoteType)emote.Type}");
         }
 
-        //if (!string.IsNullOrEmpty(emoteSet.Quest) && emoteSet.Quest == emote.Message && EmoteIsBranchingType(emote))
-        //{
-        //    _log.Error($"[EMOTE] {WorldObject.Name}.EmoteManager.DoEnqueue(): Infinite loop detected on 0x{WorldObject.Guid}:{WorldObject.WeenieClassId}\n-> {emoteSet.Category}: {emoteSet.Quest} to {(EmoteType)emote.Type}: {emote.Message}");
+        var handedOff = false; // [2025-08-29 20:14:59 UTC] track delegation for cleanup
 
-        //    Nested--;
-
-        //    if (Nested == 0)
-        //        IsBusy = false;
-
-        //    return;
-        //}
-
-        var nextDelay = ExecuteEmote(emoteSet, emote, targetObject);
-
-        if (Debug)
+        try // [2025-08-29 20:14:59 UTC] ensure busy-state released on all paths
         {
-            Console.WriteLine($" - {nextDelay}");
-        }
+            var nextDelay = ExecuteEmote(emoteSet, emote, targetObject);
 
-        if (emoteIdx < emoteSet.PropertiesEmoteAction.Count - 1)
-        {
-            Enqueue(emoteSet, targetObject, emoteIdx + 1, nextDelay);
-        }
-        else
-        {
-            if (nextDelay > 0)
+            if (Debug)
             {
-                var delayChain = new ActionChain();
-                delayChain.AddDelaySeconds(nextDelay);
-                delayChain.AddAction(
-                    WorldObject,
-                    () =>
-                    {
-                        Nested--;
+                Console.WriteLine($" - {nextDelay}");
+            }
 
-                        if (Nested == 0)
-                        {
-                            IsBusy = false;
-                        }
-                    }
-                );
-                delayChain.EnqueueChain();
+            if (emoteIdx < emoteSet.PropertiesEmoteAction.Count - 1)
+            {
+                Enqueue(emoteSet, targetObject, emoteIdx + 1, nextDelay);
+                handedOff = true; // [2025-08-29 20:14:59 UTC] delegated to next emote
             }
             else
             {
-                Nested--;
-
-                if (Nested == 0)
+                if (nextDelay > 0)
                 {
-                    IsBusy = false;
+                    var delayChain = new ActionChain();
+                    delayChain.AddDelaySeconds(nextDelay);
+                    delayChain.AddAction(WorldObject, ReleaseBusyState); // [2025-08-29 20:14:59 UTC] final cleanup after delay
+                    delayChain.EnqueueChain();
+                    handedOff = true;
+                }
+                else
+                {
+                    ReleaseBusyState(); // [2025-08-29 20:14:59 UTC] immediate cleanup when no delay
+                    handedOff = true;
                 }
             }
         }
+        catch (Exception ex)
+        {
+            _log.Error(ex, $"[EMOTE] {WorldObject.Name}.EmoteManager.DoEnqueue(): exception");
+        }
+        finally
+        {
+            if (!handedOff)
+            {
+                ReleaseBusyState();
+            }
+        } // [2025-08-29 20:14:59 UTC] guarantee busy-state reset when not handed off
+    }
+
+    private void ReleaseBusyState()
+    {
+        Nested--; // [2025-08-29 20:14:59 UTC] decrement nested invocation depth
+
+        if (Nested <= 0)
+        {
+            Nested = 0;
+
+            if (IsBusy)
+            {
+                _log.Debug(
+                    $"[EMOTE] {WorldObject.Name}.EmoteManager.Enqueue(): Busy state cleared"
+                ); // [2025-08-29 20:14:59 UTC] log busy-state exit
+            }
+
+            IsBusy = false; // [2025-08-29 20:14:59 UTC] mark manager idle
+        }
+    
     }
 
     private bool EmoteIsBranchingType(PropertiesEmoteAction emote)
