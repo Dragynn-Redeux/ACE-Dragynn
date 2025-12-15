@@ -464,8 +464,7 @@ public class ShroudZoneService
         );
 
         var isShrouded = player.IsShrouded();
-        _log.Information("ZoneShroudStateCheck: player={Player} isShrouded={IsShrouded}", player.Name, isShrouded);
-
+        
         if (isShrouded)
         {
             if (shroudActive)
