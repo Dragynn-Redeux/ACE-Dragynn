@@ -1,5 +1,4 @@
-using System;
-using System.Linq;
+using System.Collections.Generic;
 using ACE.Entity;
 using ACE.Entity.Enum;
 using ACE.Entity.Models;
@@ -11,7 +10,7 @@ namespace ACE.Server.WorldObjects;
 public class CombatFocusAlterationGem : WorldObject
 {
     /// <summary>
-    /// A new biota be created taking all of its values from weenie.
+    /// Create a new biota taking all of its values from the provided weenie.
     /// </summary>
     public CombatFocusAlterationGem(Weenie weenie, ObjectGuid guid)
         : base(weenie, guid)
@@ -34,6 +33,8 @@ public class CombatFocusAlterationGem : WorldObject
     {
         UseObjectOnTarget(player, this, target);
     }
+
+    private const int MaxSkillSpellsAltered = 3;
 
     public static void UseObjectOnTarget(Player player, WorldObject source, WorldObject target, bool confirmed = false)
     {
@@ -99,10 +100,13 @@ public class CombatFocusAlterationGem : WorldObject
                 player.TryConsumeFromInventoryWithNetworking(target);
                 player.TryCreateInInventoryWithNetworking(newFocus);
             }
+
+            // Prevent fall-through: we handled the "reset to base state" action so return.
+            return;
         }
 
         var spellId = (SpellId)source.ItemSpellId;
-        var spellMatch = combatFocus.GetCurrentSpellList().Contains(spellId) ? true : false;
+        var spellMatch = combatFocus.GetCurrentSpellList().Contains(spellId);
         var isBaseSpell = combatFocus.IsBaseSpell(spellId);
         var isAttribute = IsAttribute(spellId);
 
@@ -145,18 +149,18 @@ public class CombatFocusAlterationGem : WorldObject
 
         if (!isAttribute)
         {
-            if (spellMatch && combatFocus.CombatFocusNumSkillsRemoved == 2 && isBaseSpell)
+            if (spellMatch && combatFocus.CombatFocusNumSkillsRemoved == MaxSkillSpellsAltered && isBaseSpell)
             {
                 player.Session.Network.EnqueueSend(
                     new GameMessageSystemChat(
-                        $"You can only remove two of the original skill spells from {combatFocus.Name}.",
+                        $"You can only remove three of the original skill spells from {combatFocus.Name}.",
                         ChatMessageType.Craft
                     )
                 );
                 player.SendUseDoneEvent();
                 return;
             }
-            Console.WriteLine($"{combatFocus.CombatFocusNumSkillsRemoved} {combatFocus.CombatFocusNumSkillsAdded}");
+            
             if (!spellMatch && combatFocus.CombatFocusNumSkillsRemoved == combatFocus.CombatFocusNumSkillsAdded)
             {
                 player.Session.Network.EnqueueSend(
@@ -206,24 +210,19 @@ public class CombatFocusAlterationGem : WorldObject
         UpdateObj(player, target);
     }
 
+    private static readonly HashSet<SpellId> s_attributeSpellIds = new()
+    {
+        SpellId.StrengthSelf1,
+        SpellId.EnduranceSelf1,
+        SpellId.CoordinationSelf1,
+        SpellId.QuicknessSelf1,
+        SpellId.FocusSelf1,
+        SpellId.WillpowerSelf1
+    };
+
     private static bool IsAttribute(SpellId spellId)
     {
-        SpellId[] attributeSpellIds =
-        {
-            SpellId.StrengthSelf1,
-            SpellId.EnduranceSelf1,
-            SpellId.CoordinationSelf1,
-            SpellId.QuicknessSelf1,
-            SpellId.FocusSelf1,
-            SpellId.WillpowerSelf1
-        };
-
-        if (attributeSpellIds.Contains(spellId))
-        {
-            return true;
-        }
-
-        return false;
+        return s_attributeSpellIds.Contains(spellId);
     }
 
     private static void UpdateObj(Player player, WorldObject obj)

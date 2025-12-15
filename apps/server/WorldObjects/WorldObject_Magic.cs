@@ -601,17 +601,17 @@ partial class WorldObject
                 switch (spell.School)
                 {
                     case MagicSchool.LifeMagic:
-                        player?.CheckForSigilTrinketOnCastEffects(targetCreature, spell, true, Skill.LifeMagic, (int)SigilTrinketLifeMagicEffect.ScarabIntensity, null, false, _isSigilTrinketSpell);
-                        player?.CheckForSigilTrinketOnCastEffects(targetCreature, spell, true, Skill.LifeMagic, (int)SigilTrinketLifeMagicEffect.ScarabShield, null, false, _isSigilTrinketSpell);
-                        player?.CheckForSigilTrinketOnCastEffects(targetCreature, spell, true, Skill.LifeMagic, (int)SigilTrinketLifeMagicEffect.ScarabCastProt, null, false, _isSigilTrinketSpell);
-                        player?.CheckForSigilTrinketOnCastEffects(targetCreature, spell, true, Skill.LifeMagic, (int)SigilTrinketLifeMagicEffect.ScarabCastVuln, null, false, _isSigilTrinketSpell);
-                        player?.CheckForSigilTrinketOnCastEffects(targetCreature, spell, true, Skill.LifeMagic, (int)SigilTrinketLifeMagicEffect.ScarabCastItemBuff, null, false, _isSigilTrinketSpell);
-                        player?.CheckForSigilTrinketOnCastEffects(targetCreature, spell, true, Skill.LifeMagic, (int)SigilTrinketLifeMagicEffect.ScarabCastVitalRate, null, false, _isSigilTrinketSpell);
+                        player?.CheckForSigilTrinketOnCastEffects(targetCreature, spell, true, Skill.LifeMagic, SigilTrinketLifeWarMagicEffect.Intensity, null, false, _isSigilTrinketSpell);
+                        player?.CheckForSigilTrinketOnCastEffects(targetCreature, spell, true, Skill.LifeMagic, SigilTrinketLifeWarMagicEffect.Shielding, null, false, _isSigilTrinketSpell);
+                        player?.CheckForSigilTrinketOnCastEffects(targetCreature, spell, true, Skill.LifeMagic, SigilTrinketLifeMagicEffect.CastProt, null, false, _isSigilTrinketSpell);
+                        player?.CheckForSigilTrinketOnCastEffects(targetCreature, spell, true, Skill.LifeMagic, SigilTrinketLifeMagicEffect.CastVuln, null, false, _isSigilTrinketSpell);
+                        player?.CheckForSigilTrinketOnCastEffects(targetCreature, spell, true, Skill.LifeMagic, SigilTrinketLifeMagicEffect.CastItemBuff, null, false, _isSigilTrinketSpell);
+                        player?.CheckForSigilTrinketOnCastEffects(targetCreature, spell, true, Skill.LifeMagic, SigilTrinketLifeMagicEffect.CastVitalRate, null, false, _isSigilTrinketSpell);
                         break;
                     case MagicSchool.WarMagic:
-                        player?.CheckForSigilTrinketOnCastEffects(targetCreature, spell, true, Skill.WarMagic, (int)SigilTrinketWarMagicEffect.ScarabIntensity, null, false, _isSigilTrinketSpell);
-                        player?.CheckForSigilTrinketOnCastEffects(targetCreature, spell, true, Skill.WarMagic, (int)SigilTrinketWarMagicEffect.ScarabShield, null, false, _isSigilTrinketSpell);
-                        player?.CheckForSigilTrinketOnCastEffects(targetCreature, spell, true, Skill.WarMagic, (int)SigilTrinketWarMagicEffect.ScarabDuplicate, null, false, _isSigilTrinketSpell);
+                        player?.CheckForSigilTrinketOnCastEffects(targetCreature, spell, true, Skill.WarMagic, SigilTrinketLifeWarMagicEffect.Intensity, null, false, _isSigilTrinketSpell);
+                        player?.CheckForSigilTrinketOnCastEffects(targetCreature, spell, true, Skill.WarMagic, SigilTrinketLifeWarMagicEffect.Shielding, null, false, _isSigilTrinketSpell);
+                        player?.CheckForSigilTrinketOnCastEffects(targetCreature, spell, true, Skill.WarMagic, SigilTrinketWarMagicEffect.Duplicate, null, false, _isSigilTrinketSpell);
                         break;
                 }
             }
@@ -765,6 +765,7 @@ partial class WorldObject
         // weird itemCaster -> caster collapsing going on here -- fixme
 
         var player = this as Player;
+        var targetCreature = target as Creature;
 
         var aetheriaProc = false;
         var cloakProc = false;
@@ -794,6 +795,17 @@ partial class WorldObject
 
         // create enchantment
         var addResult = target.EnchantmentManager.Add(spell, caster, weapon, equip);
+
+        // Nether Dot Mod
+        if (player != null && caster != null && targetCreature != null && spell.School is MagicSchool.VoidMagic)
+        {
+            var casterWeapon = weapon ?? caster;
+            var wielderCreature = caster as Creature ?? this as Creature;
+
+            var netherDamageMod = GetCasterElementalDamageModifier(casterWeapon, wielderCreature, targetCreature, W_DamageType);
+
+            addResult.Enchantment.StatModValue = (int)(addResult.Enchantment.StatModValue * netherDamageMod);
+        }
 
         // Ward reduction of Creature and Life debuffs
         if (target is Player && spell.Id != (uint)SpellId.Vitae)
@@ -1086,7 +1098,7 @@ partial class WorldObject
             tryBoost = Convert.ToInt32(tryBoost * (1.0f + Jewel.GetJewelBlueFury(player)));
             tryBoost = Convert.ToInt32(tryBoost * (1.0f + Jewel.GetJewelEffectMod(player, PropertyInt.GearSelfHarm)));
 
-            var attributeMod = creature.GetAttributeMod(weapon, true, targetCreature);
+            var attributeMod = creature?.GetAttributeMod(weapon, true) ?? 1.0f;
             tryBoost = Convert.ToInt32(tryBoost * attributeMod);
 
             // reductions
@@ -1112,7 +1124,7 @@ partial class WorldObject
         tryBoost = (int)(tryBoost * scalar);
 
         SigilTrinketSpellDamageReduction = 1.0f;
-        targetPlayer?.CheckForSigilTrinketOnSpellHitReceivedEffects(this, spell, tryBoost, Skill.MagicDefense, (int)SigilTrinketMagicDefenseEffect.Absorption);
+        targetPlayer?.CheckForSigilTrinketOnSpellHitReceivedEffects(this, spell, tryBoost, Skill.MagicDefense, SigilTrinketMagicDefenseEffect.Absorption);
         tryBoost = Convert.ToInt32(tryBoost * SigilTrinketSpellDamageReduction);
 
         switch (spell.VitalDamageType)
@@ -3794,7 +3806,7 @@ partial class WorldObject
         return Math.Clamp(mod, 0.5f, 2.0f);
     }
 
-    private float GetWardMod(Creature caster, Creature target, float ignoreWardMod)
+    public float GetWardMod(Creature caster, Creature target, float ignoreWardMod)
     {
         var wardLevel = target.GetWardLevel();
 

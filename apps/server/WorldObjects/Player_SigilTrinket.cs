@@ -209,7 +209,7 @@ partial class Player
         return equippedSigilTrinkets.Any(sigilTrinket => (sigilTrinket.SigilTrinketBonusStat ?? 0) == sigilTrinketBonusStat && (sigilTrinket.SigilTrinketBonusStatAmount ?? 0) == sigilTrinketBonusStatAmount);
     }
 
-    public float GetSigilTrinketManaReductionMod(Spell spell, Skill skill, int effectId)
+    public float GetSigilTrinketManaReductionMod(Spell spell, Skill skill, Enum effectId)
     {
         var equippedSigilTrinkets = GetEquippedSigilTrinkets();
         if (equippedSigilTrinkets.Count < 1)
@@ -247,7 +247,7 @@ partial class Player
     /// <param name="onCrit">If the attack crit</param>
     /// <param name="skill"></param>
     /// <param name="effectId"></param>
-    public void CheckForSigilTrinketOnAttackEffects(Creature target, DamageEvent damageEvent, Skill skill, int effectId, bool onCrit = false)
+    public void CheckForSigilTrinketOnAttackEffects(Creature target, DamageEvent damageEvent, Skill skill, Enum effectId, bool onCrit = false)
     {
         var equippedSigilTrinkets = GetEquippedSigilTrinkets();
         if (equippedSigilTrinkets.Count == 0)
@@ -285,7 +285,7 @@ partial class Player
     /// <param name="sigilTrinketSpell">If the spell was cast from an equipped sigil trinket</param>
     /// <param name="skill"></param>
     /// <param name="effectId"></param>
-    public void CheckForSigilTrinketOnCastEffects(WorldObject target, Spell spell, bool isWeaponSpell, Skill skill, int effectId, Creature creatureToCastSpellFrom = null, bool onCrit = false, bool sigilTrinketSpell = false)
+    public void CheckForSigilTrinketOnCastEffects(WorldObject target, Spell spell, bool isWeaponSpell, Skill skill, Enum effectId, Creature creatureToCastSpellFrom = null, bool onCrit = false, bool sigilTrinketSpell = false)
     {
         // Don't allow sigil trinket effects to occur if spell was generated from a sigil trinket
         if (sigilTrinketSpell)
@@ -329,7 +329,7 @@ partial class Player
     /// <param name="damage"></param>
     /// <param name="skill"></param>
     /// <param name="effectId"></param>
-    public void CheckForSigilTrinketOnSpellHitReceivedEffects(WorldObject spellSource, Spell spell, int damage, Skill skill, int effectId, bool onCrit = false)
+    public void CheckForSigilTrinketOnSpellHitReceivedEffects(WorldObject spellSource, Spell spell, int damage, Skill skill, Enum effectId, bool onCrit = false)
     {
         var equippedSigilTrinkets = GetEquippedSigilTrinkets();
         if (equippedSigilTrinkets.Count == 0)

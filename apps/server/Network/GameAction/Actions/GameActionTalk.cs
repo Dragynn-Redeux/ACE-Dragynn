@@ -16,8 +16,10 @@ public static class GameActionTalk
     {
         var message = clientMessage.Payload.ReadString16L();
 
-        if (message.StartsWith("@"))
+        // Accept both '@' and '/' as command prefixes
+        if (!string.IsNullOrEmpty(message) && (message.StartsWith("@") || message.StartsWith("/")))
         {
+            var prefix = message[0]; // '@' or '/'
             var commandRaw = message.Remove(0, 1);
             var response = CommandHandlerResponse.InvalidCommand;
             CommandHandlerInfo commandHandler = null;
@@ -47,7 +49,7 @@ public static class GameActionTalk
             {
                 try
                 {
-                    if (commandHandler.Attribute.IncludeRaw)
+                    if (commandHandler?.Attribute.IncludeRaw ?? false)
                     {
                         parameters = CommandManager.StuffRawIntoParameters(message.Remove(0, 1), command, parameters);
                     }
@@ -60,15 +62,15 @@ public static class GameActionTalk
             }
             else if (response == CommandHandlerResponse.SudoOk)
             {
-                var sudoParameters = new string[parameters.Length - 1];
-                for (var i = 1; i < parameters.Length; i++)
-                {
-                    sudoParameters[i - 1] = parameters[i];
-                }
-
                 try
                 {
-                    if (commandHandler.Attribute.IncludeRaw)
+                    var sudoParameters = new string[parameters.Length - 1];
+                    for (var i = 1; i < parameters.Length; i++)
+                    {
+                        sudoParameters[i - 1] = parameters[i];
+                    }
+
+                    if (commandHandler?.Attribute.IncludeRaw ?? false)
                     {
                         parameters = CommandManager.StuffRawIntoParameters(message.Remove(0, 1), command, parameters);
                     }
@@ -76,11 +78,14 @@ public static class GameActionTalk
                 }
                 catch (Exception ex)
                 {
-                    _log.Error(ex, "Exception while invoking command handler for: {RawCommand}", commandRaw);
+                    _log.Error(ex, "Exception while invoking sudo command handler for: {RawCommand}", commandRaw);
                 }
             }
             else
             {
+                // Use the same prefix the player typed when showing usage/errors
+                var showUsagePrefix = prefix;
+
                 switch (response)
                 {
                     case CommandHandlerResponse.InvalidCommand:
@@ -91,26 +96,46 @@ public static class GameActionTalk
                     case CommandHandlerResponse.InvalidParameterCount:
                         session.Network.EnqueueSend(
                             new GameMessageSystemChat(
-                                $"Invalid parameter count, got {parameters.Length}, expected {commandHandler.Attribute.ParameterCount}!",
+                                $"Invalid parameter count, got {parameters?.Length ?? 0}, expected {commandHandler?.Attribute.ParameterCount}!",
                                 ChatMessageType.Help
                             )
                         );
                         session.Network.EnqueueSend(
                             new GameMessageSystemChat(
-                                $"@{commandHandler.Attribute.Command} - {commandHandler.Attribute.Description}",
+                                $"{showUsagePrefix}{commandHandler?.Attribute.Command} - {commandHandler?.Attribute.Description}",
                                 ChatMessageType.Broadcast
                             )
                         );
                         session.Network.EnqueueSend(
                             new GameMessageSystemChat(
-                                $"Usage: @{commandHandler.Attribute.Command} {commandHandler.Attribute.Usage}",
+                                $"Usage: {showUsagePrefix}{commandHandler?.Attribute.Command} {commandHandler?.Attribute.Usage}",
                                 ChatMessageType.Broadcast
                             )
                         );
                         break;
+                    case CommandHandlerResponse.NotAuthorized:
+                        session.Network.EnqueueSend(
+                            new GameMessageSystemChat($"You are not authorized to use {showUsagePrefix}{command}.", ChatMessageType.Help)
+                        );
+                        break;
+                    case CommandHandlerResponse.NotInWorld:
+                        session.Network.EnqueueSend(
+                            new GameMessageSystemChat($"You must be in the world to use {showUsagePrefix}{command}.", ChatMessageType.Help)
+                        );
+                        break;
+                    case CommandHandlerResponse.NoConsoleInvoke:
+                        session.Network.EnqueueSend(
+                            new GameMessageSystemChat($"That command cannot be invoked from the console.", ChatMessageType.Help)
+                        );
+                        break;
                     default:
+                        session.Network.EnqueueSend(
+                            new GameMessageSystemChat($"Command failed: {response}", ChatMessageType.Help)
+                        );
                         break;
                 }
+
+                _log.Information("Command {Command} returned {Response} for player {Player}", command, response, session?.Player?.Name ?? "Unknown");
             }
         }
         else

@@ -840,7 +840,7 @@ partial class Player
 
         foreach (var enchantment in enchantments)
         {
-            if (enchantment.SpellId == (int)SpellId.CurseWeakness1)
+            if (enchantment.SpellId == (int)SpellId.Shrouded)
             {
                 return true;
             }
