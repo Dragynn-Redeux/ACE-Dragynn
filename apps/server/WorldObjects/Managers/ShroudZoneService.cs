@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
 using System.Numerics;
 using ACE.Entity;
 using Serilog;
@@ -344,9 +343,15 @@ public class ShroudZoneService
             return false;
         }
 
-        // Per–zone event gating (empty key = always on if global allows)
+        // Empty key = always active if global allows
+        if (string.IsNullOrWhiteSpace(zone.ShroudEventKey))
+        {
+            return true;
+        }
+
         return IsEventRunning(zone.ShroudEventKey);
     }
+
 
     private static bool IsPortalStormZoneActive(ShroudZoneEntry zone)
     {
@@ -356,9 +361,15 @@ public class ShroudZoneService
             return false;
         }
 
-        // Per–zone event gating
+        // Empty key = always active if global allows
+        if (string.IsNullOrWhiteSpace(zone.StormEventKey))
+        {
+            return true;
+        }
+
         return IsEventRunning(zone.StormEventKey);
     }
+
 
 
     public static ShroudZoneService CreateFromConfig()
