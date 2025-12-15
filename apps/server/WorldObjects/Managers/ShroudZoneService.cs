@@ -106,12 +106,13 @@ public class ShroudZoneService
 
     private void TickPortalStorm(double currentUnixTime)
     {
-        // quick global on/off
+        // Global on/off
         if (!PropertyManager.GetBool("ps_global", true).Item)
         {
             return;
         }
-        // Get online players ONCE
+
+        // Get online players once
         var online = PlayerManager.GetAllOnline();
 
         // Bucket players by landblock once
@@ -127,67 +128,65 @@ public class ShroudZoneService
             list.Add(p);
         }
 
-        // For each landblock that has zones, evaluate storm zones
+        // For each landblock that has storm-capable zones
         foreach (var kvp in _zonesByLandblock)
         {
             var landblock = kvp.Key;
 
             if (!byLandblock.TryGetValue(landblock, out var playersInLb) || playersInLb.Count == 0)
             {
-                continue;
+                    continue;
             }
+
             // Throttle per landblock
             if (_psNextTeleportForLandblock.TryGetValue(landblock, out var nextTime) &&
                 currentUnixTime < nextTime)
             {
-                continue;
+                    continue;
             }
 
             foreach (var zone in kvp.Value)
             {
-                // Only storm zones (if you want storm-only zones, check some kind flag here instead)
-                // Event gate (optional)
-                if (!string.IsNullOrWhiteSpace(zone.StormEventKey))
+                // Only zones with an active storm event
+                if (!IsPortalStormZoneActive(zone))
                 {
-                    var state = EventManager.GetEventStatus(zone.StormEventKey);
-                    if (!(state == GameEventState.On || state == GameEventState.Enabled))
-                        {
-                            continue;
-                        }
+                    continue;
                 }
 
-                // Count in region (only players in that landblock)
                 var zoneWorld = ToWorld2D(zone.Location);
-                var maxDist   = zone.MaxDistance > 0 ? zone.MaxDistance : zone.Radius;
+                var maxDist = zone.MaxDistance > 0 ? zone.MaxDistance : zone.Radius;
                 var maxDistSq = maxDist * maxDist;
 
+                int inRegionCount = 0;
                 var inRegion = new List<Player>();
                 foreach (var p in playersInLb)
                 {
                     var d = (ToWorld2D(p.Location) - zoneWorld).LengthSquared();
                     if (d <= maxDistSq)
-                        {
-                            inRegion.Add(p);
-                        }
+                    {
+                        inRegion.Add(p);
+                        inRegionCount++;
+                    }
                 }
 
                 var cap = (int)PropertyManager.GetDouble("ps_cap", 8).Item;
-                if (cap <= 0 || inRegion.Count < cap)
+
+                if (cap <= 0 || inRegionCount < cap)
                 {
                     continue;
                 }
 
-                // Fire the storm once (this method must exist)
                 FireStormOnce(zone, landblock, inRegion, currentUnixTime);
 
                 var interval = PropertyManager.GetDouble("ps_interval", 60).Item;
                 _psNextTeleportForLandblock[landblock] = currentUnixTime + interval;
 
-                // only fire once per tick per landblock
+                // Only fire once per tick per landblock
                 break;
             }
         }
     }
+
     private void FireStormOnce(
         ShroudZoneEntry zone,
         uint landblock,
@@ -335,36 +334,33 @@ public class ShroudZoneService
 
 
 
-    private static bool IsShroudZoneActive(ShroudZoneEntry zone)
+        private static bool IsShroudZoneActive(ShroudZoneEntry zone)
     {
-        // Global shroud master switch
         if (!PropertyManager.GetBool("sz_global", true).Item)
         {
             return false;
         }
 
-        // Empty key = always active if global allows
+        // Empty key = no shroud effect on this zone
         if (string.IsNullOrWhiteSpace(zone.ShroudEventKey))
         {
-            return true;
+            return false;
         }
 
         return IsEventRunning(zone.ShroudEventKey);
     }
 
-
     private static bool IsPortalStormZoneActive(ShroudZoneEntry zone)
     {
-        // Global portal storm master switch
         if (!PropertyManager.GetBool("ps_global", true).Item)
         {
             return false;
         }
 
-        // Empty key = always active if global allows
+        // Empty key = no portal storm effect on this zone
         if (string.IsNullOrWhiteSpace(zone.StormEventKey))
         {
-            return true;
+            return false;
         }
 
         return IsEventRunning(zone.StormEventKey);
