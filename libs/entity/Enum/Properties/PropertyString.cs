@@ -83,6 +83,9 @@ public enum PropertyString : ushort
     GearPlatingName = 52,
 
     [ServerOnly]
+    SigilTrinketAllowedSpecializedSkills = 53,
+
+    [ServerOnly]
     PCAPRecordedCurrentMotionState = 8006,
 
     [ServerOnly]

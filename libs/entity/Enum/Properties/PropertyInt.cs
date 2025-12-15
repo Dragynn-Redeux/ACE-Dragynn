@@ -756,7 +756,7 @@ public enum PropertyInt : ushort
     SigilTrinketColor = 401,
 
     [ServerOnly]
-    SigilTrinketSchool = 402,
+    SigilTrinketSkill = 402,
 
     [ServerOnly]
     SigilTrinketEffectId = 403,
@@ -868,6 +868,8 @@ public enum PropertyInt : ushort
     StaminaOverTime = 509,
     ManaOverTime = 510,
     MonsterRank = 511,
+    CombatFocusSkill3SpellRemoved = 512,
+    CombatFocusSkill3SpellAdded = 513,
 
     [ServerOnly]
     PCAPRecordedAutonomousMovement = 8007,

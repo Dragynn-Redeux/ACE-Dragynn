@@ -3020,6 +3020,28 @@ partial class Player
             return WeenieError.YouDoNotOwnThatItem; // Unsure of the exact message
         }
 
+        // New: if item is a SigilTrinket and specifies AllowedSpecializedSkills, evaluate OR semantics
+        if (item is SigilTrinket st)
+        {
+            var allowed = st.AllowedSpecializedSkills;
+            if (allowed != null && allowed.Count > 0)
+            {
+                // require specialized (or higher) in at least one listed skill
+                foreach (var skill in allowed)
+                {
+                    var cs = GetCreatureSkill(skill, false);
+                    if (cs != null && cs.AdvancementClass >= SkillAdvancementClass.Specialized)
+                    {
+                        return WeenieError.None;
+                    }
+                }
+
+                // no matching specialization found
+                return WeenieError.SkillTooLow;
+            }
+        }
+
+        // Legacy AND-style wield requirements (unchanged)
         var result = CheckWieldRequirement(item.WieldRequirements, item.WieldSkillType, item.WieldDifficulty);
         if (result != WeenieError.None)
         {
@@ -5209,7 +5231,7 @@ partial class Player
             }
             else if (emoteResult.Category == EmoteCategory.Refuse)
             {
-                if (target is Creature creatureTarget && item.TrophyQuality is not null)
+                if (target is Creature creatureTarget && (item.TrophyQuality is not null || item.WeenieType is WeenieType.SigilTrinket))
                 {
                     creatureTarget.RefusalItem = (item, item.Guid.Full);
                 }

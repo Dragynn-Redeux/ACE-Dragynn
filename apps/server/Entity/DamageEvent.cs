@@ -326,7 +326,7 @@ public class DamageEvent
         if (attackRoll > GetEvadeChance(attacker, defender))
         {
             // If playerDefender has Phalanx active, 25-50% chance to convert a full hit into a partial hit, depending on shield size.
-            if (playerDefender is { PhalanxIsActive: true } && (playerAttacker.GetEquippedShield() is not null || playerAttacker.GetEquippedWeapon() is { IsTwoHanded: true}))
+            if (playerDefender is { PhalanxIsActive: true } && (playerDefender.GetEquippedShield() is not null || playerDefender.GetEquippedWeapon() is { IsTwoHanded: true}))
             {
                 var phalanxChance = 0.25;
 
@@ -417,7 +417,7 @@ public class DamageEvent
 
         if (playerDefender is not null && PartialEvasion == PartialEvasion.Some)
         {
-            playerDefender.CheckForSigilTrinketOnAttackEffects(playerAttacker, this, Skill.PhysicalDefense, (int)SigilTrinketPhysicalDefenseEffect.Evasion);
+            playerDefender.CheckForSigilTrinketOnAttackEffects(playerAttacker, this, Skill.PhysicalDefense, SigilTrinketPhysicalDefenseEffect.Evasion);
         }
     }
 
@@ -606,8 +606,8 @@ public class DamageEvent
         var roll = ThreadSafeRandom.Next(0.0f, 1.0f);
         if (roll > _criticalChance || GetCriticalDefendedFromAug(attacker, defender) || CheckForSpecPerceptionCriticalDefense(defender as Player))
         {
-            _playerAttacker?.CheckForSigilTrinketOnAttackEffects(defender, this, Skill.TwoHandedCombat, (int)SigilTrinketTwohandedCombatEffect.Might);
-            _playerAttacker?.CheckForSigilTrinketOnAttackEffects(defender, this, Skill.Shield, (int)SigilTrinketShieldEffect.Might);
+            _playerAttacker?.CheckForSigilTrinketOnAttackEffects(defender, this, Skill.TwoHandedCombat, SigilTrinketShieldTwohandedCombatEffect.Might);
+            _playerAttacker?.CheckForSigilTrinketOnAttackEffects(defender, this, Skill.Shield, SigilTrinketShieldTwohandedCombatEffect.Might);
 
             if (!CriticalOverridedByTrinket)
             {
@@ -648,7 +648,7 @@ public class DamageEvent
         var playerDefender = defender as Player;
 
         _powerMod = powerMod ?? attacker.GetPowerMod(Weapon);
-        _attributeMod = attacker.GetAttributeMod(Weapon, false, defender);
+        _attributeMod = attacker.GetAttributeMod(Weapon, false);
         _slayerMod = WorldObject.GetWeaponCreatureSlayerModifier(Weapon, attacker, defender);
         _damageRatingMod = Creature.GetPositiveRatingMod(attacker.GetDamageRating());
         _dualWieldDamageBonus = GetDualWieldDamageBonus(playerAttacker, defender);
@@ -876,7 +876,7 @@ public class DamageEvent
         var playerDefender = defender as Player;
 
         CriticalDamageBonusFromTrinket = 1.0f;
-        playerAttacker?.CheckForSigilTrinketOnAttackEffects(defender, this, Skill.Thievery, (int)SigilTrinketThieveryEffect.Treachery, true);
+        playerAttacker?.CheckForSigilTrinketOnAttackEffects(defender, this, Skill.Thievery, SigilTrinketThieveryEffect.Treachery, true);
 
         _criticalDamageMod = 1.0f + WorldObject.GetWeaponCritDamageMod(Weapon, attacker, _attackSkill, defender);
         _criticalDamageMod += GetMaceSpecCriticalDamageBonus(playerAttacker);

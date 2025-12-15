@@ -1245,7 +1245,7 @@ partial class Player
 
         if (targetAsPlayer == null)
         {
-            CheckForSigilTrinketOnCastEffects(target, vulnerabilitySpell, false, Skill.Perception, (int)SigilTrinketPerceptionEffect.Exposure);
+            CheckForSigilTrinketOnCastEffects(target, vulnerabilitySpell, false, Skill.Perception, SigilTrinketPerceptionEffect.Exposure);
         }
 
         return true;
@@ -1383,7 +1383,7 @@ partial class Player
 
             if (targetAsPlayer == null)
             {
-                CheckForSigilTrinketOnCastEffects(target, magicYieldSpell, false, Skill.Perception, (int)SigilTrinketPerceptionEffect.Exposure);
+                CheckForSigilTrinketOnCastEffects(target, magicYieldSpell, false, Skill.Perception, SigilTrinketPerceptionEffect.Exposure);
             }
         }
 
@@ -1418,7 +1418,7 @@ partial class Player
 
     public void TryUseShroud()
     {
-        if (EnchantmentManager.HasSpell(5379))
+        if (EnchantmentManager.HasSpell((int)SpellId.Shrouded))
         {
             if (IsBusy)
             {
@@ -1474,11 +1474,11 @@ partial class Player
                 return;
             }
 
-            var enchantment = EnchantmentManager.GetEnchantment(5379);
+            var enchantment = EnchantmentManager.GetEnchantment((int)SpellId.Shrouded);
             if (enchantment != null)
             {
                 EnchantmentManager.Dispel(enchantment);
-                HandleSpellHooks(new Spell(5379));
+                HandleSpellHooks(new Spell((int)SpellId.Shrouded));
                 PlayParticleEffect(PlayScript.DispelCreature, Guid);
                 Session.Network.EnqueueSend(
                     new GameMessageSystemChat(
@@ -1490,7 +1490,7 @@ partial class Player
         }
         else
         {
-            var spell = new Spell(5379);
+            var spell = new Spell((int)SpellId.Shrouded);
             var addResult = EnchantmentManager.Add(spell, null, null, true);
             Session.Network.EnqueueSend(
                 new GameEventMagicUpdateEnchantment(

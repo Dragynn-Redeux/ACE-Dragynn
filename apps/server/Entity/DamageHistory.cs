@@ -105,7 +105,7 @@ public class DamageHistory
             if (
                 attacker is Player
                 && attacker.Level > Creature.Level + 10
-                && !attacker.EnchantmentManager.HasSpell(5379)
+                && !attacker.EnchantmentManager.HasSpell((int)SpellId.Shrouded)
             )
             {
                 Creature.StruckByUnshrouded = true;

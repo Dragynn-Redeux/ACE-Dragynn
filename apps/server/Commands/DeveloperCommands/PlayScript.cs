@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using ACE.Entity.Enum;
 using ACE.Server.Commands.Handlers;
 using ACE.Server.Network;
@@ -17,13 +17,13 @@ public class PlayScript
             return;
         }
 
-        if (!Enum.TryParse(typeof(PlayScript), parameters[0], true, out var pscript))
+        if (!Enum.TryParse<ACE.Entity.Enum.PlayScript>(parameters[0], true, out var pscript))
         {
             session.Network.EnqueueSend(
                 new GameMessageSystemChat($"Couldn't find PlayScript.{parameters[0]}", ChatMessageType.Broadcast)
             );
             return;
         }
-        wo.EnqueueBroadcast(new GameMessageScript(wo.Guid, (ACE.Entity.Enum.PlayScript)pscript));
+        wo.EnqueueBroadcast(new GameMessageScript(wo.Guid, pscript));
     }
 }

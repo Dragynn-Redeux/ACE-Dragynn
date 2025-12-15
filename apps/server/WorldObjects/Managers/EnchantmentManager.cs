@@ -1851,9 +1851,10 @@ public class EnchantmentManager
                 bleedResistance = (float)(creature.ResistBleed ?? (1 / (creature.ArchetypePhysicality ?? 1)));
             }
 
+            var wardMod = creature.GetWardMod(damager as Creature, creature, 1.0f);
             var levelScalingMod = LevelScaling.GetMonsterDamageTakenHealthScalar(sourcePlayer, creature);
 
-            tickAmount *= resistanceMod * damageResistRatingMod * dotResistRatingMod * bleedResistance * levelScalingMod;
+            tickAmount *= resistanceMod * wardMod * damageResistRatingMod * dotResistRatingMod * bleedResistance * levelScalingMod;
 
             // make sure the target's current health is not exceeded
             if (tickAmountTotal + tickAmount >= creature.Health.Current)

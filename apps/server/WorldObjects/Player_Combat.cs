@@ -160,11 +160,14 @@ partial class Player
 
         var damageEvent = DamageEvent.CalculateDamage(this, target, damageSource, null, null, cleaveHits);
 
-        CheckForSigilTrinketOnAttackEffects(target, damageEvent, Skill.TwoHandedCombat, (int)SigilTrinketTwohandedCombatEffect.Aggression);
-        CheckForSigilTrinketOnAttackEffects(target, damageEvent, Skill.Shield, (int)SigilTrinketShieldEffect.Aggression);
-        CheckForSigilTrinketOnAttackEffects(target, damageEvent, Skill.DualWield, (int)SigilTrinketDualWieldEffect.Assailment, damageEvent.IsCritical);
-        CheckForSigilTrinketOnAttackEffects(target, damageEvent, Skill.Thievery, (int)SigilTrinketThieveryEffect.Treachery, damageEvent.IsCritical);
-        CheckForSigilTrinketOnAttackEffects(target, damageEvent, Skill.Deception, (int)SigilTrinketDeceptionEffect.Avoidance);
+        CheckForSigilTrinketOnAttackEffects(target, damageEvent, Skill.TwoHandedCombat, SigilTrinketShieldTwohandedCombatEffect.Aggression);
+        CheckForSigilTrinketOnAttackEffects(target, damageEvent, Skill.Shield, SigilTrinketShieldTwohandedCombatEffect.Aggression);
+        CheckForSigilTrinketOnAttackEffects(target, damageEvent, Skill.DualWield, SigilTrinketDualWieldMissileEffect.Assailment, damageEvent.IsCritical);
+        CheckForSigilTrinketOnAttackEffects(target, damageEvent, Skill.Bow, SigilTrinketDualWieldMissileEffect.Assailment, damageEvent.IsCritical);
+        CheckForSigilTrinketOnAttackEffects(target, damageEvent, Skill.DualWield, SigilTrinketDualWieldMissileEffect.SwiftKiller);
+        CheckForSigilTrinketOnAttackEffects(target, damageEvent, Skill.Bow, SigilTrinketDualWieldMissileEffect.SwiftKiller);
+        CheckForSigilTrinketOnAttackEffects(target, damageEvent, Skill.Thievery, SigilTrinketThieveryEffect.Treachery, damageEvent.IsCritical);
+        CheckForSigilTrinketOnAttackEffects(target, damageEvent, Skill.Deception, SigilTrinketDeceptionEffect.Avoidance);
 
         target.OnAttackReceived(
             this,

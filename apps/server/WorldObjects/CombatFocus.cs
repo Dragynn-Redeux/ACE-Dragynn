@@ -140,6 +140,38 @@ public class CombatFocus : WorldObject
         }
     }
 
+    public int? CombatFocusSkill3SpellRemoved
+    {
+        get => GetProperty(PropertyInt.CombatFocusSkill3SpellRemoved);
+        set
+        {
+            if (!value.HasValue)
+            {
+                RemoveProperty(PropertyInt.CombatFocusSkill3SpellRemoved);
+            }
+            else
+            {
+                SetProperty(PropertyInt.CombatFocusSkill3SpellRemoved, value.Value);
+            }
+        }
+    }
+
+    public int? CombatFocusSkill3SpellAdded
+    {
+        get => GetProperty(PropertyInt.CombatFocusSkill3SpellAdded);
+        set
+        {
+            if (!value.HasValue)
+            {
+                RemoveProperty(PropertyInt.CombatFocusSkill3SpellAdded);
+            }
+            else
+            {
+                SetProperty(PropertyInt.CombatFocusSkill3SpellAdded, value.Value);
+            }
+        }
+    }
+
     public int? CombatFocusNumSkillsRemoved
     {
         get => GetProperty(PropertyInt.CombatFocusNumSkillsRemoved);
@@ -273,6 +305,8 @@ public class CombatFocus : WorldObject
 
     public void InitializeSpellList()
     {
+        CurrentSpells.Clear();
+
         var spellList = new List<SpellId>();
         switch (CombatFocusType)
         {
@@ -318,7 +352,18 @@ public class CombatFocus : WorldObject
 
         if (CombatFocusSkillSpellRemoved != null)
         {
-            CurrentSpells.Remove((SpellId)CombatFocusSkillSpellRemoved);
+            if (CombatFocusSkillSpellRemoved == (int)SpellId.FinesseWeaponsMasterySelf1
+            || CombatFocusSkillSpellRemoved == (int)SpellId.StaffMasterySelf1
+            || CombatFocusSkillSpellRemoved == (int)SpellId.UnarmedCombatMasterySelf1)
+            {
+                CurrentSpells.Remove(SpellId.FinesseWeaponsMasterySelf1);
+                CurrentSpells.Remove(SpellId.StaffMasterySelf1);
+                CurrentSpells.Remove(SpellId.UnarmedCombatMasterySelf1);
+            }
+            else
+            {
+                CurrentSpells.Remove((SpellId)CombatFocusSkillSpellRemoved);
+            }
         }
 
         if (CombatFocusSkill2SpellAdded != null)
@@ -328,7 +373,39 @@ public class CombatFocus : WorldObject
 
         if (CombatFocusSkill2SpellRemoved != null)
         {
-            CurrentSpells.Remove((SpellId)CombatFocusSkill2SpellRemoved);
+            if (CombatFocusSkill2SpellRemoved == (int)SpellId.FinesseWeaponsMasterySelf1
+            || CombatFocusSkill2SpellRemoved == (int)SpellId.StaffMasterySelf1
+            || CombatFocusSkill2SpellRemoved == (int)SpellId.UnarmedCombatMasterySelf1)
+            {
+                CurrentSpells.Remove(SpellId.FinesseWeaponsMasterySelf1);
+                CurrentSpells.Remove(SpellId.StaffMasterySelf1);
+                CurrentSpells.Remove(SpellId.UnarmedCombatMasterySelf1);
+            }
+            else
+            {
+                CurrentSpells.Remove((SpellId)CombatFocusSkill2SpellRemoved);
+            }
+        }
+
+        if (CombatFocusSkill3SpellAdded != null)
+        {
+            CurrentSpells.Add((SpellId)CombatFocusSkill3SpellAdded);
+        }
+
+        if (CombatFocusSkill3SpellRemoved != null)
+        {
+            if (CombatFocusSkill3SpellRemoved == (int)SpellId.FinesseWeaponsMasterySelf1
+            || CombatFocusSkill3SpellRemoved == (int)SpellId.StaffMasterySelf1
+            || CombatFocusSkill3SpellRemoved == (int)SpellId.UnarmedCombatMasterySelf1)
+            {
+                CurrentSpells.Remove(SpellId.FinesseWeaponsMasterySelf1);
+                CurrentSpells.Remove(SpellId.StaffMasterySelf1);
+                CurrentSpells.Remove(SpellId.UnarmedCombatMasterySelf1);
+            }
+            else
+            {
+                CurrentSpells.Remove((SpellId)CombatFocusSkill3SpellRemoved);
+            }
         }
 
         CombatFocusNumSkillsAdded = 0;
@@ -362,8 +439,8 @@ public class CombatFocus : WorldObject
 
         ActivateSpells(player, CurrentSpells);
 
-        var particalEffect = GetFocusParticleEffect();
-        player.PlayParticleEffect(particalEffect, player.Guid);
+        var particleEffect = GetFocusParticleEffect();
+        player.PlayParticleEffect(particleEffect, player.Guid);
 
         TriggerCooldownsOfUsableAbilities(player, (CombatFocusType)combatFocusType);
     }
@@ -745,15 +822,18 @@ public class CombatFocus : WorldObject
                     CombatFocusNumSkillsRemoved++;
                 }
             }
-            else if (CombatFocusNumSkillsAdded < 1)
-            {
-                CombatFocusSkillSpellAdded = null;
-                CombatFocusNumSkillsAdded--;
-            }
             else
             {
-                CombatFocusSkill2SpellAdded = null;
-                CombatFocusNumSkillsAdded--;
+                if (CombatFocusSkill2SpellAdded != null)
+                {
+                    CombatFocusSkill2SpellAdded = null;
+                    CombatFocusNumSkillsAdded--;
+                }
+                else if (CombatFocusSkillSpellAdded != null)
+                {
+                    CombatFocusSkillSpellAdded = null;
+                    CombatFocusNumSkillsAdded--;
+                }
             }
         }
 
@@ -784,14 +864,14 @@ public class CombatFocus : WorldObject
         {
             if (IsBaseSpell(spellId))
             {
-                if (CombatFocusSkill2SpellRemoved != null)
-                {
-                    CombatFocusSkill2SpellRemoved = null;
-                    CombatFocusNumSkillsRemoved--;
-                }
-                else
+                if (CombatFocusSkillSpellRemoved != null)
                 {
                     CombatFocusSkillSpellRemoved = null;
+                    CombatFocusNumSkillsRemoved--;
+                }
+                else if (CombatFocusSkill2SpellRemoved != null)
+                {
+                    CombatFocusSkill2SpellRemoved = null;
                     CombatFocusNumSkillsRemoved--;
                 }
             }
