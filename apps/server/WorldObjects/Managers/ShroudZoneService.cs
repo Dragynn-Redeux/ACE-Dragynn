@@ -249,38 +249,41 @@ public class ShroudZoneService
         List<Player> playersInRegion,
         double currentUnixTime)
     {
-        // Swirl throttle (reuse shroud outer-warn swirl interval)
-        if (_psWarnNextSwirlForLandblock.TryGetValue(landblock, out var nextSwirl) &&
-            currentUnixTime < nextSwirl)
-        {
-            return; // no swirl this tick, and no message either (same pattern as shroud)
-        }
+        const double swirlIntervalSeconds = 10.0;
+        const double messageIntervalSeconds = 60.0;
 
-        // Swirl now
+        var doSwirl =
+            !_psWarnNextSwirlForLandblock.TryGetValue(landblock, out var nextSwirl) ||
+            currentUnixTime >= nextSwirl;
+
+        var doMsg =
+            !_psWarnNextMessageForLandblock.TryGetValue(landblock, out var nextMsg) ||
+            currentUnixTime >= nextMsg;
+
+        if (!doSwirl && !doMsg)
+            return;
+
         foreach (var p in playersInRegion)
         {
-            p.PlayParticleEffect(PlayScript.PortalStorm, p.Guid);
-        }
+            if (doSwirl)
+                p.PlayParticleEffect(PlayScript.PortalStorm, p.Guid);
 
-        _psWarnNextSwirlForLandblock[landblock] = currentUnixTime + GetOuterWarnSwirlInterval();
-
-        // Message throttle (reuse shroud outer-warn message interval)
-        if (!_psWarnNextMessageForLandblock.TryGetValue(landblock, out var nextMsg) ||
-            currentUnixTime >= nextMsg)
-        {
-            foreach (var p in playersInRegion)
-            {
+            if (doMsg)
                 p.Session.Network.EnqueueSend(
                     new GameMessageSystemChat(
                         "A rising pull gathers around you, tugging at your center as if trying to draw you into a drifting current. The pressure sharpens, and you feel moments away from being pulled away.",
                         ChatMessageType.System
                     )
                 );
-            }
-
-            _psWarnNextMessageForLandblock[landblock] = currentUnixTime + GetOuterWarnMessageInterval();
         }
+
+        if (doSwirl)
+            _psWarnNextSwirlForLandblock[landblock] = currentUnixTime + swirlIntervalSeconds;
+
+        if (doMsg)
+            _psWarnNextMessageForLandblock[landblock] = currentUnixTime + messageIntervalSeconds;
     }
+
 
 
     private void FireStormOnce(
@@ -545,20 +548,6 @@ public class ShroudZoneService
 
         var shroudActive = IsShroudZoneActive(chosenZone);
         var portalStormActive = IsPortalStormZoneActive(chosenZone);
-
-        _log.Information(
-            "ShroudZoneCheck: player={Player} zone={Zone} lb={Landblock:X4} dist2={DistSq} inner2={InnerSq} max2={MaxSq} shroudActive={Shroud} portalActive={Portal}",
-            player.Name,
-            chosenZone.Name,
-            player.Location.Landblock,
-            chosenDistSq,
-            chosenInnerSq,
-            ((chosenZone.MaxDistance > 0 ? chosenZone.MaxDistance : chosenZone.Radius) *
-            (chosenZone.MaxDistance > 0 ? chosenZone.MaxDistance : chosenZone.Radius)),
-            shroudActive,
-            portalStormActive
-        );
-
         var isShrouded = player.IsShrouded();
         
         if (isShrouded)
@@ -762,11 +751,18 @@ public class ShroudZoneService
     }
     private Position BuildDestination(ShroudZoneEntry zone, Player player)
     {
+        // Outer radius for this zone (storm/shroud): MaxDistance if set, else Radius
+        var outer = zone.MaxDistance > 0 ? zone.MaxDistance : zone.Radius;
+
+        // “Just outside” band (tune these two numbers)
+        const float bufferMin = 5f;
+        const float bufferMax = 15f;
+
+        var minDistance = outer + bufferMin;
+        var maxDistance = outer + bufferMax;
+
         var angle = _random.NextDouble() * Math.PI * 2;
         var direction = new Vector2((float)Math.Cos(angle), (float)Math.Sin(angle));
-
-        var minDistance = _config.Radius + 5f;
-        var maxDistance = Math.Max(_config.EjectionDistance, minDistance + 5f);
         var distance = (float)(_random.NextDouble() * (maxDistance - minDistance) + minDistance);
 
         var offset = direction * distance;
@@ -783,6 +779,7 @@ public class ShroudZoneService
             player.Location.RotationW
         );
     }
+
     private double NextSwirlDelay()
     {
         var rangeSeconds = _config.ShroudedSwirlMax.TotalSeconds - _config.ShroudedSwirlMin.TotalSeconds;
