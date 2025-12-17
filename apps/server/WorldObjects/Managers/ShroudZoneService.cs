@@ -33,7 +33,6 @@ public class ShroudZoneService
     private readonly Dictionary<uint, double> _outerWarnNextMessage = new();
     private readonly Dictionary<uint, double> _psNextTeleportForLandblock = new();
     private readonly Dictionary<uint, double> _psPlayerNextEligible = new();
-    private readonly Dictionary<uint, double> _psNextWarnForLandblock = new();
     private readonly Dictionary<uint, double> _psPendingTeleportAtForLandblock = new();
     private readonly Dictionary<uint, ShroudZoneEntry> _psPendingZoneForLandblock = new();
     // PortalStorm warning throttles (per landblock)
@@ -146,26 +145,17 @@ public class ShroudZoneService
                     continue;
             }
 
-            // Throttle per landblock
-            if (_psNextTeleportForLandblock.TryGetValue(landblock, out var nextTime) &&
-                currentUnixTime < nextTime)
-            {
-                    continue;
-            }
-
             foreach (var zone in kvp.Value)
             {
                 // Only zones with an active storm event
                 if (!IsPortalStormZoneActive(zone))
-                {
+                {    
                     continue;
                 }
-
                 var zoneWorld = ToWorld2D(zone.Location);
                 var maxDist = zone.MaxDistance > 0 ? zone.MaxDistance : zone.Radius;
                 var maxDistSq = maxDist * maxDist;
 
-                int inRegionCount = 0;
                 var inRegion = new List<Player>();
                 foreach (var p in playersInLb)
                 {
@@ -173,74 +163,83 @@ public class ShroudZoneService
                     if (d <= maxDistSq)
                     {
                         inRegion.Add(p);
-                        inRegionCount++;
                     }
                 }
 
                 var cap = (int)PropertyManager.GetDouble("ps_cap", 8).Item;
                 if (cap <= 0)
-                {
+                {    
                     continue;
                 }
 
+                var inRegionCount = inRegion.Count;
+
+                // one below cap → warning (no teleport)
                 if (inRegionCount == cap - 1)
                 {
-                    // warning tier (no teleport)
                     FireStormWarning(zone, landblock, inRegion, currentUnixTime);
                     continue;
                 }
 
-                if (inRegionCount < cap)
-                {
-                    continue;
-                }
-
-                // hard cap reached → schedule + then teleport after delay
-                var delay = PropertyManager.GetDouble("ps_delay", 2).Item; // seconds
-
-                // If storm pressure drops, cancel pending teleport
-                if (inRegionCount < cap)
+                // If we have a pending teleport for this landblock, but pressure dropped, cancel it.
+                if (_psPendingTeleportAtForLandblock.ContainsKey(landblock) && inRegionCount < cap)
                 {
                     _psPendingTeleportAtForLandblock.Remove(landblock);
                     _psPendingZoneForLandblock.Remove(landblock);
                     continue;
                 }
 
-                // Schedule if not already pending
-                if (!_psPendingTeleportAtForLandblock.TryGetValue(landblock, out var fireAt) ||
-                    !_psPendingZoneForLandblock.TryGetValue(landblock, out var pendingZone) ||
-                    pendingZone != zone)
+                if (inRegionCount < cap)
+                {    
+                    continue;
+                }
+
+                // Throttle teleport per landblock (DO NOT throttle warnings)
+                if (_psNextTeleportForLandblock.TryGetValue(landblock, out var nextTime) &&
+                    currentUnixTime < nextTime)
+                {    
+                    continue;
+                }
+
+                // hard cap reached → schedule + then teleport after delay
+                var delay = PropertyManager.GetDouble("ps_delay", 2).Item;
+
+                if (!_psPendingTeleportAtForLandblock.TryGetValue(landblock, out var fireAt))
                 {
                     _psPendingTeleportAtForLandblock[landblock] = currentUnixTime + delay;
                     _psPendingZoneForLandblock[landblock] = zone;
 
-                    // Optional: one-time “storm about to snap” feedback at scheduling time
                     foreach (var p in inRegion)
                     {
                         p.PlayParticleEffect(PlayScript.PortalStorm, p.Guid);
                     }
 
-                    break; // only one landblock storm per tick
+                    break; // stop after scheduling for this landblock
                 }
 
-                // Fire when delay expires
-                if (currentUnixTime >= fireAt)
+                // Not ready to fire yet
+                if (currentUnixTime < fireAt)
+                {    
+                    continue;
+                }
+
+                // Fire now
+                if (!_psPendingZoneForLandblock.TryGetValue(landblock, out var pendingZone))
                 {
-                    FireStormOnce(zone, landblock, inRegion, currentUnixTime);
-
-                    _psPendingTeleportAtForLandblock.Remove(landblock);
-                    _psPendingZoneForLandblock.Remove(landblock);
-
-                    var interval = PropertyManager.GetDouble("ps_interval", 60).Item;
-                    _psNextTeleportForLandblock[landblock] = currentUnixTime + interval;
-
-                    break;
+                    pendingZone = zone;
                 }
 
-                // still waiting
-                break;
+                FireStormOnce(pendingZone, landblock, inRegion, currentUnixTime);
 
+                _psPendingTeleportAtForLandblock.Remove(landblock);
+                _psPendingZoneForLandblock.Remove(landblock);
+
+                var interval = PropertyManager.GetDouble("ps_interval", 60).Item;
+                _psNextTeleportForLandblock[landblock] = currentUnixTime + interval;
+
+                break; // stop after firing for this landblock
             }
+
         }
     }
     private void FireStormWarning(
@@ -261,27 +260,36 @@ public class ShroudZoneService
             currentUnixTime >= nextMsg;
 
         if (!doSwirl && !doMsg)
+        {
             return;
+        }
 
         foreach (var p in playersInRegion)
         {
             if (doSwirl)
+            {
                 p.PlayParticleEffect(PlayScript.PortalStorm, p.Guid);
-
+            }
             if (doMsg)
-                p.Session.Network.EnqueueSend(
+            {
+                    p.Session.Network.EnqueueSend(
                     new GameMessageSystemChat(
                         "A rising pull gathers around you, tugging at your center as if trying to draw you into a drifting current. The pressure sharpens, and you feel moments away from being pulled away.",
                         ChatMessageType.System
                     )
                 );
+            }
         }
 
         if (doSwirl)
+        {
             _psWarnNextSwirlForLandblock[landblock] = currentUnixTime + swirlIntervalSeconds;
+        }
 
         if (doMsg)
+        {
             _psWarnNextMessageForLandblock[landblock] = currentUnixTime + messageIntervalSeconds;
+        }
     }
 
 
