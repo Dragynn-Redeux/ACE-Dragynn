@@ -28,7 +28,7 @@ public class ShroudZoneConfigTests
     public void IgnoresInvalidEntries()
     {
         var raw = "invalid entry that should be skipped";
-        var config = new ShroudZoneConfig(raw);
+        var config = new raw);
 
         Assert.AreEqual(0, config.Zones.Count);
     }

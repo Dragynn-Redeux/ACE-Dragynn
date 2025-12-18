@@ -21,9 +21,6 @@ public class ShroudZoneService
     private double _shroudedMessageIntervalSeconds;
     private double _outerWarnSwirlIntervalSeconds;
     // PortalStorm tuning (live-updated from server properties)
-    private double _psCap;
-    private double _psInterval;
-    private double _psCooldown;
     private readonly ShroudZoneConfig _config;
     private readonly Dictionary<uint, List<ShroudZoneEntry>> _zonesByLandblock;
     private readonly Dictionary<uint, double> _shroudedNextSwirl = new();
@@ -38,6 +35,9 @@ public class ShroudZoneService
     // PortalStorm warning throttles (per landblock)
     private readonly Dictionary<uint, double> _psWarnNextSwirlForLandblock = new();
     private readonly Dictionary<uint, double> _psWarnNextMessageForLandblock = new();
+    // Prune per-player PortalStorm eligibility cache periodically
+    private double _psNextEligibilityPruneAt;
+    private const double PsEligibilityPruneIntervalSeconds = 300; // 5 minutes
 
 
 
@@ -64,17 +64,14 @@ public class ShroudZoneService
             _outerWarnSwirlIntervalSeconds
         );
 
-        // PortalStorm tunables (initial read)
-        _psCap = PropertyManager.GetDouble("ps_cap", 8).Item;
-        _psInterval = PropertyManager.GetDouble("ps_interval", 60).Item;
-        _psCooldown = PropertyManager.GetDouble("ps_cooldown", 120).Item;
-
-        _log.Information(
+        
+       _log.Information(
             "PortalStorm config: Cap={Cap}, Interval={Interval}s, Cooldown={Cooldown}s",
-            _psCap,
-            _psInterval,
-            _psCooldown
+            PropertyManager.GetDouble("ps_cap", 8).Item,
+            PropertyManager.GetDouble("ps_interval", 60).Item,
+            PropertyManager.GetDouble("ps_cooldown", 120).Item
         );
+
     }
     private static bool EventIsActive(GameEventState state)
     {
@@ -121,6 +118,13 @@ public class ShroudZoneService
 
         // Get online players once
         var online = PlayerManager.GetAllOnline();
+        
+        // Prune eligibility cache (session-only): remove expired + offline players
+        if (currentUnixTime >= _psNextEligibilityPruneAt)
+        {
+            PrunePortalStormEligibility(online, currentUnixTime);
+            _psNextEligibilityPruneAt = currentUnixTime + PsEligibilityPruneIntervalSeconds;
+        }
 
         // Bucket players by landblock once
         var byLandblock = new Dictionary<uint, List<Player>>();
@@ -242,6 +246,30 @@ public class ShroudZoneService
 
         }
     }
+        private void PrunePortalStormEligibility(List<Player> online, double currentUnixTime)
+    {
+        // Who is currently online?
+        var onlineIds = new HashSet<uint>(online.Select(p => p.Guid.Full));
+
+        // Remove if expired OR player is offline (session-only semantics)
+        var remove = new List<uint>();
+        foreach (var kvp in _psPlayerNextEligible)
+        {
+            var playerId = kvp.Key;
+            var nextOk = kvp.Value;
+
+            if (nextOk <= currentUnixTime || !onlineIds.Contains(playerId))
+            {
+                remove.Add(playerId);
+            }
+        }
+
+        foreach (var id in remove)
+        {
+            _psPlayerNextEligible.Remove(id);
+        }
+    }
+
     private void FireStormWarning(
         ShroudZoneEntry zone,
         uint landblock,
@@ -555,7 +583,6 @@ public class ShroudZoneService
         var insideInner = chosenDistSq <= chosenInnerSq;
 
         var shroudActive = IsShroudZoneActive(chosenZone);
-        var portalStormActive = IsPortalStormZoneActive(chosenZone);
         var isShrouded = player.IsShrouded();
         
         if (isShrouded)
@@ -669,46 +696,7 @@ public class ShroudZoneService
 
         _shroudedNextSwirl[guid] = currentUnixTime + NextSwirlDelay();
     }
-    private void HandleUnshroudedPlayer(
-        Player player,
-        ShroudZoneEntry zone,
-        double currentUnixTime,
-        bool insideInner)
-    {
-        var guid = player.Guid.Full;
-
-        if (insideInner)
-        {
-            // Inner radius → actual teleport, with cooldown
-            if (_nextTeleportAllowed.TryGetValue(guid, out var nextTeleport) &&
-                currentUnixTime < nextTeleport)
-            {
-                return;
-            }
-
-            // Final swirl before teleport
-            player.Session.Network.EnqueueSend(
-                new GameMessageSystemChat(
-                    "The pull snaps tight. A cold surge seizes your balance, dragging at your core as the resonance rejects you. There is nothing shielding you from it. You are swept away before you can steady yourself.",
-                    ChatMessageType.System
-                )
-            );
-
-
-            var destination = BuildDestination(zone, player);
-            WorldManager.ThreadSafeTeleport(player, destination);
-
-            _nextTeleportAllowed[guid] = currentUnixTime + _config.TeleportCooldown.TotalSeconds;
-
-            // Clear any pending outer / shrouded state once we teleport
-            _shroudedNextSwirl.Remove(guid);
-            _outerWarnNextSwirl.Remove(guid);
-            return;
-        }
-
-        // Outer ring: warning swirls only (no teleport yet)
-        HandleOuterWarning(player, currentUnixTime);
-    }
+    
     private void HandleOuterWarning(Player player, double currentUnixTime)
     {
         var guid = player.Guid.Full;
@@ -813,16 +801,5 @@ public class ShroudZoneService
         _outerWarnSwirlIntervalSeconds =
             PropertyManager.GetDouble("sz_warnswirl", _outerWarnSwirlIntervalSeconds).Item;
         return _outerWarnSwirlIntervalSeconds;
-    }
-    private double GetPortalStormInterval()
-    {
-        _psInterval = PropertyManager.GetDouble("ps_interval", _psInterval).Item;
-        return _psInterval;
-    }
-
-    private double GetPortalStormCooldown()
-    {
-        _psCooldown = PropertyManager.GetDouble("ps_cooldown", _psCooldown).Item;
-        return _psCooldown;
     }
 }

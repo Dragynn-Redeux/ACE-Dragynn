@@ -408,10 +408,6 @@ partial class Player
 
         PhysicsObj.update_object();
 
-        var currentUnixTime = (DateTime.UtcNow - DateTime.UnixEpoch).TotalSeconds;
-        ShroudManager.Zones?.TryHandlePlayer(this, currentUnixTime);
-
-
         // sync ace position?
         Location.Rotation = PhysicsObj.Position.Frame.Orientation;
 

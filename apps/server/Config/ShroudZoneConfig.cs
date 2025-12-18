@@ -13,32 +13,25 @@ public class ShroudZoneConfig
 {
     public const string ZonesKey = "shroud_zone_entries";
     public const string TeleportCooldownKey = "shroud_zone_teleport_cooldown_seconds";
-    public const string RadiusKey = "shroud_zone_radius";
-    public const string EjectionDistanceKey = "shroud_zone_ejection_distance";
     public const string ShroudedSwirlMinKey = "shroud_zone_shrouded_swirl_min_seconds";
     public const string ShroudedSwirlMaxKey = "shroud_zone_shrouded_swirl_max_seconds";
 
     private static readonly ILogger Log = Serilog.Log.ForContext<ShroudZoneConfig>();
-    public float Radius { get; }
-    public float EjectionDistance { get; }
     public TimeSpan ShroudedSwirlMin { get; }
     public TimeSpan ShroudedSwirlMax { get; }
 
    public ShroudZoneConfig(
-        string rawEntries,
-        TimeSpan teleportCooldown,
-        float radius,
-        float ejectionDistance,
-        TimeSpan shroudedSwirlMin,
-        TimeSpan shroudedSwirlMax)
-    {
-        Zones = Parse(rawEntries);
-        TeleportCooldown = teleportCooldown;
-        Radius = radius;
-        EjectionDistance = ejectionDistance;
-        ShroudedSwirlMin = shroudedSwirlMin;
-        ShroudedSwirlMax = shroudedSwirlMax;
-    }
+    string rawEntries,
+    TimeSpan teleportCooldown,
+    TimeSpan shroudedSwirlMin,
+    TimeSpan shroudedSwirlMax)
+{
+    Zones = Parse(rawEntries);
+    TeleportCooldown = teleportCooldown;
+    ShroudedSwirlMin = shroudedSwirlMin;
+    ShroudedSwirlMax = shroudedSwirlMax;
+}
+
 
 
     public IReadOnlyList<ShroudZoneEntry> Zones { get; }
@@ -52,14 +45,12 @@ public class ShroudZoneConfig
 
         var cooldownSeconds = PropertyManager.GetDouble(TeleportCooldownKey, 30).Item;
         var teleportCooldown = TimeSpan.FromSeconds(cooldownSeconds);
-
-        var radius = (float)PropertyManager.GetDouble(RadiusKey, 50).Item;
-        var ejectionDistance = (float)PropertyManager.GetDouble(EjectionDistanceKey, 100).Item;
-
+      
         var swirlMin = TimeSpan.FromSeconds(PropertyManager.GetDouble(ShroudedSwirlMinKey, 10).Item);
         var swirlMax = TimeSpan.FromSeconds(PropertyManager.GetDouble(ShroudedSwirlMaxKey, 20).Item);
 
-        return new ShroudZoneConfig(rawEntries, teleportCooldown, radius, ejectionDistance, swirlMin, swirlMax);
+        return new ShroudZoneConfig(rawEntries, teleportCooldown, swirlMin, swirlMax);
+
     }
 
 
@@ -124,12 +115,7 @@ public class ShroudZoneConfig
         var shroudEventKey = segments.Length > 4 ? segments[4] : string.Empty;
         var stormEventKey = segments.Length > 5 ? segments[5] : string.Empty;
 
-        int? stormCapOverride = null;
-        if (segments.Length > 6 && int.TryParse(segments[6], NumberStyles.Integer, CultureInfo.InvariantCulture, out var cap))
-            {
-                stormCapOverride = cap;
-            }
-        entry = new ShroudZoneEntry(center, radius, maxDistance, name, shroudEventKey, stormEventKey, stormCapOverride);
+        entry = new ShroudZoneEntry(center, radius, maxDistance, name, shroudEventKey, stormEventKey);
 
 
         return true;
