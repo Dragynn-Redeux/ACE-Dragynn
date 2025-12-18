@@ -255,7 +255,10 @@ public class ShroudZoneService
 
         void PrunePlayerDict(Dictionary<uint, double> dict)
         {
-            if (dict.Count == 0) return;
+            if (dict.Count == 0)
+            {
+                return;
+            }
 
             var remove = new List<uint>();
             foreach (var kvp in dict)
@@ -296,7 +299,9 @@ public class ShroudZoneService
             var hasPending = _psPendingTeleportAtForLandblock.ContainsKey(lb);
 
             if (!hasPlayers && !hasPending)
+            {
                 lbRemove.Add(lb);
+            }
         }
 
         foreach (var lb in lbRemove)
@@ -329,7 +334,9 @@ public class ShroudZoneService
                 currentUnixTime >= nextMsg;
 
             if (!doSwirl && !doMsg)
+            {
                 continue;
+            }
 
             if (doSwirl)
             {
