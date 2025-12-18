@@ -32,9 +32,9 @@ public class ShroudZoneService
     private readonly Dictionary<uint, double> _psPlayerNextEligible = new();
     private readonly Dictionary<uint, double> _psPendingTeleportAtForLandblock = new();
     private readonly Dictionary<uint, ShroudZoneEntry> _psPendingZoneForLandblock = new();
-    // PortalStorm warning throttles (per landblock)
-    private readonly Dictionary<uint, double> _psWarnNextSwirlForLandblock = new();
-    private readonly Dictionary<uint, double> _psWarnNextMessageForLandblock = new();
+    // Portal Storm warning throttles
+    private readonly Dictionary<uint, double> _psWarnNextSwirlForPlayer = new();
+    private readonly Dictionary<uint, double> _psWarnNextMessageForPlayer = new();
     // Prune per-player PortalStorm eligibility cache periodically
     private double _psNextEligibilityPruneAt;
     private const double PsEligibilityPruneIntervalSeconds = 300; // 5 minutes
@@ -119,10 +119,9 @@ public class ShroudZoneService
         // Get online players once
         var online = PlayerManager.GetAllOnline();
         
-        // Prune eligibility cache (session-only): remove expired + offline players
         if (currentUnixTime >= _psNextEligibilityPruneAt)
         {
-            PrunePortalStormEligibility(online, currentUnixTime);
+            PruneTransientState(online, currentUnixTime);
             _psNextEligibilityPruneAt = currentUnixTime + PsEligibilityPruneIntervalSeconds;
         }
 
@@ -146,6 +145,9 @@ public class ShroudZoneService
 
             if (!byLandblock.TryGetValue(landblock, out var playersInLb) || playersInLb.Count == 0)
             {
+                    // cancel pending if nobody is here anymore
+                    _psPendingTeleportAtForLandblock.Remove(landblock);
+                    _psPendingZoneForLandblock.Remove(landblock);
                     continue;
             }
 
@@ -178,12 +180,12 @@ public class ShroudZoneService
 
                 var inRegionCount = inRegion.Count;
 
-                // one below cap → warning (no teleport)
-                if (inRegionCount == cap - 1)
+                // Warning should still occur even during landblock cooldown
+                if (inRegionCount >= cap - 1 && inRegionCount > 0)
                 {
-                    FireStormWarning(zone, landblock, inRegion, currentUnixTime);
-                    continue;
+                    FireStormWarning(zone, inRegion, currentUnixTime);
                 }
+
 
                 // If we have a pending teleport for this landblock, but pressure dropped, cancel it.
                 if (_psPendingTeleportAtForLandblock.ContainsKey(landblock) && inRegionCount < cap)
@@ -246,81 +248,107 @@ public class ShroudZoneService
 
         }
     }
-        private void PrunePortalStormEligibility(List<Player> online, double currentUnixTime)
+
+    private void PruneTransientState(List<Player> online, double now)
     {
-        // Who is currently online?
         var onlineIds = new HashSet<uint>(online.Select(p => p.Guid.Full));
 
-        // Remove if expired OR player is offline (session-only semantics)
-        var remove = new List<uint>();
-        foreach (var kvp in _psPlayerNextEligible)
+        void PrunePlayerDict(Dictionary<uint, double> dict)
         {
-            var playerId = kvp.Key;
-            var nextOk = kvp.Value;
+            if (dict.Count == 0) return;
 
-            if (nextOk <= currentUnixTime || !onlineIds.Contains(playerId))
+            var remove = new List<uint>();
+            foreach (var kvp in dict)
             {
-                remove.Add(playerId);
+                if (kvp.Value <= now || !onlineIds.Contains(kvp.Key))
+                {
+                    remove.Add(kvp.Key);
+                }
+            }
+
+            foreach (var id in remove)
+            {
+                dict.Remove(id);
             }
         }
 
-        foreach (var id in remove)
+        // ── PortalStorm (per-player)
+        PrunePlayerDict(_psPlayerNextEligible);
+        PrunePlayerDict(_psWarnNextSwirlForPlayer);
+        PrunePlayerDict(_psWarnNextMessageForPlayer);
+
+        // ── Shroud (per-player)
+        PrunePlayerDict(_nextTeleportAllowed);
+        PrunePlayerDict(_shroudedNextSwirl);
+        PrunePlayerDict(_shroudedNextMessage);
+        PrunePlayerDict(_outerWarnNextSwirl);
+        PrunePlayerDict(_outerWarnNextMessage);
+
+        // ── PortalStorm (per-landblock)
+        var landblocksWithPlayers =
+            new HashSet<uint>(online.Select(p => p.Location.Landblock));
+
+        var lbRemove = new List<uint>();
+
+        foreach (var lb in _psNextTeleportForLandblock.Keys)
         {
-            _psPlayerNextEligible.Remove(id);
+            var hasPlayers = landblocksWithPlayers.Contains(lb);
+            var hasPending = _psPendingTeleportAtForLandblock.ContainsKey(lb);
+
+            if (!hasPlayers && !hasPending)
+                lbRemove.Add(lb);
+        }
+
+        foreach (var lb in lbRemove)
+        {
+            _psNextTeleportForLandblock.Remove(lb);
+            _psPendingTeleportAtForLandblock.Remove(lb);
+            _psPendingZoneForLandblock.Remove(lb);
         }
     }
 
-    private void FireStormWarning(
+
+        private void FireStormWarning(
         ShroudZoneEntry zone,
-        uint landblock,
         List<Player> playersInRegion,
         double currentUnixTime)
     {
         const double swirlIntervalSeconds = 10.0;
         const double messageIntervalSeconds = 60.0;
 
-        var doSwirl =
-            !_psWarnNextSwirlForLandblock.TryGetValue(landblock, out var nextSwirl) ||
-            currentUnixTime >= nextSwirl;
-
-        var doMsg =
-            !_psWarnNextMessageForLandblock.TryGetValue(landblock, out var nextMsg) ||
-            currentUnixTime >= nextMsg;
-
-        if (!doSwirl && !doMsg)
-        {
-            return;
-        }
-
         foreach (var p in playersInRegion)
         {
+            var id = p.Guid.Full;
+
+            var doSwirl =
+                !_psWarnNextSwirlForPlayer.TryGetValue(id, out var nextSwirl) ||
+                currentUnixTime >= nextSwirl;
+
+            var doMsg =
+                !_psWarnNextMessageForPlayer.TryGetValue(id, out var nextMsg) ||
+                currentUnixTime >= nextMsg;
+
+            if (!doSwirl && !doMsg)
+                continue;
+
             if (doSwirl)
             {
                 p.PlayParticleEffect(PlayScript.PortalStorm, p.Guid);
+                _psWarnNextSwirlForPlayer[id] = currentUnixTime + swirlIntervalSeconds;
             }
+
             if (doMsg)
             {
-                    p.Session.Network.EnqueueSend(
+                p.Session.Network.EnqueueSend(
                     new GameMessageSystemChat(
                         "A rising pull gathers around you, tugging at your center as if trying to draw you into a drifting current. The pressure sharpens, and you feel moments away from being pulled away.",
                         ChatMessageType.System
                     )
                 );
+                _psWarnNextMessageForPlayer[id] = currentUnixTime + messageIntervalSeconds;
             }
         }
-
-        if (doSwirl)
-        {
-            _psWarnNextSwirlForLandblock[landblock] = currentUnixTime + swirlIntervalSeconds;
-        }
-
-        if (doMsg)
-        {
-            _psWarnNextMessageForLandblock[landblock] = currentUnixTime + messageIntervalSeconds;
-        }
     }
-
-
 
     private void FireStormOnce(
         ShroudZoneEntry zone,
