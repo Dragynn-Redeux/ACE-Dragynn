@@ -20,7 +20,7 @@ public class ResonanceZoneService
     private double _shroudedMessageIntervalSeconds;
     private double _outerWarnSwirlIntervalSeconds;
     // PortalStorm tuning (live-updated from server properties)
-    private readonly ShroudZoneConfig _config;
+    private readonly ResonanceZoneConfig _config;
     private readonly Dictionary<uint, List<ResonanceZoneEntry>> _zonesByLandblock;
     private readonly Dictionary<uint, double> _shroudedNextSwirl = new();
     private readonly Dictionary<uint, double> _nextTeleportAllowed = new();
@@ -42,7 +42,7 @@ public class ResonanceZoneService
 
 
 
-    public ResonanceZoneService(ShroudZoneConfig config)
+    public ResonanceZoneService(ResonanceZoneConfig config)
     {
         _config = config;
         _zonesByLandblock = BuildZonesByLandblock(config.Zones);
@@ -539,7 +539,7 @@ public class ResonanceZoneService
 
     public static ResonanceZoneService CreateFromConfig()
     {
-        var config = ShroudZoneConfig.FromProperties();
+        var config = ResonanceZoneConfig.FromProperties();
         return new ResonanceZoneService(config);
     }
     public void TryHandlePlayer(Player player, double currentUnixTime)

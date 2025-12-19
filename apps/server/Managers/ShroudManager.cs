@@ -29,7 +29,7 @@ public static class ShroudManager
 
     private static void ReloadIfChanged(bool force)
     {
-        var raw = PropertyManager.GetString(ShroudZoneConfig.ZonesKey, string.Empty).Item ?? string.Empty;
+        var raw = PropertyManager.GetString(ResonanceZoneConfig.ZonesKey, string.Empty).Item ?? string.Empty;
 
         if (!force && raw == _lastZonesRaw)
         {

@@ -9,18 +9,18 @@ using Serilog;
 
 namespace ACE.Server.WorldObjects.Managers;
 
-public class ShroudZoneConfig
+public class ResonanceZoneConfig
 {
     public const string ZonesKey = "shroud_zone_entries";
     public const string TeleportCooldownKey = "shroud_zone_teleport_cooldown_seconds";
     public const string ShroudedSwirlMinKey = "shroud_zone_shrouded_swirl_min_seconds";
     public const string ShroudedSwirlMaxKey = "shroud_zone_shrouded_swirl_max_seconds";
 
-    private static readonly ILogger Log = Serilog.Log.ForContext<ShroudZoneConfig>();
+    private static readonly ILogger Log = Serilog.Log.ForContext<ResonanceZoneConfig>();
     public TimeSpan ShroudedSwirlMin { get; }
     public TimeSpan ShroudedSwirlMax { get; }
 
-   public ShroudZoneConfig(
+   public ResonanceZoneConfig(
     string rawEntries,
     TimeSpan teleportCooldown,
     TimeSpan shroudedSwirlMin,
@@ -39,7 +39,7 @@ public class ShroudZoneConfig
     public TimeSpan TeleportCooldown { get; }
 
 
-    public static ShroudZoneConfig FromProperties()
+    public static ResonanceZoneConfig FromProperties()
     {
         var rawEntries = PropertyManager.GetString(ZonesKey, string.Empty).Item ?? string.Empty;
 
@@ -49,7 +49,7 @@ public class ShroudZoneConfig
         var swirlMin = TimeSpan.FromSeconds(PropertyManager.GetDouble(ShroudedSwirlMinKey, 10).Item);
         var swirlMax = TimeSpan.FromSeconds(PropertyManager.GetDouble(ShroudedSwirlMaxKey, 20).Item);
 
-        return new ShroudZoneConfig(rawEntries, teleportCooldown, swirlMin, swirlMax);
+        return new ResonanceZoneConfig(rawEntries, teleportCooldown, swirlMin, swirlMax);
 
     }
 
