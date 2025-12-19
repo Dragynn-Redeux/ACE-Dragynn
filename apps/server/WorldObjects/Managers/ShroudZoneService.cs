@@ -21,7 +21,7 @@ public class ShroudZoneService
     private double _outerWarnSwirlIntervalSeconds;
     // PortalStorm tuning (live-updated from server properties)
     private readonly ShroudZoneConfig _config;
-    private readonly Dictionary<uint, List<ShroudZoneEntry>> _zonesByLandblock;
+    private readonly Dictionary<uint, List<ResonanceZoneEntry>> _zonesByLandblock;
     private readonly Dictionary<uint, double> _shroudedNextSwirl = new();
     private readonly Dictionary<uint, double> _nextTeleportAllowed = new();
     private readonly Dictionary<uint, double> _outerWarnNextSwirl = new();
@@ -30,7 +30,7 @@ public class ShroudZoneService
     private readonly Dictionary<uint, double> _psNextTeleportForLandblock = new();
     private readonly Dictionary<uint, double> _psPlayerNextEligible = new();
     private readonly Dictionary<uint, double> _psPendingTeleportAtForLandblock = new();
-    private readonly Dictionary<uint, ShroudZoneEntry> _psPendingZoneForLandblock = new();
+    private readonly Dictionary<uint, ResonanceZoneEntry> _psPendingZoneForLandblock = new();
     // Portal Storm warning throttles
     private readonly Dictionary<uint, double> _psWarnNextSwirlForPlayer = new();
     private readonly Dictionary<uint, double> _psWarnNextMessageForPlayer = new();
@@ -77,7 +77,7 @@ public class ShroudZoneService
         return state == GameEventState.On || state == GameEventState.Enabled;
     }
 
-    private static bool IsZoneEventActive(ShroudZoneEntry zone)
+    private static bool IsZoneEventActive(ResonanceZoneEntry zone)
     {
         // If neither shroud nor storm has an event key, zone is always considered active.
         if (string.IsNullOrWhiteSpace(zone.ShroudEventKey) &&
@@ -313,7 +313,7 @@ public class ShroudZoneService
 
 
         private void FireStormWarning(
-        ShroudZoneEntry zone,
+        ResonanceZoneEntry zone,
         List<Player> playersInRegion,
         double currentUnixTime)
     {
@@ -357,7 +357,7 @@ public class ShroudZoneService
     }
 
     private void FireStormOnce(
-        ShroudZoneEntry zone,
+        ResonanceZoneEntry zone,
         uint landblock,
         List<Player> playersInRegion,
         double currentUnixTime)
@@ -403,10 +403,10 @@ public class ShroudZoneService
         _psPlayerNextEligible[target.Guid.Full] = currentUnixTime + cooldown;
     }
 
-    private static Dictionary<uint, List<ShroudZoneEntry>> BuildZonesByLandblock(
-        IReadOnlyList<ShroudZoneEntry> zones)
+    private static Dictionary<uint, List<ResonanceZoneEntry>> BuildZonesByLandblock(
+        IReadOnlyList<ResonanceZoneEntry> zones)
     {
-        var result = new Dictionary<uint, List<ShroudZoneEntry>>();
+        var result = new Dictionary<uint, List<ResonanceZoneEntry>>();
 
         const float landblockSize = 192.0f; // local X/Y run 0..192 inside each block
 
@@ -462,14 +462,14 @@ public class ShroudZoneService
     }
 
     private static void AddZoneToBlock(
-        Dictionary<uint, List<ShroudZoneEntry>> dict,
+        Dictionary<uint, List<ResonanceZoneEntry>> dict,
         uint landblockId,
-        ShroudZoneEntry zone
+        ResonanceZoneEntry zone
     )
     {
         if (!dict.TryGetValue(landblockId, out var list))
         {
-            list = new List<ShroudZoneEntry>();
+            list = new List<ResonanceZoneEntry>();
             dict[landblockId] = list;
         }
 
@@ -503,7 +503,7 @@ public class ShroudZoneService
 
 
 
-        private static bool IsShroudZoneActive(ShroudZoneEntry zone)
+        private static bool IsShroudZoneActive(ResonanceZoneEntry zone)
     {
         if (!PropertyManager.GetBool("sz_global", true).Item)
         {
@@ -519,7 +519,7 @@ public class ShroudZoneService
         return IsEventRunning(zone.ShroudEventKey);
     }
 
-    private static bool IsPortalStormZoneActive(ShroudZoneEntry zone)
+    private static bool IsPortalStormZoneActive(ResonanceZoneEntry zone)
     {
         if (!PropertyManager.GetBool("ps_global", true).Item)
         {
@@ -553,7 +553,7 @@ public class ShroudZoneService
 
         var playerWorld = ToWorld2D(player.Location);
 
-        ShroudZoneEntry chosenZone = null;
+        ResonanceZoneEntry chosenZone = null;
         var chosenDistSq = float.MaxValue;
 
         // track overlaps (eligible zones only)
@@ -642,7 +642,7 @@ public class ShroudZoneService
     }
 
 
-    private void HandleTeleport(Player player, ShroudZoneEntry zone, double currentUnixTime)
+    private void HandleTeleport(Player player, ResonanceZoneEntry zone, double currentUnixTime)
     {
         var guid = player.Guid.Full;
 
@@ -779,7 +779,7 @@ public class ShroudZoneService
     {
         return GetOuterWarnSwirlInterval();
     }
-    private Position BuildDestination(ShroudZoneEntry zone, Player player)
+    private Position BuildDestination(ResonanceZoneEntry zone, Player player)
     {
         // Outer radius for this zone (storm/shroud): MaxDistance if set, else Radius
         var outer = zone.MaxDistance > 0 ? zone.MaxDistance : zone.Radius;

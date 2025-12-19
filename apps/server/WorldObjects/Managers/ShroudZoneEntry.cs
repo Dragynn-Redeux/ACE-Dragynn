@@ -2,7 +2,7 @@ using ACE.Entity;
 
 namespace ACE.Server.WorldObjects.Managers;
 
-public class ShroudZoneEntry
+public class ResonanceZoneEntry
 {
     public Position Location { get; }
     public float Radius { get; }
@@ -15,7 +15,7 @@ public class ShroudZoneEntry
     public string ShroudEventKey { get; }
     public string StormEventKey { get; }
     
-    public ShroudZoneEntry(
+    public ResonanceZoneEntry(
         Position location,
         float radius,
         float maxDistance,

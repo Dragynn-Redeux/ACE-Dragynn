@@ -34,7 +34,7 @@ public class ShroudZoneConfig
 
 
 
-    public IReadOnlyList<ShroudZoneEntry> Zones { get; }
+    public IReadOnlyList<ResonanceZoneEntry> Zones { get; }
 
     public TimeSpan TeleportCooldown { get; }
 
@@ -55,9 +55,9 @@ public class ShroudZoneConfig
 
 
 
-    private static IReadOnlyList<ShroudZoneEntry> Parse(string rawEntries)
+    private static IReadOnlyList<ResonanceZoneEntry> Parse(string rawEntries)
     {
-        var zones = new List<ShroudZoneEntry>();
+        var zones = new List<ResonanceZoneEntry>();
 
         if (string.IsNullOrWhiteSpace(rawEntries))
         {
@@ -80,7 +80,7 @@ public class ShroudZoneConfig
         return zones;
     }
 
-    private static bool TryParseEntry(string line, out ShroudZoneEntry entry)
+    private static bool TryParseEntry(string line, out ResonanceZoneEntry entry)
     {
         entry = null;
 
@@ -115,7 +115,7 @@ public class ShroudZoneConfig
         var shroudEventKey = segments.Length > 4 ? segments[4] : string.Empty;
         var stormEventKey = segments.Length > 5 ? segments[5] : string.Empty;
 
-        entry = new ShroudZoneEntry(center, radius, maxDistance, name, shroudEventKey, stormEventKey);
+        entry = new ResonanceZoneEntry(center, radius, maxDistance, name, shroudEventKey, stormEventKey);
 
 
         return true;
