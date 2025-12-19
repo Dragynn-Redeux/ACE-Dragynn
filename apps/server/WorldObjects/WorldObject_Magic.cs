@@ -627,6 +627,15 @@ partial class WorldObject
                     GenerateSupportSpellThreat(spell, targetCreature);
                 }
 
+                var playerCaster = this as Player;
+
+                if (playerCaster is { OverloadStanceIsActive: true } or { BatteryStanceIsActive: true } &&
+                    spell.School is MagicSchool.VoidMagic &&
+                    targetCreature != playerCaster)
+                {
+                    playerCaster.IncreaseChargedMeter(spell);
+                }
+
                 // TODO: replace with some kind of 'rootOwner unless equip' concept?
                 if (itemCaster != null && (equip || itemCaster is Gem || itemCaster is Food))
                 {
@@ -819,7 +828,7 @@ partial class WorldObject
 
             if (addResult.Enchantment.StatModValue < 0 && targetPlayerWard > 0)
             {
-                //Console.WriteLine($"StatModValue Before: {addResult.Enchantment.StatModType} {addResult.Enchantment.StatModValue}\n" +
+                //Console.WriteLine($"StatModValue Before: {addResult.Enchantment.StatModType} {addResult.Enchantment.StatModValue} {addResult.Enchantment.Duration}\n" +
                 //    $" -Target Ward Level: {targetPlayer.GetWardLevel()}");
 
                 var ignoreWardMod = 1.0f;
@@ -836,11 +845,13 @@ partial class WorldObject
                     ignoreWardMod *= 1.0f - Jewel.GetJewelEffectMod(player, PropertyInt.GearWardPen, "WardPen");
                 }
 
-                var wardMod = GetWardMod(caster as Creature, targetPlayer, ignoreWardMod) / 10;
+                var wardMod = GetWardMod(caster as Creature, targetPlayer, ignoreWardMod);
+
+                wardMod += (1 - wardMod) * 0.5f;
 
                 addResult.Enchantment.StatModValue *= wardMod;
                 addResult.Enchantment.Duration *= wardMod;
-                //Console.WriteLine($"StatModValue After: {addResult.Enchantment.StatModType} {addResult.Enchantment.StatModValue}");
+                //Console.WriteLine($"StatModValue After: {addResult.Enchantment.StatModType} {addResult.Enchantment.StatModValue} {addResult.Enchantment.Duration}");
             }
         }
 
@@ -877,18 +888,29 @@ partial class WorldObject
 
             if (casterCheck || target == this || caster != target)
             {
+                var chargedPercent = Math.Round(player.ManaChargeMeter * 100);
+                var chargedMsg = player is { OverloadStanceIsActive: true } or { BatteryStanceIsActive: true } ? $"{chargedPercent}% Charged! " : "";
+
+                chargedMsg = player switch
+                {
+                    { OverloadDischargeIsActive: true } => "Overload Discharge! ",
+                    { BatteryDischargeIsActive: true } => "Battery Discharge! ",
+                    _ => chargedMsg
+                };
+
                 var casterName = casterCheck ? "You" : caster.Name;
                 var targetName = target.Name;
                 if (target == this)
                 {
                     targetName = casterCheck ? "yourself" : "you";
+                    chargedMsg = "";
                 }
 
                 if (showMsg)
                 {
                     player.SendChatMessage(
                         player,
-                        $"{casterName} cast {spell.Name} on {targetName}{suffix}",
+                        $"{chargedMsg}{casterName} cast {spell.Name} on {targetName}{suffix}",
                         ChatMessageType.Magic
                     );
                 }

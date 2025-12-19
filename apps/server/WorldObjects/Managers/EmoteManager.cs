@@ -542,7 +542,7 @@ public class EmoteManager
                     }
                     else
                     {
-                        WorldObject.DeleteObject(rootOwner);
+                        player.TryConsumeFromInventoryWithNetworking(wo);
                     }
                 }
                 else

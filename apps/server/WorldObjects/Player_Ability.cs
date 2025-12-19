@@ -1079,7 +1079,7 @@ partial class Player
         );
         PlayParticleEffect(PlayScript.DispelLife, Guid);
 
-        return true;
+        return false;
     }
 
     public bool TryUseEvasiveStance()
@@ -1111,7 +1111,7 @@ partial class Player
         );
         PlayParticleEffect(PlayScript.DispelLife, Guid);
 
-        return true;
+        return false;
     }
 
     public bool TryUseExposePhysicalWeakness(WorldObject ability)

@@ -77,6 +77,7 @@ public class DamageEvent
     private float _resistanceMod;
     private float _slayerMod;
     private float _specDefenseMod;
+    private float _swarmedDamageReductionMod;
     private float _combatAbilitySteadyStrikeDamageBonus;
     private float _twohandedCombatDamageBonus;
     private float _weaponResistanceMod;
@@ -1046,6 +1047,8 @@ public class DamageEvent
             _ => 1.0f
         };
 
+        _swarmedDamageReductionMod = GetSwarmedMod(playerDefender);
+
         // if (playerAttacker is not null)
         // {
         //     Console.WriteLine(
@@ -1062,7 +1065,43 @@ public class DamageEvent
                * _ratingDamageTypeWard
                * _ratingSelfHarm
                * _ratingRedFury
-               * _ratingYellowFury;
+               * _ratingYellowFury
+               * _swarmedDamageReductionMod;
+    }
+
+    /// <summary>
+    /// Calculates a modifier that reduces damage taken for a defending player based on the number of
+    /// nearby enemies.
+    /// </summary>
+    /// <remarks>The modifier is multiplicatively reduced by 10% for each nearby enemy beyond the first,
+    /// within a radius of 3 units. This effect only applies if the player has a melee weapon equipped.</remarks>
+    /// <param name="playerDefender">The player who is defending and whose damage reduction will be modified. Cannot be null.</param>
+    /// <returns>A floating-point value representing the swarmed modifier. Returns 1.0 if the player or their equipped melee
+    /// weapon is null, or if there is one or no nearby enemy; otherwise, returns a value less than 1.0 that decreases
+    /// as the number of nearby enemies increases.</returns>
+    private static float GetSwarmedMod(Player playerDefender)
+    {
+        var swarmedMod = 1.0f;
+
+        if (playerDefender is null || playerDefender.GetEquippedMeleeWeapon() is null)
+        {
+            return swarmedMod;
+        }
+
+        var numNearbyEnemies = playerDefender.GetNearbyMonsters(3).Count;
+
+        if (numNearbyEnemies <= 1)
+        {
+            return swarmedMod;
+        }
+
+        // start loop at 1 to only count mobs beyond the first
+        for (var i = 1; i < numNearbyEnemies; i++)
+        {
+            swarmedMod *= 0.9f;
+        }
+
+        return swarmedMod;
     }
 
     private float GetIgnoreArmorMod(Creature attacker, Creature defender)

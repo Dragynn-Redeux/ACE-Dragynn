@@ -77,7 +77,7 @@ public class BezelTool : WorldObject
 
     public static void UseObjectOnTarget(Player player, WorldObject source, WorldObject target, bool confirmed = false)
     {
-        var targetWorkmanship = Math.Clamp((target.ItemWorkmanship ?? 1) - 1, 1, 10);
+        var targetWorkmanship = target.ItemWorkmanship ?? 1;
         var fragmentsRequired = targetWorkmanship * targetWorkmanship;
 
         if (player.IsBusy)

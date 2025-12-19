@@ -43,7 +43,6 @@ public class Healer : WorldObject
     private void SetEphemeralValues()
     {
         ObjectDescriptionFlags |= ObjectDescriptionFlag.Healer;
-        CooldownDuration = 10;
     }
 
     public override void HandleActionUseOnTarget(Player healer, WorldObject target)
@@ -123,43 +122,26 @@ public class Healer : WorldObject
             return;
         }
 
-        var currentTime = Time.GetUnixTime();
-
-        var remainingCooldown = healer.NextHealingKitUseTime > currentTime ? Math.Round(healer.NextHealingKitUseTime - currentTime, 1) : 0;
-
-        if (remainingCooldown > 0)
+        if (CooldownDuration.HasValue)
         {
-            healer.Session.Network.EnqueueSend(
-                new GameEventCommunicationTransientString(
-                    healer.Session, $"{Name} is still on cooldown for {remainingCooldown} seconds.")
-            );
+            var currentTime = Time.GetUnixTime();
+            var remainingCooldown = healer.NextHealingKitUseTime > currentTime ? Math.Round(healer.NextHealingKitUseTime - currentTime, 1) : 0;
 
-            // healer.Session.Network.EnqueueSend(
-            //     new GameMessageSystemChat(
-            //         $"{Name} is still on cooldown for {remainingCooldown} seconds.", ChatMessageType.System)
-            // );
+            if (remainingCooldown > 0)
+            {
+                healer.Session.Network.EnqueueSend(
+                    new GameEventCommunicationTransientString(
+                        healer.Session, $"{Name} is still on cooldown for {remainingCooldown} seconds.")
+                );
 
-            healer.SendUseDoneEvent();
-            return;
+                healer.SendUseDoneEvent();
+                return;
+            }
+
+            healer.NextHealingKitUseTime = currentTime + CooldownDuration.Value;
+
+            StartCooldown(healer);
         }
-
-        if (!CooldownDuration.HasValue)
-        {
-            _log.Error("{HealingKit} is missing a cooldown duration value.", Name);
-            return;
-        }
-
-        var cooldownDuration = CooldownDuration.Value;
-
-        if (healer.GetCreatureSkill(Skill.Healing).AdvancementClass is SkillAdvancementClass.Specialized)
-        {
-            CooldownDuration = 8.0f;
-        }
-
-        healer.NextHealingKitUseTime = currentTime + CooldownDuration.Value;
-        StartCooldown(healer);
-
-        CooldownDuration = cooldownDuration;
 
         DoHealMotion(healer, targetPlayer, true);
     }
@@ -234,8 +216,6 @@ public class Healer : WorldObject
             return;
         }
 
-        var canHealOverTime = UsesLeft > 0;
-
         var remainingMsg = "";
 
         if (!UnlimitedUse)
@@ -246,10 +226,7 @@ public class Healer : WorldObject
             }
 
             var s = UsesLeft == 1 ? "" : "s";
-            remainingMsg =
-                UsesLeft > 0
-                    ? $" Your {Name} has {UsesLeft} use{s} left before it will no longer provide heal-over-time effects."
-                    : $" Your {Name} has run out of uses that provide heal-over-time effects.";
+            remainingMsg = UsesLeft > 0 ? $" Your {Name} has {UsesLeft} use{s} left." : $" Your {Name} is used up.";
 
             Value -= StructureUnitValue;
 
@@ -278,7 +255,9 @@ public class Healer : WorldObject
             target.DamageHistory.OnHeal(actualHealAmount);
         }
 
-        // heal-over-time if kit had uses remaining
+        // SPEC BONUS: Healing - Heal-over-time spell when used.
+        var canHealOverTime = healer.GetCreatureSkill(Skill.Healing).AdvancementClass is SkillAdvancementClass.Specialized;
+
         if (canHealOverTime)
         {
             var spell = BoosterEnum switch
@@ -306,9 +285,6 @@ public class Healer : WorldObject
             healer.TryCastSpell_Inner(spell, target);
         }
 
-        //if (target.Fellowship != null)
-        //target.Fellowship.OnVitalUpdate(target);
-
         var healingSkill = healer.GetCreatureSkill(Skill.Healing);
         Proficiency.OnSuccessUse(healer, healingSkill, difficulty);
 
@@ -328,6 +304,11 @@ public class Healer : WorldObject
                     ChatMessageType.Broadcast
                 )
             );
+        }
+
+        if (UsesLeft <= 0 && !UnlimitedUse)
+        {
+            healer.TryConsumeFromInventoryWithNetworking(this, 1);
         }
     }
 
