@@ -6,7 +6,7 @@ public static class ShroudManager
 {
     private static readonly ILogger _log = Log.ForContext(typeof(ShroudManager));
 
-    public static ShroudZoneService Zones { get; private set; }
+    public static ResonanceZoneService Zones { get; private set; }
 
     private static string _lastZonesRaw = string.Empty;
 
@@ -16,7 +16,7 @@ public static class ShroudManager
 
         if (Zones == null)
         {
-            _log.Warning("ShroudZoneService failed to initialize");
+            _log.Warning("ResonanceZoneService failed to initialize");
         }
     }
 
@@ -37,6 +37,6 @@ public static class ShroudManager
         }
 
         _lastZonesRaw = raw;
-        Zones = ShroudZoneService.CreateFromConfig();
+        Zones = ResonanceZoneService.CreateFromConfig();
     }
 }

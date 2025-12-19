@@ -11,9 +11,9 @@ using System.Linq;
 namespace ACE.Server.WorldObjects.Managers;
 
 
-public class ShroudZoneService
+public class ResonanceZoneService
 {
-    private static readonly ILogger _log = Log.ForContext(typeof(ShroudZoneService));
+    private static readonly ILogger _log = Log.ForContext(typeof(ResonanceZoneService));
     private static readonly Random _random = new();
     // Shroud Zone tuning (live-updated from server properties)
     private double _outerWarnMessageIntervalSeconds;
@@ -42,7 +42,7 @@ public class ShroudZoneService
 
 
 
-    public ShroudZoneService(ShroudZoneConfig config)
+    public ResonanceZoneService(ShroudZoneConfig config)
     {
         _config = config;
         _zonesByLandblock = BuildZonesByLandblock(config.Zones);
@@ -537,10 +537,10 @@ public class ShroudZoneService
 
 
 
-    public static ShroudZoneService CreateFromConfig()
+    public static ResonanceZoneService CreateFromConfig()
     {
         var config = ShroudZoneConfig.FromProperties();
-        return new ShroudZoneService(config);
+        return new ResonanceZoneService(config);
     }
     public void TryHandlePlayer(Player player, double currentUnixTime)
     {
