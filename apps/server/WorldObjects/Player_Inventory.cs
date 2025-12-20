@@ -3020,28 +3020,33 @@ partial class Player
             return WeenieError.YouDoNotOwnThatItem; // Unsure of the exact message
         }
 
-        // New: if item is a SigilTrinket and specifies AllowedSpecializedSkills, evaluate OR semantics
+        // if item is a SigilTrinket and specifies AllowedSpecializedSkills, enforce that requirement
         if (item is SigilTrinket st)
         {
             var allowed = st.AllowedSpecializedSkills;
             if (allowed != null && allowed.Count > 0)
             {
                 // require specialized (or higher) in at least one listed skill
+                var hasRequiredSpecialization = false;
                 foreach (var skill in allowed)
                 {
                     var cs = GetCreatureSkill(skill, false);
                     if (cs != null && cs.AdvancementClass >= SkillAdvancementClass.Specialized)
                     {
-                        return WeenieError.None;
+                        hasRequiredSpecialization = true;
+                        break;
                     }
                 }
 
-                // no matching specialization found
-                return WeenieError.SkillTooLow;
+                // If the player doesn't meet the sigil's AllowedSpecializedSkills, fail immediately.
+                if (!hasRequiredSpecialization)
+                {
+                    return WeenieError.SkillTooLow;
+                }
             }
         }
 
-        // Legacy AND-style wield requirements (unchanged)
+        // Legacy AND-style wield requirements.
         var result = CheckWieldRequirement(item.WieldRequirements, item.WieldSkillType, item.WieldDifficulty);
         if (result != WeenieError.None)
         {
@@ -3095,6 +3100,12 @@ partial class Player
 
                 // verify skill level - base
                 skill = GetCreatureSkill(ConvertToMoASkill((Skill)skillOrAttribute), false);
+
+                if (skill is null)
+                {
+                    break;
+                }
+
                 if (skill.Base < difficulty)
                 {
                     return WeenieError.SkillTooLow;

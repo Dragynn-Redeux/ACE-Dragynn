@@ -1714,6 +1714,20 @@ partial class WorldObject
                         transferSource.DamageHistory.Add(this, DamageType.Health, srcVitalChange);
                         break;
                 }
+
+                // Determine if this drain/infuse should increase the charge meter. Self-transfer does not increase charge.
+                var shouldIncreaseCharge =
+                    destVitalChange > 0 &&
+                    (
+                        transferSource is not Player || 
+                        (transferSource is Player && destination != transferSource)
+                    );
+
+                if (shouldIncreaseCharge &&
+                    player is { OverloadStanceIsActive: true } or { BatteryStanceIsActive: true })
+                {
+                    player.IncreaseChargedMeter(spell);
+                }
             }
 
             // Apply the scaled change in vitals to the caster
