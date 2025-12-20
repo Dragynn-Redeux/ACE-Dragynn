@@ -22,6 +22,8 @@ using ACE.Server.WorldObjects;
 using Serilog;
 using Biota = ACE.Entity.Models.Biota;
 using Position = ACE.Entity.Position;
+using System.Numerics;
+
 
 namespace ACE.Server.Managers;
 
@@ -440,6 +442,59 @@ public static class WorldManager
             })
         );
     }
+    public static bool TryBuildGroundedPosition(
+        float worldX,
+        float worldY,
+        float clearance,
+        out Position pos,
+        out float groundZ)
+    {
+        pos = null;
+        groundZ = 0f;
+
+        const float landblockSize = 192.0f;
+
+        var bx = (int)Math.Floor(worldX / landblockSize);
+        var by = (int)Math.Floor(worldY / landblockSize);
+
+        if (bx < 0 || bx > 0xFF || by < 0 || by > 0xFF)
+        {
+            return false;
+        }
+
+        var localX = worldX - (bx * landblockSize);
+        var localY = worldY - (by * landblockSize);
+
+        var landblockRaw = ((uint)bx << 24) | ((uint)by << 16);
+
+        var candidate = new Position(
+            landblockRaw,
+            localX,
+            localY,
+            0f,
+            0f, 0f, 0f, 1f
+        );
+
+        // NOTE: World layer cannot resolve ObjCellID — that's physics-only.
+        // We sample terrain directly from the landblock.
+
+        var landblock = LScape.get_landblock(candidate.LandblockId.Raw);
+        if (landblock == null)
+        {
+            return false;
+        }
+
+        groundZ = landblock.GetZ(new Vector3(
+            candidate.PositionX,
+            candidate.PositionY,
+            candidate.PositionZ
+        ));
+
+        candidate.PositionZ = groundZ + clearance;
+        pos = candidate;
+        return true;
+    }
+
 
     public static void EnqueueAction(IAction action)
     {

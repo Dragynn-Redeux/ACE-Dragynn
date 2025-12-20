@@ -640,8 +640,6 @@ public class ResonanceZoneService
             }
         }
     }
-
-
     private void HandleTeleport(Player player, ResonanceZoneEntry zone, double currentUnixTime)
     {
         var guid = player.Guid.Full;
@@ -784,24 +782,62 @@ public class ResonanceZoneService
         // Outer radius for this zone (storm/shroud): MaxDistance if set, else Radius
         var outer = zone.MaxDistance > 0 ? zone.MaxDistance : zone.Radius;
 
-        // “Just outside” band (tune these two numbers)
+        // “Just outside” band
         const float bufferMin = 5f;
         const float bufferMax = 15f;
 
         var minDistance = outer + bufferMin;
         var maxDistance = outer + bufferMax;
 
-        var angle = _random.NextDouble() * Math.PI * 2;
-        var direction = new Vector2((float)Math.Cos(angle), (float)Math.Sin(angle));
-        var distance = (float)(_random.NextDouble() * (maxDistance - minDistance) + minDistance);
+        // Tunables (live)
+        var clearance = (float)PropertyManager.GetDouble("rz_teleport_clearance", 0.5).Item;
+        var maxFall   = (float)PropertyManager.GetDouble("rz_maxFall", 2).Item;
 
-        var offset = direction * distance;
+        var originZ = player.Location.PositionZ;
 
-        // Keep player's current rotation so they arrive upright
+        // Zone center in world space
+        var zoneWorld = ToWorld2D(zone.Location);
+
+        const int attempts = 12;
+
+        for (var i = 0; i < attempts; i++)
+        {
+            var angle = _random.NextDouble() * Math.PI * 2;
+            var direction = new Vector2((float)Math.Cos(angle), (float)Math.Sin(angle));
+            var distance = (float)(_random.NextDouble() * (maxDistance - minDistance) + minDistance);
+
+            var worldX = zoneWorld.X + (direction.X * distance);
+            var worldY = zoneWorld.Y + (direction.Y * distance);
+
+            if (!WorldManager.TryBuildGroundedPosition(worldX, worldY, clearance, out var grounded, out var groundZ))
+            {
+                continue;
+            }
+
+            // Avoid big cliff drops
+            if ((originZ - groundZ) > maxFall)
+            {
+                continue;
+            }
+
+            // Keep player's rotation so they arrive upright
+            return new Position(
+                grounded.LandblockId.Raw,
+                grounded.PositionX,
+                grounded.PositionY,
+                grounded.PositionZ,
+                player.Location.RotationX,
+                player.Location.RotationY,
+                player.Location.RotationZ,
+                player.Location.RotationW
+            );
+        }
+
+        // Absolute fallback: old behavior
         return new Position(
             zone.Location.LandblockId.Raw,
-            zone.Location.PositionX + offset.X,
-            zone.Location.PositionY + offset.Y,
+            zone.Location.PositionX,
+            zone.Location.PositionY,
             zone.Location.PositionZ,
             player.Location.RotationX,
             player.Location.RotationY,
@@ -809,6 +845,9 @@ public class ResonanceZoneService
             player.Location.RotationW
         );
     }
+
+
+
 
     private double NextSwirlDelay()
     {

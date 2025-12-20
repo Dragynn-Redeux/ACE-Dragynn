@@ -17,7 +17,7 @@ public class RZList
         CommandHandlerFlag.None,
         0,
         "Lists enabled resonance zones near your current location.",
-        "rzlist [float range]"
+        "rzlist [float range | all | filter]"
     )]
     public static void Handle(Session session, params string[] parameters)
     {
@@ -28,12 +28,26 @@ public class RZList
         }
 
         var range = 200f;
-        if (parameters.Length >= 1 &&
-            !float.TryParse(parameters[0], NumberStyles.Float, CultureInfo.InvariantCulture, out range))
+        var listAll = false;
+        string filter = null;
+
+        if (parameters.Length >= 1)
         {
-            CommandHandlerHelper.WriteOutputInfo(session, "Please input a valid range.", ChatMessageType.Help);
-            return;
+            if (string.Equals(parameters[0], "all", StringComparison.OrdinalIgnoreCase))
+            {
+                listAll = true;
+            }
+            else if (float.TryParse(parameters[0], NumberStyles.Float, CultureInfo.InvariantCulture, out var parsedRange))
+            {
+                range = parsedRange;
+            }
+            else
+            {
+                // Treat anything else as a text filter
+                filter = parameters[0].ToLowerInvariant();
+            }
         }
+
 
         var playerLoc = session.Player.Location;
         var rows = DatabaseManager.ShardConfig.GetResonanceZoneEntriesEnabled();
@@ -49,9 +63,23 @@ public class RZList
                 var dist = playerLoc.DistanceTo(zonePos);
                 return new { Row = r, Dist = dist };
             })
-            .Where(x => x.Dist <= range)
+            .Where(x => listAll || x.Dist <= range)
+            .Where(x =>
+            {
+                if (filter == null)
+                {    
+                    return true;
+                }
+
+                var haystack =
+                    $"{x.Row.Name} {x.Row.ShroudEventKey} {x.Row.StormEventKey}"
+                    .ToLowerInvariant();
+
+                return haystack.Contains(filter);
+            })
             .OrderBy(x => x.Dist)
             .ToList();
+
 
         if (matches.Count == 0)
         {
@@ -69,16 +97,29 @@ public class RZList
         static string Fit(string s, int width)
         {
             s ??= "";
-            if (s.Length <= width) return s.PadRight(width);
-            if (width <= 1) return s.Substring(0, width);
+
+            if (s.Length <= width)
+            {
+                return s.PadRight(width);
+            }
+
+            if (width <= 1)
+            {
+                return s.Substring(0, width);
+            }
+
             return s.Substring(0, width - 1) + "…";
         }
+
 
         static string FitCenter(string s, int width)
         {
             s ??= "";
+
             if (s.Length >= width)
+            {
                 return s.Substring(0, width);
+            }
 
             var totalPad = width - s.Length;
             var padLeft = totalPad / 2;
@@ -86,6 +127,7 @@ public class RZList
 
             return new string(' ', padLeft) + s + new string(' ', padRight);
         }
+
 
         // header
         CommandHandlerHelper.WriteOutputInfo(
@@ -103,11 +145,18 @@ public class RZList
             var r = m.Row;
             var dist = m.Dist;
 
-            var effects = new System.Collections.Generic.List<string>();
-            if (!string.IsNullOrWhiteSpace(r.ShroudEventKey))
-                effects.Add($"shroud({r.ShroudEventKey})");
-            if (!string.IsNullOrWhiteSpace(r.StormEventKey))
-                effects.Add($"storm({r.StormEventKey})");
+        var effects = new System.Collections.Generic.List<string>();
+
+        if (!string.IsNullOrWhiteSpace(r.ShroudEventKey))
+        {
+            effects.Add($"shroud({r.ShroudEventKey})");
+        }
+
+        if (!string.IsNullOrWhiteSpace(r.StormEventKey))
+        {
+            effects.Add($"storm({r.StormEventKey})");
+        }
+
 
             var effectsText = effects.Count > 0 ? string.Join(", ", effects) : "none";
             var areaText = $"{r.Radius:0.#}/{r.MaxDistance:0.#}";
