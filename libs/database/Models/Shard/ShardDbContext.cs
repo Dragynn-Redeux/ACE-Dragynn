@@ -91,7 +91,7 @@ public partial class ShardDbContext : DbContext
 
     public virtual DbSet<AccountSessionLog> AccountSessions { get; set; }
 
-    public DbSet<ResonanceZoneEntry> ResonanceZoneEntries { get; set; }
+    public DbSet<ResonanceZoneRow> ResonanceZoneEntries { get; set; }
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {

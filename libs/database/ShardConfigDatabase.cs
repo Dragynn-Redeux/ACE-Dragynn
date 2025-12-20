@@ -171,7 +171,57 @@ public class ShardConfigDatabase
             return context.ConfigPropertiesString.AsNoTracking().ToList();
         }
     }
-    public List<ResonanceZoneEntry> GetResonanceZoneEntriesEnabled()
+    public bool DeleteResonanceZoneEntry(int id)
+    {
+        using var context = new ShardDbContext();
+
+        var entry = context.ResonanceZoneEntries.FirstOrDefault(z => z.Id == id);
+        if (entry == null)
+        {
+            return false;
+        }
+
+        context.ResonanceZoneEntries.Remove(entry);
+        context.SaveChanges();
+        return true;
+    }
+
+    public ResonanceZoneRow FindResonanceZoneNear(
+        uint cellId,
+        float x,
+        float y,
+        float z,
+        float tolerance)
+    {
+        using var context = new ShardDbContext();
+
+        // Pull same-cell zones only (cheap filter)
+        var candidates = context.ResonanceZoneEntries
+            .Where(z => z.CellId == cellId)
+            .AsNoTracking()
+            .ToList();
+
+        ResonanceZoneRow best = null;
+        float bestDistSq = tolerance * tolerance;
+
+        foreach (var zne in candidates)
+        {
+            var dx = zne.X - x;
+            var dy = zne.Y - y;
+            var dz = zne.Z - z;
+            var distSq = dx * dx + dy * dy + dz * dz;
+
+            if (distSq <= bestDistSq)
+            {
+                best = zne;
+                bestDistSq = distSq;
+            }
+        }
+
+        return best;
+    }
+
+    public List<ResonanceZoneRow> GetResonanceZoneEntriesEnabled()
     {
         using var context = new ShardDbContext();
         return context.ResonanceZoneEntries
@@ -187,13 +237,65 @@ public class ShardConfigDatabase
             .Max(z => (DateTime?)z.ModifiedAt);
     }
 
-    public int InsertResonanceZoneEntry(ResonanceZoneEntry entry)
+    public int InsertResonanceZoneEntry(ResonanceZoneRow entry)
     {
         using var context = new ShardDbContext();
         context.ResonanceZoneEntries.Add(entry);
+        entry.ModifiedAt = DateTime.UtcNow;
         context.SaveChanges();
         return entry.Id;
     }
+   public bool UpdateResonanceZoneEntry(
+        int id,
+        string name,
+        float? radius,
+        float? maxDistance,
+        string shroudEventKey,
+        string stormEventKey,
+        bool? isEnabled = null)
+    {
+        using var context = new ShardDbContext();
+
+        var entry = context.ResonanceZoneEntries.FirstOrDefault(z => z.Id == id);
+        if (entry == null)
+        {
+            return false;
+        }
+
+        if (name != null)
+        {
+            entry.Name = name;
+        }
+
+        if (radius.HasValue)
+        {
+            entry.Radius = radius.Value;
+        }
+
+        if (maxDistance.HasValue)
+        {
+            entry.MaxDistance = maxDistance.Value;
+        }
+
+        if (shroudEventKey != null)
+        {
+            entry.ShroudEventKey = shroudEventKey;
+        }
+
+        if (stormEventKey != null)
+        {
+            entry.StormEventKey = stormEventKey;
+        }
+
+        if (isEnabled.HasValue)
+        {
+            entry.IsEnabled = isEnabled.Value;
+        }
+        entry.ModifiedAt = DateTime.UtcNow;
+        context.SaveChanges();
+        return true;
+    }
+
 
 
     public void SaveBool(ConfigPropertiesBoolean stat)

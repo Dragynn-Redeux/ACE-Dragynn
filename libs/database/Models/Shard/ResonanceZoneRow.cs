@@ -5,7 +5,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 namespace ACE.Database.Models.Shard;
 
 [Table("resonance_zone_entries")]
-public class ResonanceZoneEntry
+public class ResonanceZoneRow
 {
     [Key]
     [Column("id")]
