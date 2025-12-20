@@ -53,7 +53,7 @@ public static class WorldManager
 
     public static void Initialize()
     {
-        ShroudManager.Initialize();
+        ResonanceManager.Initialize();
         var thread = new Thread(() =>
         {
             LandblockManager.PreloadConfigLandblocks();
@@ -557,7 +557,7 @@ public static class WorldManager
         LandblockManager.Tick(Timers.PortalYearTicks);
 
         HouseManager.Tick();
-        ShroudManager.Tick(Timers.PortalYearTicks);
+        ResonanceManager.Tick(Timers.PortalYearTicks);
         ServerPerformanceMonitor.RegisterEventEnd(ServerPerformanceMonitor.MonitorType.UpdateGameWorld_Entire);
         ServerPerformanceMonitor.RegisterCumulativeEvents();
 

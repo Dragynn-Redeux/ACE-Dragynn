@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Linq;
 using ACE.Database.Models.Shard;
 using Microsoft.EntityFrameworkCore;
+using System;
 
 namespace ACE.Database;
 
@@ -170,6 +171,30 @@ public class ShardConfigDatabase
             return context.ConfigPropertiesString.AsNoTracking().ToList();
         }
     }
+    public List<ResonanceZoneEntry> GetResonanceZoneEntriesEnabled()
+    {
+        using var context = new ShardDbContext();
+        return context.ResonanceZoneEntries
+            .AsNoTracking()
+            .Where(z => z.IsEnabled)
+            .ToList();
+    }
+    public DateTime? GetResonanceZoneEntriesLastModifiedUtc()
+    {
+        using var context = new ShardDbContext();
+        return context.ResonanceZoneEntries
+            .AsNoTracking()
+            .Max(z => (DateTime?)z.ModifiedAt);
+    }
+
+    public int InsertResonanceZoneEntry(ResonanceZoneEntry entry)
+    {
+        using var context = new ShardDbContext();
+        context.ResonanceZoneEntries.Add(entry);
+        context.SaveChanges();
+        return entry.Id;
+    }
+
 
     public void SaveBool(ConfigPropertiesBoolean stat)
     {
