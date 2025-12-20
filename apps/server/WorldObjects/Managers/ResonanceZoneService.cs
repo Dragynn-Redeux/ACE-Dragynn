@@ -791,7 +791,7 @@ public class ResonanceZoneService
 
         // Tunables (live)
         var clearance = (float)PropertyManager.GetDouble("rz_teleport_clearance", 0.5).Item;
-        var maxFall   = (float)PropertyManager.GetDouble("rz_maxFall", 2).Item;
+        var maxfall   = (float)PropertyManager.GetDouble("rz_maxfall", 0.5).Item;
 
         var originZ = player.Location.PositionZ;
 
@@ -813,19 +813,21 @@ public class ResonanceZoneService
             {
                 continue;
             }
+            // rz_maxfall = requested fall height
+            // minForcedFall = absolute minimum allowed drop height
+            const float minForcedFall = 0.5f;
 
-            // Avoid big cliff drops
-            if ((originZ - groundZ) > maxFall)
-            {
-                continue;
-            }
+            // Enforce absolute floor at use-time
+            var zOffset = Math.Max(clearance, Math.Max(maxfall, minForcedFall));
+
+            var destZ = groundZ + zOffset;
 
             // Keep player's rotation so they arrive upright
             return new Position(
                 grounded.LandblockId.Raw,
                 grounded.PositionX,
                 grounded.PositionY,
-                grounded.PositionZ,
+                destZ,
                 player.Location.RotationX,
                 player.Location.RotationY,
                 player.Location.RotationZ,
