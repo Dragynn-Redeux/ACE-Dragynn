@@ -324,7 +324,8 @@ public static class PropertiesEnchantmentRegistryExtensions
             return null;
         }
 
-        rwLock.EnterReadLock();
+        // We modify `StartTime` here so a write-lock is required to avoid races
+        rwLock.EnterWriteLock();
         try
         {
             var expired = new List<PropertiesEnchantmentRegistry>();
@@ -344,7 +345,7 @@ public static class PropertiesEnchantmentRegistryExtensions
         }
         finally
         {
-            rwLock.ExitReadLock();
+            rwLock.ExitWriteLock();
         }
     }
 
