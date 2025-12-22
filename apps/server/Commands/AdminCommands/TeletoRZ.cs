@@ -1,6 +1,5 @@
 using System;
 using System.Globalization;
-using System.Linq;
 using ACE.Entity.Enum;
 using ACE.Server.Commands.Handlers;
 using ACE.Server.Managers;
@@ -43,14 +42,18 @@ public class TeletoRZ
             tries = Math.Clamp(parsedTries, 1, 64);
         }
 
-        var rows = DatabaseManager.ShardConfig.GetResonanceZoneEntriesEnabled();
-        var zone = rows.FirstOrDefault(r => r.Id == id);
+        var zone = DatabaseManager.ShardConfig.GetResonanceZoneEntryById((int)id);
 
         if (zone == null)
         {
-            CommandHandlerHelper.WriteOutputInfo(session, $"Zone id {id} not found (enabled zones only).", ChatMessageType.Help);
+            CommandHandlerHelper.WriteOutputInfo(
+                session,
+                $"Zone id {id} not found.",
+                ChatMessageType.Help
+            );
             return;
         }
+
 
         // Build zone center Position
         var zonePos = new ACE.Entity.Position(
@@ -76,11 +79,10 @@ public class TeletoRZ
 
         var rng = new Random(unchecked((int)DateTime.UtcNow.Ticks));
         var clearance = (float)PropertyManager.GetDouble("rz_teleport_clearance", 0.5).Item;
-        var originZ = player.Location.PositionZ;
-        var maxFall = (float)PropertyManager.GetDouble("rz_maxfall", 2).Item;
+        var maxfall = (float)PropertyManager.GetDouble("rz_maxfall", 2).Item;
 
         ACE.Entity.Position grounded = null;
-        float groundZ = 0f;
+        var groundZ = 0f;
 
         for (var attempt = 0; attempt < tries; attempt++)
         {
@@ -91,16 +93,16 @@ public class TeletoRZ
             var worldX = baseWorldX + (float)(Math.Cos(angle) * radius);
             var worldY = baseWorldY + (float)(Math.Sin(angle) * radius);
 
-            if (!WorldManager.TryBuildGroundedPosition(worldX, worldY, clearance, out var pos, out var gz))
+           if (!WorldManager.TryBuildGroundedPosition(worldX, worldY, clearance, out var pos, out var gz))
             {
                 continue;
             }
 
-            // Reject destinations that would cause too large a fall
-            if ((originZ - gz) > maxFall)
-            {
-                continue;
-            }
+            // Match the real teleport logic: stand above ground by a safe offset
+            const float minForcedFall = 0.5f;
+            var zOffset = Math.Max(clearance, Math.Max(maxfall, minForcedFall));
+
+            pos.PositionZ = gz + zOffset;
 
             grounded = pos;
             groundZ = gz;

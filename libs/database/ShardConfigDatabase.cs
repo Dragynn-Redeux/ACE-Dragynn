@@ -202,7 +202,7 @@ public class ShardConfigDatabase
             .ToList();
 
         ResonanceZoneRow best = null;
-        float bestDistSq = tolerance * tolerance;
+        var bestDistSq = tolerance * tolerance;
 
         foreach (var zne in candidates)
         {
@@ -220,6 +220,12 @@ public class ShardConfigDatabase
 
         return best;
     }
+    public IReadOnlyList<ResonanceZoneRow> GetResonanceZoneEntriesAll()
+    {
+        using var context = new ShardDbContext();
+        return context.ResonanceZoneEntries
+            .ToList();
+    }
 
     public List<ResonanceZoneRow> GetResonanceZoneEntriesEnabled()
     {
@@ -229,6 +235,20 @@ public class ShardConfigDatabase
             .Where(z => z.IsEnabled)
             .ToList();
     }
+    public List<ResonanceZoneRow> GetResonanceZoneEntriesDisabled()
+    {
+        using var context = new ShardDbContext();
+        return context.ResonanceZoneEntries
+            .AsNoTracking()
+            .Where(z => !z.IsEnabled)
+            .ToList();
+    }
+    public ACE.Database.Models.Shard.ResonanceZoneRow GetResonanceZoneEntryById(int id)
+    {
+        using var context = new ShardDbContext();
+        return context.ResonanceZoneEntries.FirstOrDefault(r => r.Id == id);
+    }
+
     public DateTime? GetResonanceZoneEntriesLastModifiedUtc()
     {
         using var context = new ShardDbContext();

@@ -39,9 +39,72 @@ public class ResonanceZoneService
     private const double PsEligibilityPruneIntervalSeconds = 300; // 5 minutes
 
 
+    private void LogZoneOverlapsAtLoad()
+    {
+        var overlapPairs = 0;
+        var landblocksWithOverlaps = new HashSet<uint>();
+        var examples = new List<string>();
+        const int maxExamples = 10;
 
+        foreach (var kvp in _zonesByLandblock)
+        {
+            var landblock = kvp.Key;
+            var zones = kvp.Value;
 
+            if (zones == null || zones.Count < 2)
+            {
+                continue;
+            }
 
+            for (var i = 0; i < zones.Count - 1; i++)
+            {
+                var a = zones[i];
+                var aOuter = a.MaxDistance > 0 ? a.MaxDistance : a.Radius;
+                var aPos = ToWorld2D(a.Location);
+
+                for (var j = i + 1; j < zones.Count; j++)
+                {
+                    var b = zones[j];
+                    var bOuter = b.MaxDistance > 0 ? b.MaxDistance : b.Radius;
+                    var bPos = ToWorld2D(b.Location);
+
+                    var delta = aPos - bPos;
+                    var distSq = delta.LengthSquared();
+                    var outerSum = aOuter + bOuter;
+
+                    if (distSq > outerSum * outerSum)
+                    {
+                        continue;
+                    }
+
+                    overlapPairs++;
+                    landblocksWithOverlaps.Add(landblock);
+
+                    if (examples.Count < maxExamples)
+                    {
+                        var dist = MathF.Sqrt(distSq);
+                        examples.Add(
+                            $"lb={landblock:X4} '{a.Name}'[{a.Radius:0.#}/{aOuter:0.#}] <-> " +
+                            $"'{b.Name}'[{b.Radius:0.#}/{bOuter:0.#}] dist={dist:0.##}"
+                        );
+                    }
+                }
+            }
+        }
+
+        if (overlapPairs == 0)
+        {
+            _log.Information("ResonanceZones overlap check: none detected.");
+            return;
+        }
+
+        _log.Warning(
+            "ResonanceZones overlap check: pairs={Pairs}, landblocks={Landblocks}. Examples: {Examples}",
+            overlapPairs,
+            landblocksWithOverlaps.Count,
+            string.Join(" | ", examples)
+        );
+    }
     public ResonanceZoneService(ResonanceZoneConfig config)
     {
         _config = config;
@@ -55,21 +118,79 @@ public class ResonanceZoneService
         _outerWarnSwirlIntervalSeconds =
             PropertyManager.GetDouble("sz_warnswirl", 2.5).Item;
 
+        // Summarize what was actually loaded (NOTE: config.Zones are ENABLED rows only right now)
+        var totalZones = config.Zones.Count;
+
+        var shroudKeyZones = 0;
+        var stormKeyZones = 0;
+        var ungatedZones = 0;   // neither key set → always "zone active" per IsZoneEventActive :contentReference[oaicite:2]{index=2}
+
+        foreach (var z in config.Zones)
+        {
+            if (!string.IsNullOrWhiteSpace(z.ShroudEventKey))
+            {
+                shroudKeyZones++;
+            }
+
+            if (!string.IsNullOrWhiteSpace(z.StormEventKey))
+            {
+                stormKeyZones++;
+            }
+
+            if (string.IsNullOrWhiteSpace(z.ShroudEventKey) && string.IsNullOrWhiteSpace(z.StormEventKey))
+            {
+                ungatedZones++;
+            }
+        }
+
         _log.Information(
-            "Loaded {Count} shroud zones (WarnMsg={Warn}s, ShroudMsg={Shroud}s, WarnSwirl={Swirl}s)",
-            config.Zones.Count,
+            "ResonanceZones loaded: zones={Zones}, shroudKey={ShroudKey}, stormKey={StormKey}, ungated={Ungated} " +
+            "(WarnMsg={Warn}s, ShroudMsg={Shroud}s, WarnSwirl={Swirl}s, TeleportCooldown={TpCd}s, ShroudedSwirl={SwirlMin}-{SwirlMax}s)",
+            totalZones,
+            shroudKeyZones,
+            stormKeyZones,
+            ungatedZones,
             _outerWarnMessageIntervalSeconds,
             _shroudedMessageIntervalSeconds,
-            _outerWarnSwirlIntervalSeconds
+            _outerWarnSwirlIntervalSeconds,
+            _config.TeleportCooldown.TotalSeconds,
+            _config.ShroudedSwirlMin.TotalSeconds,
+            _config.ShroudedSwirlMax.TotalSeconds
         );
 
-        
-       _log.Information(
-            "PortalStorm config: Cap={Cap}, Interval={Interval}s, Cooldown={Cooldown}s",
+        // Conservative warning: zones with no event keys are selection-eligible but inert
+        var unflagged = config.Zones
+            .Where(z => string.IsNullOrWhiteSpace(z.ShroudEventKey) &&
+                        string.IsNullOrWhiteSpace(z.StormEventKey))
+            .ToList();
+
+        if (unflagged.Count > 0)
+        {
+            var examples = unflagged
+                .Take(10)
+                .Select(z =>
+                    $"{z.Name}@{z.Location.LandblockId.Raw:X4} " +
+                    $"({z.Location.PositionX:0.#},{z.Location.PositionY:0.#},{z.Location.PositionZ:0.#})")
+                .ToArray();
+
+            _log.Warning(
+                "ResonanceZones: {Count} zone(s) have no shroud/storm event keys (selection-eligible but inert). Examples: {Examples}",
+                unflagged.Count,
+                string.Join(" | ", examples)
+            );
+        }
+
+        // PortalStorm summary (keep it, but include the global toggle too)
+        _log.Information(
+            "PortalStorm config: Global={Global}, Cap={Cap}, Interval={Interval}s, Cooldown={Cooldown}s",
+            PropertyManager.GetBool("ps_global", true).Item,
             PropertyManager.GetDouble("ps_cap", 8).Item,
             PropertyManager.GetDouble("ps_interval", 60).Item,
             PropertyManager.GetDouble("ps_cooldown", 120).Item
         );
+
+        // Overlap reporting at load-time (not per-player tick)
+        LogZoneOverlapsAtLoad();
 
     }
     private static bool EventIsActive(GameEventState state)
@@ -563,7 +684,6 @@ public class ResonanceZoneService
         {
             if (!IsZoneEventActive(zone))
             {
-                _log.Information("Zone skipped (event inactive): player={Player} zone={Zone}", player.Name, zone.Name);
                 continue;
             }
 
@@ -599,19 +719,7 @@ public class ResonanceZoneService
             return;
         }
 
-        // Admin warning if overlap/misconfig: more than one eligible zone
-        if (overlaps != null && overlaps.Count > 1)
-        {
-            // TODO: if you already have an admin/audit rate limiter, use it here.
-            // Keep it simple for now; you can add a per-player cooldown dict later.
-            _log.Warning(
-                "SHROUD ZONE OVERLAP: player={Player} lb={Landblock:X4} eligibleZones={Zones}",
-                player.Name,
-                player.Location.Landblock,
-                string.Join(", ", overlaps.OrderBy(z => z.distSq).Select(z => $"{z.name}(dist2={z.distSq:0.##})"))
-            );
-        }
-
+       
         // Existing behavior, applied to chosen zone only
         var chosenInnerSq = chosenZone.Radius * chosenZone.Radius;
         var insideInner = chosenDistSq <= chosenInnerSq;
