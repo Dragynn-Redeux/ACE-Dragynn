@@ -890,34 +890,37 @@ public class SpellProjectile : WorldObject
                 finalDamage *= monsterSpellDamageMultiplier;
             }
 
-            // if (sourcePlayer is not null)
-            // {
-            //     Console.WriteLine($"\n{sourceCreature.Name} casted {Spell.Name} on {target.Name} for {Math.Round(finalDamage, 0)}.\n" +
-            //         $" -baseDamage: {baseDamage}\n" +
-            //         $" -critMultiplier: {criticalDamageMod}\n" +
-            //         $" -attributeMod: {attributeMod}\n" +
-            //         $" -elementalDamageMod: {elementalDamageMod}\n" +
-            //         $" -slayerMod: {slayerMod}\n" +
-            //         $" -overload: {overloadDamageMod}\n" +
-            //         $" -batteryMod: {batteryDamageMod}\n" +
-            //         $" -jewelElementalist: {jewelElementalist}\n" +
-            //         $" -jewelElemental: {jewelElemental}\n" +
-            //         $" -jewelSelfHarm: {jewelSelfHarm}\n" +
-            //         $" -jewelRedFury: {jewelRedFury}\n" +
-            //         $" -jewelBlueFury: {jewelBlueFury}\n" +
-            //         $" -strikethrough: {strikethroughMod}\n" +
-            //         $" -archetypeSpellDamageMod: {archetypeSpellDamageMod}\n" +
-            //         $" -levelscaling: {levelScalingMod}\n" +
-            //         $" -damageMultiplier: {damageMultiplier}\n" +
-            //         $" -spellcraftMod: {spellcraftMod}\n" +
-            //         $" -absorbMod: {absorbMod}\n" +
-            //         $" -wardMod: {wardMod}\n" +
-            //         $" -resistanceMod: {resistanceMod}\n" +
-            //         $" -resistedMod: {resistedMod}\n" +
-            //         $" -specDefMod: {specDefenseMod}\n" +
-            //         $" -ratingDamageTypeWard: {ratingDamageTypeWard}\n" +
-            //         $" -FinalBeforeRatings: {finalDamage}");
-            // }
+        //if (sourcePlayer is not null)
+        //{
+        //    Console.WriteLine($"\n{sourceCreature.Name} casted {Spell.Name} on {target.Name} for {Math.Round(finalDamage, 0)}.\n" +
+        //        $" -baseDamage: {baseDamage}\n" +
+        //        $" -critMultiplier: {criticalDamageMod}\n" +
+        //        $" -attributeMod: {attributeMod}\n" +
+        //        $" -elementalDamageMod: {elementalDamageMod}\n" +
+        //        $" -slayerMod: {slayerMod}\n" +
+        //        $" -overload: {overloadDamageMod}\n" +
+        //        $" -batteryMod: {batteryDamageMod}\n" +
+        //        $" -jewelElementalist: {jewelElementalist}\n" +
+        //        $" -jewelElemental: {jewelElemental}\n" +
+        //        $" -jewelSelfHarm: {jewelSelfHarm}\n" +
+        //        $" -jewelRedFury: {jewelRedFury}\n" +
+        //        $" -jewelBlueFury: {jewelBlueFury}\n" +
+        //        $" -strikethrough: {strikethroughMod}\n" +
+        //        $" -archetypeSpellDamageMod: {archetypeSpellDamageMod}\n" +
+        //        $" -levelscaling: {levelScalingMod}\n" +
+        //        $" -damageMultiplier: {damageMultiplier}\n" +
+        //        $" -spellcraftMod: {spellcraftMod}\n" +
+        //        $" -landblockScalingMod: {landblockScalingMod}\n" +
+        //        $" -damageBeforeMitigation: {damageBeforeMitigation}\n" +
+        //        $" -absorbMod: {absorbMod}\n" +
+        //        $" -wardMod: {wardMod}\n" +
+        //        $" -resistanceMod: {resistanceMod}\n" +
+        //        $" -resistedMod: {resistedMod}\n" +
+        //        $" -specDefMod: {specDefenseMod}\n" +
+        //        $" -ratingDamageTypeWard: {ratingDamageTypeWard}\n" +
+        //        $" -playerSpellDamageMultiplier: {(float)PropertyManager.GetDouble("player_spell_damage_multiplier").Item}\n" +
+        //        $" -FinalBeforeRatings: {finalDamage}");
+        //}
 
 
         // show debug info
@@ -1446,7 +1449,8 @@ public class SpellProjectile : WorldObject
 
             percent = damage / target.Health.MaxValue;
 
-            //Console.WriteLine($"Damage rating: " + Creature.ModToRating(damageRatingMod));
+            //Console.WriteLine($"DamageRating mod: {damageRatingMod}\n" +
+            //    $"DamageResistRating mod: {damageResistRatingMod}");
 
             equippedCloak = target.EquippedCloak;
 

@@ -163,16 +163,16 @@ internal static class SigilTrinketConfig
     public static IReadOnlyDictionary<int, uint> TierIconIds { get; } =
         new Dictionary<int, uint>
         {
-            [1] = 100690996,
-            [2] = 100690997,
-            [3] = 100690998,
-            [4] = 100690999,
-            [5] = 100691000,
-            [6] = 100691001,
-            [7] = 100691002,
-            [8] = 100691003,
-            [9] = 100691004,
-            [10] = 0
+            [1] = 0x06009001,
+            [2] = 0x06009002,
+            [3] = 0x06009003,
+            [4] = 0x06009004,
+            [5] = 0x06009005,
+            [6] = 0x06009006,
+            [7] = 0x06009007,
+            [8] = 0x06009008,
+            [9] = 0x06009009,
+            [10] = 0x06009010
         };
 
     public static IReadOnlyDictionary<int, SigilStatConfig> LifeMagicScarab { get; } =

@@ -447,15 +447,15 @@ public static partial class LootGenerationFactory
 
     /// <summary>
     /// Rolls Bonus Ward Cleaving for Orbs
-    /// 0% to 20% (up to 10% based on tier)
+    /// 10% to 20% 
     /// </summary>
     private static void RollBonusWardCleaving(TreasureDeath treasureDeath, WorldObject wo, out float percentile)
     {
-        float[] minMod = { 0.0f, 0.01f, 0.02f, 0.03f, 0.04f, 0.05f, 0.075f, 0.1f };
+        //float[] minMod = { 0.10f, 0.11f, 0.12f, 0.13f, 0.14f, 0.15f, 0.175f, 0.2f };
 
-        var tier = Math.Clamp(treasureDeath.Tier - 1, 0, minMod.Length);
+        //var tier = Math.Clamp(treasureDeath.Tier - 1, 0, minMod.Length);
         var wardCleavingMod = 0.1f * GetDiminishingRoll(treasureDeath);
-        wardCleavingMod += minMod[tier];
+        wardCleavingMod += 0.1f;
 
         const float maxMod = 0.2f;
         percentile = wardCleavingMod / maxMod;
@@ -467,15 +467,15 @@ public static partial class LootGenerationFactory
 
     /// <summary>
     /// Rolls Bonus Armor Cleaving for Spears
-    /// 0% to 20% (up to 10% based on tier)
+    /// 10% to 20%
     /// </summary>
     private static void RollBonusArmorCleaving(TreasureDeath treasureDeath, WorldObject wo, out float percentile)
     {
-        float[] minMod = { 0.0f, 0.01f, 0.02f, 0.03f, 0.04f, 0.05f, 0.075f, 0.1f };
+        //float[] minMod = { 0.10f, 0.11f, 0.12f, 0.13f, 0.14f, 0.15f, 0.175f, 0.2f };
 
-        var tier = Math.Clamp(treasureDeath.Tier - 1, 0, minMod.Length);
+        //var tier = Math.Clamp(treasureDeath.Tier - 1, 0, minMod.Length);
         var armorCleavingMod = 0.1f * GetDiminishingRoll(treasureDeath);
-        armorCleavingMod += minMod[tier];
+        armorCleavingMod += 0.1f;
 
         const float maxMod = 0.2f;
         percentile = armorCleavingMod / maxMod;

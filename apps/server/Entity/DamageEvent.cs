@@ -73,6 +73,7 @@ public class DamageEvent
     private float _ratingRedFury;
     private float _ratingYellowFury;
     private float _ratingSelfHarm;
+    private float _ratingPierceResistanceBonus;
     private float _recklessnessMod;
     private float _resistanceMod;
     private float _slayerMod;
@@ -675,6 +676,7 @@ public class DamageEvent
         SneakAttackMod = attacker.GetSneakAttackMod(defender);
         _attackHeightDamageBonus += GetHighAttackHeightBonus(playerAttacker);
         _ratingElementalDamageBonus = Jewel.HandleElementalBonuses(playerAttacker, DamageType);
+        _ratingPierceResistanceBonus = GetRatingPierceResistanceBonus(defender, playerAttacker);
         _levelScalingMod = GetLevelScalingMod(attacker, defender, playerDefender);
         _ammoEffectMod = GetAmmoEffectMod(Weapon, playerAttacker);
 
@@ -929,6 +931,7 @@ public class DamageEvent
                * _combatAbilityRelentlessDamagePenalty
                * _combatAbilitySteadyStrikeDamageBonus
                * _ratingElementalDamageBonus
+               * _ratingPierceResistanceBonus
                * _recklessnessMod
                * SneakAttackMod
                * _attackHeightDamageBonus
@@ -950,6 +953,7 @@ public class DamageEvent
         //                       $" -SneakAttack: {SneakAttackMod}\n" +
         //                       $" -AttackHeight: {_attackHeightDamageBonus}\n" +
         //                       $" -ElementalDamageRating: {_ratingElementalDamageBonus}\n" +
+        //                       $" -PierceResistanceRating: {_ratingPierceResistanceBonus}\n" +
         //                       $" -DualWield: {_dualWieldDamageBonus}\n" +
         //                       $" -TwoHand: {_twohandedCombatDamageBonus}\n" +
         //                       $" -MultiShot: {_combatAbilityMultishotDamagePenalty}\n" +
@@ -984,6 +988,7 @@ public class DamageEvent
                * SneakAttackMod
                * _attackHeightDamageBonus
                * _ratingElementalDamageBonus
+               * _ratingPierceResistanceBonus
                * _dualWieldDamageBonus
                * _twohandedCombatDamageBonus
                * _combatAbilityMultishotDamagePenalty
@@ -1226,14 +1231,14 @@ public class DamageEvent
     {
         if (playerAttacker == null)
         {
-            return 0.0f;
+            return 1.0f;
         }
 
         var rating = playerAttacker.GetEquippedAndActivatedItemRatingSum(PropertyInt.GearPierce);
 
         if (rating <= 0 || DamageType != DamageType.Pierce)
         {
-            return 0.0f;
+            return 1.0f;
         }
 
         var rampPercentage = (float)defender.QuestManager.GetCurrentSolves($"{playerAttacker.Name},Pierce") / 100;
@@ -1241,7 +1246,7 @@ public class DamageEvent
         const float baseMod = 0.2f;
         const float bonusPerRating = 0.01f;
 
-        return rampPercentage * (baseMod + bonusPerRating * rating);
+        return 1.0f + (rampPercentage * (baseMod + bonusPerRating * rating));
     }
 
     private void PostDamageMitigationEffects(Creature attacker, Creature defender, WorldObject damageSource)

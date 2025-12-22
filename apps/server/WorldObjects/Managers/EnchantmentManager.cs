@@ -1854,7 +1854,17 @@ public class EnchantmentManager
             var wardMod = creature.GetWardMod(damager as Creature, creature, 1.0f);
             var levelScalingMod = LevelScaling.GetMonsterDamageTakenHealthScalar(sourcePlayer, creature);
 
-            tickAmount *= resistanceMod * wardMod * damageResistRatingMod * dotResistRatingMod * bleedResistance * levelScalingMod;
+            //Console.WriteLine($"DoT Tick (Damager: {damager?.Name}, Target: {creature?.Name})\n" +
+            //    $"-BaseTickAmount: {tickAmount}\n" +
+            //    $"-ResistanceMod: {resistanceMod}\n" +
+            //    $"-DamageResistRatingMod: {damageResistRatingMod}\n" +
+            //    $"-DotResistRatingMod: {dotResistRatingMod}\n" +
+            //    $"-BleedResistance: {bleedResistance}\n" +
+            //    $"-WardMod: {wardMod}\n" +
+            //    $"-LevelScalingMod: {levelScalingMod}\n" +
+            //    $"-FinalTickAmount: {tickAmount * resistanceMod * wardMod * damageResistRatingMod * dotResistRatingMod * bleedResistance * levelScalingMod}");
+
+            //tickAmount *= resistanceMod * wardMod * damageResistRatingMod * dotResistRatingMod * bleedResistance * levelScalingMod;
 
             // make sure the target's current health is not exceeded
             if (tickAmountTotal + tickAmount >= creature.Health.Current)
@@ -1881,6 +1891,7 @@ public class EnchantmentManager
                 break;
             }
         }
+
 
         creature.TakeDamageOverTime(tickAmountTotal, damageType);
 

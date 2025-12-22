@@ -328,8 +328,8 @@ public class Healer : WorldObject
         var normalized = 1 - Math.Exp(-0.001 * healingSkill);
         var healingSkillMod = 0.1 + (10.0 - 0.1) * normalized;
 
-        var healMin = 50 * healingSkillMod * 0.5f;
-        var healMax = 50 * healingSkillMod;
+        var healMin = 100 * healingSkillMod * 0.5f;
+        var healMax = 100 * healingSkillMod;
         var healAmount = ThreadSafeRandom.Next((float)healMin, (float)healMax);
 
         var healKitMod = (float)(HealkitMod ?? 1.0);

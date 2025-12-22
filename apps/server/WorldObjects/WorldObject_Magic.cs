@@ -805,17 +805,6 @@ partial class WorldObject
         // create enchantment
         var addResult = target.EnchantmentManager.Add(spell, caster, weapon, equip);
 
-        // Nether Dot Mod
-        if (player != null && caster != null && targetCreature != null && spell.School is MagicSchool.VoidMagic)
-        {
-            var casterWeapon = weapon ?? caster;
-            var wielderCreature = caster as Creature ?? this as Creature;
-
-            var netherDamageMod = GetCasterElementalDamageModifier(casterWeapon, wielderCreature, targetCreature, W_DamageType);
-
-            addResult.Enchantment.StatModValue = (int)(addResult.Enchantment.StatModValue * netherDamageMod);
-        }
-
         // Ward reduction of Creature and Life debuffs
         if (target is Player && spell.Id != (uint)SpellId.Vitae)
         {
@@ -3513,7 +3502,7 @@ partial class WorldObject
         // thanks to Xenocide for figuring this part out!
 
         var elementalDamageMod = 1.0f;
-        var skillMod = 1.0f;
+        var attributeDamageMod = 1.0f;
 
         if (creatureSource != null)
         {
@@ -3525,22 +3514,9 @@ partial class WorldObject
                 spell.DamageType
             );
 
-            // skillMod only applied to projectiles -- no destructive curse
-            if (player != null && spell.NumProjectiles > 0)
-            {
-                // from SpellProjectile, slightly modified
-                // convert this to common function
-                var magicSkill = player.GetCreatureSkill(spell.School).Current;
-
-                if (magicSkill > spell.Power)
-                {
-                    var percentageBonus = (magicSkill - spell.Power) / 1000.0f;
-
-                    skillMod = 1.0f + percentageBonus;
-                }
-            }
+            attributeDamageMod = creatureSource.GetAttributeMod(creatureSource.GetEquippedWeapon(), true);
         }
-        enchantment_statModVal *= skillMod * elementalDamageMod * damageRatingMod;
+        enchantment_statModVal *= elementalDamageMod * attributeDamageMod * damageRatingMod;
 
         return enchantment_statModVal;
     }
