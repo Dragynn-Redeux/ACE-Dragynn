@@ -797,14 +797,18 @@ public class SpellProjectile : WorldObject
                     1.0f + Jewel.GetJewelEffectMod(sourcePlayer, PropertyInt.GearBludgeon, "Bludgeon");
 
                 criticalDamageMod = (1.0f + weaponCritDamageMod) * jewelBludgeCritDamageMod;
+
+                baseDamage = Spell.MaxDamage;
+
+                // monster spell crits are based on median damage instead of max
+                if (sourceCreature is not Player)
+                {
+                    baseDamage = Spell.MedianDamage;
+                }
             }
-
-            baseDamage = ThreadSafeRandom.Next(Spell.MinDamage, Spell.MaxDamage);
-
-            // monster spell crits are based on median damage instead of max
-            if (criticalHit && sourceCreature is not Player)
+            else
             {
-                baseDamage = Spell.MedianDamage;
+                baseDamage = ThreadSafeRandom.Next(Spell.MinDamage, Spell.MaxDamage);
             }
         }
 
