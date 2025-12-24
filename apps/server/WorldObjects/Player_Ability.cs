@@ -887,6 +887,16 @@ partial class Player
             return false;
         }
 
+        if (BatteryDischargeIsActive)
+        {
+            manaCost = 0;
+        }
+        else if (BatteryStanceIsActive)
+        {
+            var batteryMod = ManaChargeMeter * 0.5f;
+            manaCost = (int)(manaCost * (1.0f - batteryMod));
+        }
+
         UpdateVitalDelta(Mana, -manaCost);
 
         var particalIntensity = Math.Clamp((level - 1) * (1.0f / 6.0f), 0.0f, 1.0f);

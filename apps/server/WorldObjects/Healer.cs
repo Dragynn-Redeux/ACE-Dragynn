@@ -245,9 +245,8 @@ public class Healer : WorldObject
         var difficulty = 0;
 
         // heal up
-        var healAmount = GetHealAmount(healer, target, missingVital, out var critical, out var staminaCost);
+        var healAmount = GetHealAmount(healer, target, missingVital, out var critical);
 
-        healer.UpdateVitalDelta(healer.Stamina, (int)-staminaCost);
         // Amount displayed to player can exceed actual amount healed due to heal boost ratings, but we only want to record the actual amount healed
         var actualHealAmount = (uint)target.UpdateVitalDelta(vital, healAmount);
         if (vital.Vital == PropertyAttribute2nd.MaxHealth)
@@ -255,35 +254,21 @@ public class Healer : WorldObject
             target.DamageHistory.OnHeal(actualHealAmount);
         }
 
-        // SPEC BONUS: Healing - Heal-over-time spell when used.
-        var canHealOverTime = healer.GetCreatureSkill(Skill.Healing).AdvancementClass is SkillAdvancementClass.Specialized;
-
-        if (canHealOverTime)
+        var spell = BoosterEnum switch
         {
-            var spell = BoosterEnum switch
-            {
-                PropertyAttribute2nd.Health => new Spell(6413),
-                PropertyAttribute2nd.Stamina => new Spell(6414),
-                PropertyAttribute2nd.Mana => new Spell(6415),
-                _ => null
-            };
+            PropertyAttribute2nd.Health => new Spell((int)SpellId.HealKitRegen),
+            PropertyAttribute2nd.Stamina => new Spell((int)SpellId.StaminaKitRegen),
+            PropertyAttribute2nd.Mana => new Spell((int)SpellId.ManaKitRegen),
+            _ => null
+        };
 
-            if (spell is null)
-            {
-                _log.Error("DoHealing(Player {Player}, Target {Target}) - spell is null", healer.Name, target.Name);
-                return;
-            }
-
-            var healingSkillCurrent = healer.GetCreatureSkill(Skill.Healing).Current;
-            var normalized = 1 - Math.Exp(-0.001 * healingSkillCurrent);
-            var healingSkillMod = 0.1 + (10.0 - 0.1) * normalized;
-
-            var healkitMod = (HealkitMod ?? 1.0);
-
-            spell.SpellStatModVal = (float)healkitMod * (float)healingSkillMod;
-
-            healer.TryCastSpell_Inner(spell, target);
+        if (spell is null)
+        {
+            _log.Error("DoHealing(Player {Player}, Target {Target}) - spell is null", healer.Name, target.Name);
+            return;
         }
+
+        TryStartHealOverTime(healer, target, spell);
 
         var healingSkill = healer.GetCreatureSkill(Skill.Healing);
         Proficiency.OnSuccessUse(healer, healingSkill, difficulty);
@@ -300,7 +285,7 @@ public class Healer : WorldObject
         {
             target.Session.Network.EnqueueSend(
                 new GameMessageSystemChat(
-                    $"{healer.Name} heals you for {healAmount} {BoosterEnum.ToString()} points.",
+                    $"{healer.Name} {crit}heals you for {healAmount} {BoosterEnum.ToString()} points.",
                     ChatMessageType.Broadcast
                 )
             );
@@ -312,6 +297,24 @@ public class Healer : WorldObject
         }
     }
 
+    private void TryStartHealOverTime(Player healer, Player target, Spell spell)
+    {
+        // Convert the healer's raw Healing skill into a non-linear modifier with diminishing returns.
+        var healingSkillCurrent = healer.GetCreatureSkill(Skill.Healing).Current;
+        var normalized = 1 - Math.Exp(-0.001 * healingSkillCurrent);
+        var healingSkillMod = (0.1 + (10.0 - 0.1) * normalized);
+
+        var healkitMod = (HealkitMod ?? 1.0);
+
+        // SPEC BONUS: Healing - Heal-over-time doubled.
+        var specialized = healer.GetCreatureSkill(Skill.Healing).AdvancementClass is SkillAdvancementClass.Specialized;
+        var specMod = specialized ? 2.0f : 1.0f;
+
+        spell.SpellStatModVal = (float)healkitMod * (float)healingSkillMod * specMod;
+
+        healer.TryCastSpell_Inner(spell, target);
+    }
+
     /// <summary>
     /// Returns the healing amount for this attempt
     /// </summary>
@@ -319,8 +322,7 @@ public class Healer : WorldObject
         Player healer,
         Player target,
         uint missingVital,
-        out bool criticalHeal,
-        out uint staminaCost
+        out bool criticalHeal
     )
     {
         // factors: healing skill, healing kit bonus, stamina, critical chance
@@ -351,15 +353,18 @@ public class Healer : WorldObject
             healAmount = missingVital;
         }
 
-        // stamina check? On the Q&A board a dev posted that stamina directly effects the amount of damage you can heal
-        // low stam = less vital healed. I don't have exact numbers for it. Working through forum archive.
-
-        // stamina cost: 1 stamina per 2 vital healed
-        staminaCost = (uint)Math.Round(healAmount / 2.0f);
-        if (staminaCost > healer.Stamina.Current)
+        // stamina cost: 1 stamina per 5 vital healed
+        if (BoosterEnum != PropertyAttribute2nd.Stamina)
         {
-            staminaCost = healer.Stamina.Current;
-            healAmount = staminaCost * 2;
+            var staminaCost = (uint)Math.Round(healAmount / 5.0f);
+
+            if (staminaCost > healer.Stamina.Current)
+            {
+                staminaCost = healer.Stamina.Current;
+                healAmount = staminaCost * 5;
+            }
+
+            healer.UpdateVitalDelta(healer.Stamina, (int)-staminaCost);
         }
 
         // verify healing boost comes from target instead of healer?

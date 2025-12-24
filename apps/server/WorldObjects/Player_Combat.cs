@@ -1363,7 +1363,7 @@ partial class Player
     {
         var weaponTier = Math.Max(GetMainHandWeaponTier(), GetOffHandWeaponTier());
         var powerAccuracyLevel = GetEquippedMissileWeapon() != null ? AccuracyLevel : PowerLevel;
-        var weightClassPenalty = (float)(1 + GetArmorResourcePenalty() ?? 0);
+        var weightClassPenalty = (float)(1 + (GetArmorResourcePenalty() ?? 0));
         var baseCost = StaminaTable.GetStaminaCost(weaponTier, attackAnimLength, powerAccuracyLevel, weightClassPenalty);
 
         var staminaCostReductionMod = GetStaminaReductionMod(weapon);
@@ -1392,6 +1392,26 @@ partial class Player
         baseCost *= staminaCostReductionMod * abilityPenaltyMod;
 
         var staminaCost = Math.Max(baseCost, 1);
+
+        if (GetEquippedCombatFocus() is { CombatFocusType: (int)CombatFocusType.Spellsword})
+        {
+            staminaCost = (int)Math.Round(staminaCost * 0.5f);
+            var manaCost = staminaCost;
+
+            if (BatteryDischargeIsActive)
+            {
+                manaCost = 0;
+            }
+            else if (BatteryStanceIsActive)
+            {
+                var batteryMod = ManaChargeMeter * 0.5f;
+                manaCost = (int)Math.Round(manaCost * (1.0f - batteryMod));
+            }
+
+            UpdateVitalDelta(Mana, (int)-manaCost);
+
+            return (int)Math.Round(staminaCost);
+        }
 
         return (int)Math.Round(staminaCost);
     }
