@@ -5,6 +5,8 @@ using ACE.Database;
 using ACE.Entity.Enum;
 using ACE.Server.Commands.Handlers;
 using ACE.Server.Network;
+using DbResonanceZoneEntry = ACE.Database.Models.Shard.ResonanceZoneRow;
+
 
 namespace ACE.Server.Commands.AdminCommands;
 
@@ -66,7 +68,7 @@ public class RZModify
         var args = ParseNamedArgs(parameters.Length > 1 ? parameters[1..] : Array.Empty<string>());
 
         // Fetch zone by id, including disabled
-        var row = DatabaseManager.ShardConfig.GetResonanceZoneEntryById((int)id);
+        DbResonanceZoneEntry row = DatabaseManager.ShardConfig.GetResonanceZoneEntryById((int)id);
         if (row == null)
         {
             CommandHandlerHelper.WriteOutputInfo(session, $"Zone id {id} not found.", ChatMessageType.Help);

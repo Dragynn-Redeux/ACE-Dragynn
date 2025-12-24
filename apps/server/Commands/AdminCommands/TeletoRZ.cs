@@ -5,6 +5,8 @@ using ACE.Server.Commands.Handlers;
 using ACE.Server.Managers;
 using ACE.Server.Network;
 using ACE.Database;
+using DbResonanceZoneEntry = ACE.Database.Models.Shard.ResonanceZoneRow;
+
 
 
 namespace ACE.Server.Commands.AdminCommands;
@@ -42,7 +44,8 @@ public class TeletoRZ
             tries = Math.Clamp(parsedTries, 1, 64);
         }
 
-        var zone = DatabaseManager.ShardConfig.GetResonanceZoneEntryById((int)id);
+        DbResonanceZoneEntry zone = DatabaseManager.ShardConfig.GetResonanceZoneEntryById((int)id);
+
 
         if (zone == null)
         {

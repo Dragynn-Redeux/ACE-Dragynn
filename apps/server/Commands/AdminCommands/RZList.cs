@@ -7,6 +7,8 @@ using ACE.Entity;
 using ACE.Entity.Enum;
 using ACE.Server.Commands.Handlers;
 using ACE.Server.Network;
+using DbResonanceZoneEntry = ACE.Database.Models.Shard.ResonanceZoneRow;
+
 
 namespace ACE.Server.Commands.AdminCommands;
 
@@ -87,7 +89,7 @@ public class RZList
         }
 
         // Fetch rows based on scope
-        IReadOnlyList<ACE.Database.Models.Shard.ResonanceZoneRow> rows;
+        IReadOnlyList<DbResonanceZoneEntry> rows;
         if (scope == "all")
         {
             rows = DatabaseManager.ShardConfig.GetResonanceZoneEntriesAll();

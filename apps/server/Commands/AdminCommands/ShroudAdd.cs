@@ -1,10 +1,11 @@
 using System.Globalization;
 using ACE.Database;
 using ACE.Entity.Enum;
+using ACE.Entity;
 using ACE.Server.Commands.Handlers;
 using ACE.Server.Network;
 using System.Collections.Generic;
-using DbResonanceZoneRow = ACE.Database.Models.Shard.ResonanceZoneRow;
+using DbResonanceZoneEntry = ACE.Database.Models.Shard.ResonanceZoneRow;
 using System;
 
 namespace ACE.Server.Commands.AdminCommands;
@@ -104,7 +105,7 @@ public class ShroudAdd
             return;
         }
 
-        var row = new DbResonanceZoneRow
+        var row = new DbResonanceZoneEntry
         {
             IsEnabled = true,
             CellId = cellId,
@@ -122,6 +123,9 @@ public class ShroudAdd
             MaxDistance = maxDistance,
 
             Name = zoneName,
+            ZoneType = (short)ResonanceZoneType.Shroud,
+            EventKey = shroudKey,
+            ZoneKey = $"shroud:{cellId:X8}:{(int)x}:{(int)y}:{(int)z}",
             ShroudEventKey = shroudKey,
             StormEventKey = ""
         };

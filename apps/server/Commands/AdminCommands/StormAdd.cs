@@ -1,6 +1,7 @@
 using System.Globalization;
 using ACE.Database;
 using ACE.Entity.Enum;
+using ACE.Entity;
 using ACE.Server.Commands.Handlers;
 using ACE.Server.Network;
 using DbResonanceZoneEntry = ACE.Database.Models.Shard.ResonanceZoneRow;
@@ -121,6 +122,9 @@ public class StormAdd
             MaxDistance = maxDistance,
 
             Name = zoneName,
+            ZoneType = (short)ResonanceZoneType.Storm,
+            EventKey = stormKey,
+            ZoneKey = $"storm:{cellId:X8}:{(int)x}:{(int)y}:{(int)z}",
             ShroudEventKey = "",
             StormEventKey = stormKey
         };

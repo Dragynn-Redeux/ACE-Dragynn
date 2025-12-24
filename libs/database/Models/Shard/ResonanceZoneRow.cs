@@ -47,12 +47,30 @@ public class ResonanceZoneRow
     [Column("name")]
     public string Name { get; set; } = "";
 
+    // Old fields (kept temporarily during migration)
     [Column("shroud_event_key")]
     public string ShroudEventKey { get; set; } = "";
 
     [Column("storm_event_key")]
     public string StormEventKey { get; set; } = "";
 
+    // New fields
+    [Column("zone_type")]
+    public short ZoneType { get; set; } = 0;
+
+    [Column("event_key")]
+    public string? EventKey { get; set; }   // NULL allowed in DB
+
+    [Column("zone_key")]
+    public string ZoneKey { get; set; } = ""; // NOT NULL in DB
+
+    [Column("param_a")]
+    public float? ParamA { get; set; }
+
+    [Column("param_b")]
+    public float? ParamB { get; set; }
+
     [Column("modified_at")]
     public DateTime ModifiedAt { get; set; }
 }
+
