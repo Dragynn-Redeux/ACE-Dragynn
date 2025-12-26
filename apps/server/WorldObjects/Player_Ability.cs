@@ -1780,8 +1780,18 @@ partial class Player
         return true;
     }
 
-    public void IncreaseChargedMeter(Spell spell)
+    public void IncreaseChargedMeter(Spell spell, bool fromProc = false)
     {
+        if (fromProc)
+        {
+            ManaChargeMeter += 0.25f;
+            if (ManaChargeMeter > 1.0f)
+            {
+                ManaChargeMeter = 1.0f;
+            }
+            return;
+        }
+
         var animationLength = WeaponAnimationLength.GetSpellCastAnimationLength(ProjectileSpellType.Arc, spell.Level);
 
         ManaChargeMeter += 0.1f * animationLength;

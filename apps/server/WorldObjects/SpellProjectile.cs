@@ -426,7 +426,7 @@ public class SpellProjectile : WorldObject
 
         if (player is { OverloadStanceIsActive: true } or {BatteryStanceIsActive: true})
         {
-            player.IncreaseChargedMeter(Spell);
+            player.IncreaseChargedMeter(Spell, FromProc);
         }
 
         if (targetPlayer != null && damage != null)

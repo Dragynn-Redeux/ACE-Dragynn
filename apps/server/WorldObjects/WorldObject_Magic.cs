@@ -633,7 +633,7 @@ partial class WorldObject
                     spell.School is MagicSchool.VoidMagic &&
                     targetCreature != playerCaster)
                 {
-                    playerCaster.IncreaseChargedMeter(spell);
+                    playerCaster.IncreaseChargedMeter(spell, fromProc);
                 }
                 
                 // TODO: replace with some kind of 'rootOwner unless equip' concept?
@@ -661,7 +661,7 @@ partial class WorldObject
                     GenerateSupportSpellThreat(spell, targetCreature);
                 }
 
-                HandleCastSpell_Transfer(spell, targetCreature, showMsg, weapon);
+                HandleCastSpell_Transfer(spell, targetCreature, showMsg, weapon, fromProc);
                 break;
 
             case SpellType.Projectile:
@@ -1159,7 +1159,7 @@ partial class WorldObject
 
                     if (player is { OverloadStanceIsActive: true } or {BatteryStanceIsActive: true} && boost > 0)
                     {
-                        player.IncreaseChargedMeter(spell);
+                        player.IncreaseChargedMeter(spell, fromProc);
                     }
                 }
                 else if (creature is { IsMonster: false } && targetCreature.IsMonster)
@@ -1169,7 +1169,7 @@ partial class WorldObject
 
                     if (player is { OverloadStanceIsActive: true } or {BatteryStanceIsActive: true} && boost < 0)
                     {
-                        player.IncreaseChargedMeter(spell);
+                        player.IncreaseChargedMeter(spell, fromProc);
                     }
                 }
                 break;
@@ -1539,7 +1539,7 @@ partial class WorldObject
     /// Handles casting SpellType.Transfer spells
     /// usually for Life Magic, ie. Stamina to Mana, Drain
     /// </summary>
-    private void HandleCastSpell_Transfer(Spell spell, Creature targetCreature, bool showMsg = true, WorldObject weapon = null)
+    private void HandleCastSpell_Transfer(Spell spell, Creature targetCreature, bool showMsg = true, WorldObject weapon = null, bool fromProc = false)
     {
         var player = this as Player;
         var creature = this as Creature;
@@ -1715,7 +1715,7 @@ partial class WorldObject
                 if (shouldIncreaseCharge &&
                     player is { OverloadStanceIsActive: true } or { BatteryStanceIsActive: true })
                 {
-                    player.IncreaseChargedMeter(spell);
+                    player.IncreaseChargedMeter(spell, fromProc);
                 }
             }
 
@@ -1956,7 +1956,7 @@ partial class WorldObject
 
             if (caster is Player playerCaster and ({ OverloadStanceIsActive: true } or {BatteryStanceIsActive: true}))
             {
-                playerCaster.IncreaseChargedMeter(spell);
+                playerCaster.IncreaseChargedMeter(spell, fromProc);
             }
         }
 
