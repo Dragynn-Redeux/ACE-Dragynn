@@ -4,4 +4,5 @@ namespace ACE.Entity;
         None   = 0,
         Shroud = 1,
         Storm  = 2,
+        Resonance = 3
     }

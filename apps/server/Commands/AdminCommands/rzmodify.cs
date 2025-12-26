@@ -191,7 +191,7 @@ public class RZModify
             CommandHandlerHelper.WriteOutputInfo(session, "Radius cannot be greater than max.", ChatMessageType.Help);
             return;
         }
-
+        
         var ok = DatabaseManager.ShardConfig.UpdateResonanceZoneEntry(
             id: row.Id,
             name: newName,

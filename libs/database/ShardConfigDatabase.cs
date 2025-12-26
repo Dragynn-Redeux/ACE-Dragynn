@@ -265,14 +265,15 @@ public class ShardConfigDatabase
         context.SaveChanges();
         return entry.Id;
     }
-   public bool UpdateResonanceZoneEntry(
+    public bool UpdateResonanceZoneEntry(
         int id,
         string name,
         float? radius,
         float? maxDistance,
-        string shroudEventKey,
-        string stormEventKey,
+        short? zoneType,
+        string eventKey,
         bool? isEnabled = null)
+
     {
         using var context = new ShardDbContext();
 
@@ -297,14 +298,13 @@ public class ShardConfigDatabase
             entry.MaxDistance = maxDistance.Value;
         }
 
-        if (shroudEventKey != null)
+        if (zoneType.HasValue)
         {
-            entry.ShroudEventKey = shroudEventKey;
+            entry.ZoneType = zoneType.Value;
         }
-
-        if (stormEventKey != null)
+        if (eventKey != null)
         {
-            entry.StormEventKey = stormEventKey;
+            entry.EventKey = eventKey;
         }
 
         if (isEnabled.HasValue)
