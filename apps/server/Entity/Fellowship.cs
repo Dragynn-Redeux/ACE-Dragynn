@@ -341,6 +341,12 @@ public class Fellowship
 
     private void CheckForFellowRequiredLandblock(Player player)
     {
+        if (player.CurrentLandblock is null)
+        {
+            _log.Error("CheckForFellowRequiredLandblock({Player}) - CurrentLandblock is null", player.Name);
+            return;
+        }
+
         if (player.CurrentLandblock.IsFellowshipRequired())
         {
             player.Session.Network.EnqueueSend(
@@ -765,7 +771,7 @@ public class Fellowship
             var fLevel = f.Level ?? 1;
             var fromMax = fLevel - lowestLevel;
 
-            if (fromMax <= 25 && f.EnchantmentManager.HasSpell(5379))
+            if (fromMax <= 25 && f.EnchantmentManager.HasSpell((int)SpellId.Shrouded))
             {
                 fLevel = lowestLevel;
             }

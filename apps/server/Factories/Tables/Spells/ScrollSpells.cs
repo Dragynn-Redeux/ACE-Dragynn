@@ -329,11 +329,11 @@ public static class ScrollSpells
         //SpellId.NetherBolt1,
         //SpellId.NetherStreak1,
         //SpellId.NetherArc1,
-        //SpellId.Corrosion1,
+        SpellId.Corrosion1,
         //SpellId.Corruption1,
-        //SpellId.CurseDestructionOther1,
+        SpellId.CurseDestructionOther1,
         //SpellId.CurseFestering1,
-        //SpellId.CurseWeakness1,
+        SpellId.CurseWeakness1,
     };
 
     private const int NumLevels = 7;
@@ -365,7 +365,7 @@ public static class ScrollSpells
         //startIdx += AddSpells(itemSpells, startIdx);
         startIdx += AddSpells(lifeSpells, startIdx);
         startIdx += AddSpells(warSpells, startIdx);
-        //startIdx += AddSpells(voidSpells, startIdx);
+        startIdx += AddSpells(voidSpells, startIdx);
 
         if (startIdx != NumSpells)
         {

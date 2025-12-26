@@ -805,12 +805,12 @@ public static partial class LootGenerationFactory
         var maxSpellPower = GetTierSpellPower(wo);
 
         var lootQualityMod = wo.LootQualityMod ?? 0.0f;
-        var bonusRoll = 100 * GetDiminishingRoll(td, (float)lootQualityMod);
+        var bonusRoll = 200 * GetDiminishingRoll(td, (float)lootQualityMod);
 
         var spellcraft = (int)Math.Ceiling(maxSpellPower + bonusRoll);
 
         // retail was capped at 370
-        spellcraft = Math.Min(spellcraft, 500);
+        spellcraft = Math.Min(spellcraft, 600);
 
         return spellcraft;
     }

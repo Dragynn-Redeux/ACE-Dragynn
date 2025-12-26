@@ -512,6 +512,11 @@ partial class WorldObject
 
         var elementalDamageMod = weapon.ElementalDamageMod ?? 1.0f;
 
+        if (damageType is DamageType.Health && weapon.WeaponRestorationSpellsMod is not null)
+        {
+            elementalDamageMod = weapon.WeaponRestorationSpellsMod.Value;
+        }
+
         // multiplicative to base multiplier
         var wielderEnchantments = wielder.EnchantmentManager.GetElementalDamageMod();
         var weaponEnchantments = weapon.EnchantmentManager.GetElementalDamageMod();
@@ -1067,7 +1072,7 @@ partial class WorldObject
         var creatureMod = IgnoreWard ?? 0.0f;
         var weaponMod = weapon.IgnoreWard ?? 0.0f;
 
-        var finalMod = 1.0f - (float)Math.Max(creatureMod, weaponMod);
+        var finalMod = (float)Math.Max(creatureMod, weaponMod);
         //Console.WriteLine($"FinalMod = {finalMod}");
 
         return finalMod;
@@ -1387,9 +1392,9 @@ partial class WorldObject
 
                 var scarabReduction = spell.School == MagicSchool.LifeMagic
                     ? playerAttacker.GetSigilTrinketManaReductionMod(spell, Skill.LifeMagic,
-                        (int)SigilTrinketLifeMagicEffect.ScarabManaReduction)
+                        SigilTrinketLifeWarMagicEffect.Reduction)
                     : playerAttacker.GetSigilTrinketManaReductionMod(spell, Skill.WarMagic,
-                        (int)SigilTrinketWarMagicEffect.ScarabManaReduction);
+                        SigilTrinketLifeWarMagicEffect.Reduction);
 
                 if (playerAttacker.Mana.Current < (uint)(baseCost * scarabReduction))
                 {

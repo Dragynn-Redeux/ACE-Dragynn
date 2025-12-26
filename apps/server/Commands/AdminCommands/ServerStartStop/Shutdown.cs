@@ -103,13 +103,15 @@ public class Shutdown
                 new GameMessageSystemChat(
                     $"Broadcast from {adminName}> {adminText}\n" + genericMsgToPlayers,
                     ChatMessageType.WorldBroadcast
-                )
+                ),
+                $"Broadcast from {{adminName}}> {{adminText}}\\n\" + genericMsgToPlayers",
+                "System"
             );
         }
         else
         {
             PlayerManager.BroadcastToAll(
-                new GameMessageSystemChat(genericMsgToPlayers, ChatMessageType.WorldBroadcast)
+                new GameMessageSystemChat(genericMsgToPlayers, ChatMessageType.WorldBroadcast), genericMsgToPlayers, "System"
             );
         }
 

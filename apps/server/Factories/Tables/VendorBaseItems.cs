@@ -97,6 +97,12 @@ public static class VendorBaseItems
         (0, false, HeritageAny, 1644, 0, 0.0, -1), // Brown
         (0, false, HeritageAny, 1652, 0, 0.0, -1), // White
         (0, false, HeritageAny, 1646, 0, 0.0, -1), // Grey
+        // Void Comps
+        (0, false, HeritageAny, 43347, 0, 0.0, -1), // Nightshade
+        (0, false, HeritageAny, 43348, 0, 0.0, -1), // Shadowroot
+        (0, false, HeritageAny, 43349, 0, 0.0, -1), // Soulweed
+        (0, false, HeritageAny, 43350, 0, 0.0, -1), // Essence of Kemeroi
+        (0, false, HeritageAny, 43351, 0, 0.0, -1), // Bottled Rage
         // Mana Stones
         (0, false, HeritageAny, 1057002, 0, 0.0, -1), // Lesser
         (2, false, HeritageAny, 1057003, 0, 0.0, -1), // Standard

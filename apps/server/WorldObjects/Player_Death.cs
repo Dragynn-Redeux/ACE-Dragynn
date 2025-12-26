@@ -160,7 +160,7 @@ partial class Player
 
             globalPKDe += "\n[PKDe]";
 
-            PlayerManager.BroadcastToAll(new GameMessageSystemChat(globalPKDe, ChatMessageType.Broadcast));
+            PlayerManager.BroadcastToAll(new GameMessageSystemChat(globalPKDe, ChatMessageType.Broadcast), globalPKDe, "World");
         }
         else if (IsPKLiteDeath(topDamager))
         {

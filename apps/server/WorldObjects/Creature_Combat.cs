@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using ACE.Common;
 using ACE.Entity;
@@ -39,6 +40,69 @@ partial class Creature
     public AttackType AttackType { get; set; }
 
     public DamageHistory DamageHistory { get; private set; }
+
+    public List<DamageType> RecentDamageTypesTaken
+    {
+        get
+        {
+            if (this is Creature creature && creature.DamageHistory != null)
+            {
+                var cutoff = DateTime.UtcNow - TimeSpan.FromSeconds(10);
+
+                return creature.DamageHistory.Log
+                    .Where(e => e.Amount < 0 && e.Time >= cutoff) // only damage (not healing) within window
+                    .Select(e => e.DamageType)
+                    .Where(dt => dt != DamageType.Undef)
+                    .Distinct()
+                    .ToList();
+            }
+
+            return new List<DamageType>();
+        }
+    }
+
+    /// <summary>
+    /// Returns all DamageType elements that this creature is weakest to
+    /// using the raw Resist* property values (null => 1.0).
+    /// Higher values represent weaker resistances; returns every element with the maximum raw value.
+    /// Computed on access so it always reflects current raw resist properties.
+    /// </summary>
+    public List<DamageType> WeakestResistances
+    {
+        get
+        {
+            var raw = new Dictionary<DamageType, double>
+        {
+            { DamageType.Slash, ResistSlash ?? 1.0 },
+            { DamageType.Pierce, ResistPierce ?? 1.0 },
+            { DamageType.Bludgeon, ResistBludgeon ?? 1.0 },
+            { DamageType.Fire, ResistFire ?? 1.0 },
+            { DamageType.Cold, ResistCold ?? 1.0 },
+            { DamageType.Acid, ResistAcid ?? 1.0 },
+            { DamageType.Electric, ResistElectric ?? 1.0 },
+            { DamageType.Nether, ResistNether ?? 1.0 }
+        };
+
+            if (raw.Count == 0)
+            {
+                return new List<DamageType>();
+            }
+
+            // Find the maximum raw resistance value (higher == weaker)
+            var max = raw.Values.Max();
+
+            // Use a relative tolerance so ties (e.g. all 1.0) are detected reliably.
+            var tol = Math.Max(1e-6, Math.Abs(max) * 1e-6);
+
+            var result = raw
+                .Where(kv => Math.Abs(kv.Value - max) <= tol)
+                .Select(kv => kv.Key)
+                .OrderBy(k => k.ToString()) // stable ordering for easier inspection
+                .ToList();
+
+            return result;
+        }
+    }
 
     /// <summary>
     /// Handles queueing up multiple animation sequences between packets
@@ -565,7 +629,7 @@ partial class Creature
     /// Returns the attribute damage bonus for a physical and magical attacks
     /// </summary>
     /// <param name="attackType">Uses strength for melee, coordination for missile</param>
-    public float GetAttributeMod(WorldObject weapon, bool isSpell, Creature target)
+    public float GetAttributeMod(WorldObject weapon, bool isSpell)
     {
         Entity.CreatureAttribute attribute;
 
@@ -603,10 +667,7 @@ partial class Creature
 
         var skill = GetCurrentWeaponSkill();
 
-        // LEVEL SCALING - Attribute Mod
-        var currentAttribute = (int)(attribute.Current * LevelScaling.GetPlayerAttributeScalar(this, target));
-
-        return SkillFormula.GetAttributeMod(currentAttribute, skill);
+        return SkillFormula.GetAttributeMod((int)attribute.Current, skill);
     }
 
     /// <summary>
@@ -702,9 +763,9 @@ partial class Creature
         //                       $" -weaponSpeedMod: {weaponSpeedMod} weaponSpeed: {weaponSpeed}");
         // }
 
-        if (this as Player is { SteadyShotIsActive: true })
+        if (this as Player is { SteadyStrikeIsActive: true })
         {
-            animSpeed *= 0.75f;
+            animSpeed *= 0.9f;
         }
 
         return animSpeed;
@@ -1035,7 +1096,7 @@ partial class Creature
             return 1.0f;
         }
 
-        // SPEC BONUS - Perception: Up to 50% chance to avoid sneak attacks
+        // SPEC BONUS - Perception: Up to 25% chance to avoid sneak attacks
         var attackerThievery = GetCreatureSkill(Skill.Thievery);
         var targetPerception = creatureTarget.GetCreatureSkill(Skill.Perception); // Perception
 
@@ -1043,7 +1104,7 @@ partial class Creature
         {
             var skillCheck = SkillCheck.GetSkillChance(creatureTarget.GetModdedPerceptionSkill(), GetModdedThieverySkill());
 
-            if (Math.Min(skillCheck, 0.5f) > ThreadSafeRandom.Next(0.0f, 1.0f))
+            if (Math.Min(skillCheck, 0.25f) > ThreadSafeRandom.Next(0.0f, 1.0f))
             {
                 return 1.0f;
             }
@@ -1100,7 +1161,7 @@ partial class Creature
                 return multiplier;
             }
 
-            if (targetPlayer is {PhalanxIsActive: true} && targetPlayer.GetEquippedShield() != null)
+            if (targetPlayer is {PhalanxIsActive: true} && (targetPlayer.GetEquippedShield() != null || targetPlayer.GetEquippedWeapon() is { IsTwoHanded: true}))
             {
                 return 1.0f;
             }

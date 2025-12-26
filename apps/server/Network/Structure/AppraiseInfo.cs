@@ -919,7 +919,7 @@ public class AppraiseInfo
         SetGearRatingText(wo, PropertyInt.GearFrostBane, "Gelidite's Bane", $"Grants +0.2 cold protection to all equipped armor, plus an additional 0.01 per equipped rating ((ONE) total). The protection level cannot be increased beyond 1.0 (average), from this effect.", 0.01f, 1.0f, 0.2f);
         SetGearRatingText(wo, PropertyInt.GearLightningBane, "Astyrrian's Bane", $"Grants +0.2 electric protection to all equipped armor, plus an additional 0.01 per equipped rating ((ONE) total) The protection level cannot be increased beyond 1.0 (average), from this effect..", 0.01f, 1.0f, 0.2f);
 
-        SetAdditionalPropertiesUseText();
+        SetAdditionalPropertiesUseText(wo);
 
         // Spell proc rate ('Use' text)
         SetSpellProcRateUseText(wo);
@@ -1150,24 +1150,6 @@ public class AppraiseInfo
             return;
         }
 
-        // Max Level
-        if (PropertiesInt.TryGetValue(PropertyInt.SigilTrinketMaxTier, out var sigilTrinketTier) &&
-            sigilTrinketTier > 0)
-        {
-            if (sigilTrinket.WieldSkillType is (int)Skill.WarMagic or (int)Skill.LifeMagic)
-            {
-                _extraPropertiesText += $"\nMax Spell Level: {sigilTrinketTier}\n";
-            }
-            // else
-            // {
-            //     var wieldReq = LootGenerationFactory.GetWieldDifficultyPerTier(sigilTrinketTier + 1);
-            //
-            //     _extraPropertiesText += $"\nMax Wield Req: {wieldReq}\n";
-            // }
-
-            _hasExtraPropertiesText = true;
-        }
-
         // Proc Chance
         if (
             PropertiesFloat.TryGetValue(PropertyFloat.SigilTrinketTriggerChance, out var sigilTrinketTriggerChance)
@@ -1300,6 +1282,52 @@ public class AppraiseInfo
             }
 
             _hasExtraPropertiesText = true;
+        }
+
+        // Wield Skill Req
+        if (wo is SigilTrinket { AllowedSpecializedSkills: not null } sigilTrinketSkills)
+        {
+            var skills = sigilTrinketSkills.AllowedSpecializedSkills;
+            if (skills.Count > 0)
+            {
+                try
+                {
+                    var names = new List<string>(skills.Count);
+                    foreach (var sk in skills)
+                    {
+                        // Prefer human-friendly name if available
+                        try
+                        {
+                            names.Add(((NewSkillNames)sk).ToSentence());
+                        }
+                        catch
+                        {
+                            names.Add(((NewSkillNames)sk).ToString());
+                        }
+                    }
+
+                    // Deduplicate while preserving order
+                    var unique = new List<string>();
+                    foreach (var n in names)
+                    {
+                        if (!unique.Contains(n))
+                        {
+                            unique.Add(n);
+                        }
+                    }
+
+                    var wieldReqStr = unique.Count == 1
+                        ? $"Wield requires specialized {unique[0]}"
+                        : $"Wield requires specialized {string.Join(" or ", unique)}";
+
+                    _extraPropertiesText += wieldReqStr + "\n";
+                    _hasExtraPropertiesText = true;
+                }
+                catch
+                {
+                    // resilient: if anything goes wrong, do not break appraisal
+                }
+            }
         }
     }
 
@@ -1694,7 +1722,7 @@ public class AppraiseInfo
         _hasExtraPropertiesText = true;
     }
 
-    private void SetAdditionalPropertiesUseText()
+    private void SetAdditionalPropertiesUseText(WorldObject wo)
     {
         if (!_hasAdditionalProperties)
         {
@@ -1712,9 +1740,9 @@ public class AppraiseInfo
         additionaPropertiesString = additionaPropertiesString.TrimEnd();
         additionaPropertiesString = additionaPropertiesString.TrimEnd(',');
 
-        _extraPropertiesText += $"Additional Properties: {additionaPropertiesString}.\n(This item's properties will not activate if it is out of mana)\n\n";
+        var oomText = wo.Workmanship != null ? "" : "This item's properties will not activate if it is out of mana";
 
-        //_extraPropertiesText += "(This item's properties will not activate if it is out of mana)\n\n";
+        _extraPropertiesText += $"Additional Properties: {additionaPropertiesString}.\n\n{oomText}\n\n";
 
         _hasExtraPropertiesText = true;
     }
@@ -1791,7 +1819,7 @@ public class AppraiseInfo
         _hasExtraPropertiesText = true;
 
         _additionalPropertiesLongDescriptionsText +=
-            $"~ Crippling Blow: Increases critical damage by +{amountFormatted}%, additively. " +
+            $"~ Critical Strike: Increases critical chance by +{amountFormatted}%, additively. " +
             $"Value is based on wielder attack skill (5% to 10%).\n";
     }
 
@@ -1856,7 +1884,7 @@ public class AppraiseInfo
             return;
         }
 
-        var ratingAmount = Math.Round((ignoreArmor * 100), 0);
+        var ratingAmount = 100 - Math.Round((ignoreArmor * 100), 0);
 
         var itemTier = LootGenerationFactory.GetTierFromWieldDifficulty(wo.WieldDifficulty ?? 1);
         var rangeMinAtTier = Math.Round(LootTables.BonusIgnoreArmorPerTier[itemTier - 1] * 100, 0);

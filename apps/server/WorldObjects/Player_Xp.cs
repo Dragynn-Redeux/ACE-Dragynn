@@ -306,7 +306,7 @@ partial class Player
         }
 
         // only certain types of XP are granted to items
-        if (xpType == XpType.Kill || xpType == XpType.Quest)
+        if (xpType is XpType.Kill or XpType.Quest or XpType.Fellowship)
         {
             GrantItemXP(amount);
         }

@@ -29,7 +29,7 @@ public class GameCastEmote
         //session.Player.HandleActionWorldBroadcast($"{msg}", ChatMessageType.WorldBroadcast);
 
         var sysMessage = new GameMessageSystemChat(msg, ChatMessageType.WorldBroadcast);
-        PlayerManager.BroadcastToAll(sysMessage);
+        PlayerManager.BroadcastToAll(sysMessage, msg, "World");
         PlayerManager.LogBroadcastChat(Channel.AllBroadcast, session?.Player, msg);
     }
 

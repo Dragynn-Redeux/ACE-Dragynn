@@ -979,12 +979,12 @@ public static partial class LootGenerationFactory
                 if (magicSkill == Skill.WarMagic)
                 {
                     wo.SetProperty(PropertyFloat.ElementalDamageMod, final);
-                    wo.SetProperty(PropertyFloat.WeaponRestorationSpellsMod, 1 + (final - 1) / 2);
+                    wo.SetProperty(PropertyFloat.WeaponRestorationSpellsMod, 1 + (final - 1) / 4);
                 }
                 else
                 {
-                    wo.SetProperty(PropertyFloat.WeaponRestorationSpellsMod, final);
                     wo.SetProperty(PropertyFloat.ElementalDamageMod, 1 + (final - 1) / 2);
+                    wo.SetProperty(PropertyFloat.WeaponRestorationSpellsMod, 1 + (final - 1) / 2);
                 }
             }
             else if (wo is { WeaponRestorationSpellsMod: not null, ElementalDamageMod: null})
@@ -1431,6 +1431,11 @@ public static partial class LootGenerationFactory
 
                 wo.SetProperty(PropertyFloat.ArmorWarMagicMod, final);
             }
+
+            if (wo.ItemType is ItemType.Armor)
+            {
+                NormalizeProtectionLevels(wo);
+            }
         }
     }
 
@@ -1785,8 +1790,7 @@ public static partial class LootGenerationFactory
         return gemResult.MaterialType;
     }
 
-    public const float WeaponBulk = 0.50f;
-    public const float ArmorBulk = 0.25f;
+    public const float Bulk = 0.50f;
 
     private static bool MutateBurden(WorldObject wo, TreasureDeath treasureDeath, bool isWeapon)
     {
@@ -1796,21 +1800,9 @@ public static partial class LootGenerationFactory
             return false;
         }
 
-        var qualityInterval = QualityChance.RollInterval(treasureDeath);
-
-        // only continue if the initial roll to modify the quality succeeded
-        if (qualityInterval == 0.0f)
-        {
-            return false;
-        }
-
         // only continue if initial roll succeeded?
-        var bulk = isWeapon ? WeaponBulk : ArmorBulk;
-        bulk *= (float)(wo.BulkMod ?? 1.0f);
-
-        var maxBurdenMod = 1.0f - bulk;
-
-        var burdenMod = 1.0f - (qualityInterval * maxBurdenMod);
+        var bulk = Bulk * (float)(wo.BulkMod ?? 1.0f) * GetDiminishingRoll(treasureDeath, (float)(wo.LootQualityMod ?? 0.0f));
+        var burdenMod = 1.0f - bulk;;
 
         // modify burden
         var prevBurden = wo.EncumbranceVal.Value;
@@ -1821,7 +1813,7 @@ public static partial class LootGenerationFactory
             wo.EncumbranceVal = 1;
         }
 
-        //Console.WriteLine($"Modified burden from {prevBurden} to {wo.EncumbranceVal} for {wo.Name} ({wo.WeenieClassId})");
+        //Console.WriteLine($"Modified burden from {prevBurden} to {wo.EncumbranceVal} for {wo.Name} ({wo.WeenieClassId}. BurdenMod: {burdenMod})");
 
         return true;
     }
@@ -2782,18 +2774,18 @@ public static partial class LootGenerationFactory
             lootQualityMod = treasureDeath.LootQualityMod > 0 ? treasureDeath.LootQualityMod : 0;
         }
 
-        var minimumRoll = (float)(1 - Math.Exp(-1 * lootQualityMod));
+        var diminishedLootQuality = (float)(1 - Math.Exp(-1 * lootQualityMod));
 
-        var roll = (float)ThreadSafeRandom.Next(minimumRoll, 1.0f);
+        var roll = (float)ThreadSafeRandom.Next(diminishedLootQuality, 1.0f);
+
+        //Console.WriteLine($"GetDiminishingRoll - LQ: {lootQualityMod}, diminishedLootQuality: {diminishedLootQuality}, roll: {roll}, final: {roll * roll}");
 
         roll *= roll;
-
-        //Console.WriteLine($"GetDiminishingRoll - LQ: {lootQualityMod}, minRoll: {minimumRoll}, roll: {roll}");
 
         return roll;
     }
 
-    private static int GetMaxWardOfTier(int tier)
+    private static int GetBaseWardOfTier(int tier)
     {
         switch (tier)
         {
@@ -2812,6 +2804,8 @@ public static partial class LootGenerationFactory
                 return 50;
             case 8:
                 return 75;
+            case 9:
+                return 100;
             default:
                 return 7;
         }

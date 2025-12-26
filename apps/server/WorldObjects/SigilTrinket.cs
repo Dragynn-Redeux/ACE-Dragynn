@@ -33,34 +33,43 @@ public enum SigilTrinketType
 
 public enum SigilTrinketLifeMagicEffect
 {
-    ScarabCastProt,
-    ScarabCastVuln,
-    ScarabCastItemBuff,
-    ScarabCastVitalRate,
-    ScarabIntensity,
-    ScarabShield,
-    ScarabManaReduction
+    CastProt,
+    CastVuln,
+    CastItemBuff,
+    CastVitalRate
 }
 
 public enum SigilTrinketWarMagicEffect
 {
-    ScarabIntensity,
-    ScarabShield,
-    ScarabManaReduction,
-    ScarabDuplicate,
-    ScarabDetonate,
-    ScarabCrit
+    Duplicate,
+    Detonate,
+    Crushing
+}
+
+public enum SigilTrinketLifeWarMagicEffect
+{
+    Intensity,
+    Shielding,
+    Reduction
 }
 
 public enum SigilTrinketShieldEffect
 {
-    Might,
-    Aggression
+    None,
+    // PH2
     // PH3,
     // PH4
 }
 
 public enum SigilTrinketTwohandedCombatEffect
+{
+    None,
+    // PH2
+    // PH3,
+    // PH4
+}
+
+public enum SigilTrinketShieldTwohandedCombatEffect
 {
     Might,
     Aggression
@@ -70,8 +79,24 @@ public enum SigilTrinketTwohandedCombatEffect
 
 public enum SigilTrinketDualWieldEffect
 {
-    Assailment
+    None
     // PH2,
+    // PH3,
+    // PH4
+}
+
+public enum SigilTrinketMissileEffect
+{
+    None
+    // PH2,
+    // PH3,
+    // PH4
+}
+
+public enum SigilTrinketDualWieldMissileEffect
+{
+    Assailment,
+    SwiftKiller
     // PH3,
     // PH4
 }
@@ -120,9 +145,13 @@ public class SigilTrinket : WorldObject
 {
     public static readonly int MaxLifeMagicEffectId = Enum.GetValues(typeof(SigilTrinketLifeMagicEffect)).Cast<int>().Max();
     public static readonly int MaxWarMagicEffectId = Enum.GetValues(typeof(SigilTrinketWarMagicEffect)).Cast<int>().Max();
+    public static readonly int MaxLifeWarMagicEffectId = Enum.GetValues(typeof(SigilTrinketLifeWarMagicEffect)).Cast<int>().Max();
     public static readonly int MaxTwohandedCombatEffectId = Enum.GetValues(typeof(SigilTrinketTwohandedCombatEffect)).Cast<int>().Max();
     public static readonly int MaxShieldEffectId = Enum.GetValues(typeof(SigilTrinketShieldEffect)).Cast<int>().Max();
+    public static readonly int MaxShieldTwohandedCombatEffectId = Enum.GetValues(typeof(SigilTrinketShieldTwohandedCombatEffect)).Cast<int>().Max();
     public static readonly int MaxDualWieldEffectId = Enum.GetValues(typeof(SigilTrinketDualWieldEffect)).Cast<int>().Max();
+    public static readonly int MaxMissileEffectId = Enum.GetValues(typeof(SigilTrinketMissileEffect)).Cast<int>().Max();
+    public static readonly int MaxDualWieldMissileEffectId = Enum.GetValues(typeof(SigilTrinketDualWieldMissileEffect)).Cast<int>().Max();
     public static readonly int MaxThieveryEffectId = Enum.GetValues(typeof(SigilTrinketThieveryEffect)).Cast<int>().Max();
     public static readonly int MaxPerceptionEffectId = Enum.GetValues(typeof(SigilTrinketPerceptionEffect)).Cast<int>().Max();
     public static readonly int MaxDeceptionEffectId = Enum.GetValues(typeof(SigilTrinketDeceptionEffect)).Cast<int>().Max();
@@ -265,16 +294,16 @@ public class SigilTrinket : WorldObject
 
     public int? SigilTrinketSkill
     {
-        get => GetProperty(PropertyInt.SigilTrinketSchool);
+        get => GetProperty(PropertyInt.SigilTrinketSkill);
         set
         {
             if (!value.HasValue)
             {
-                RemoveProperty(PropertyInt.SigilTrinketSchool);
+                RemoveProperty(PropertyInt.SigilTrinketSkill);
             }
             else
             {
-                SetProperty(PropertyInt.SigilTrinketSchool, value.Value);
+                SetProperty(PropertyInt.SigilTrinketSkill, value.Value);
             }
         }
     }
@@ -765,5 +794,58 @@ public class SigilTrinket : WorldObject
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Persistent storage for allowed specialized skills (OR semantics).
+    /// Stored as a comma-separated list of skill numeric IDs in PropertyString.SigilTrinketAllowedSpecializedSkills.
+    /// Example stored value: "5,8" (integer Skill enum values).
+    /// </summary>
+    public List<Skill> AllowedSpecializedSkills
+    {
+        get
+        {
+            var raw = GetProperty(PropertyString.SigilTrinketAllowedSpecializedSkills);
+            if (string.IsNullOrWhiteSpace(raw))
+            {
+                return null;
+            }
+
+            var parts = raw.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            var list = new List<Skill>(parts.Length);
+            foreach (var p in parts)
+            {
+                if (int.TryParse(p, out var v))
+                {
+                    // defensive: ensure value maps to Skill enum
+                    if (Enum.IsDefined(typeof(Skill), v))
+                    {
+                        list.Add((Skill)v);
+                    }
+                }
+                else
+                {
+                    // support legacy storage by name (optional)
+                    if (Enum.TryParse<Skill>(p, true, out var sk))
+                    {
+                        list.Add(sk);
+                    }
+                }
+            }
+
+            return list.Count > 0 ? list : null;
+        }
+        set
+        {
+            if (value == null || value.Count == 0)
+            {
+                RemoveProperty(PropertyString.SigilTrinketAllowedSpecializedSkills);
+                return;
+            }
+
+            var vals = value.Select(s => ((int)s).ToString()).ToArray();
+            var raw = string.Join(",", vals);
+            SetProperty(PropertyString.SigilTrinketAllowedSpecializedSkills, raw);
+        }
     }
 }

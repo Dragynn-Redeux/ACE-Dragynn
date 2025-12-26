@@ -1589,7 +1589,7 @@ public class Landblock : IActor
         }
         else
         {
-            RemoveWorldObjectInternal(wo.Guid);
+            RemoveWorldObjectInternal(wo.Guid, true);
         }
 
         ProcessPendingWorldObjectAdditionsAndRemovals();
@@ -1975,8 +1975,25 @@ public class Landblock : IActor
 
         foreach (var fellowshipMember in playerLeader.Fellowship.GetFellowshipMembers())
         {
-            fellowshipMember.Value.EnqueueBroadcast(new GameMessageSystemChat(
-                $"Dungeon instance activated by '{playerLeader.Name}' with the following effects:",
+            var fellowPlayer = fellowshipMember.Value;
+
+            if (fellowPlayer is null)
+            {
+                continue;
+            }
+
+            const int baseBonus = 25;
+
+            fellowPlayer.Session.Network.EnqueueSend(new GameMessageSystemChat(
+                $"Dungeon instance activated by '{playerLeader.Name}' with the following effects:\n" +
+                $" -Base Bonus: {baseBonus}%",
+                ChatMessageType.Broadcast
+            ));
+
+            var completionBonus = QuestManager.GetCapstonesCompleted(fellowPlayer) * 2;
+
+            fellowPlayer.Session.Network.EnqueueSend(new GameMessageSystemChat(
+                $" -Completion Bonus: +{completionBonus}%",
                 ChatMessageType.Broadcast
             ));
 
@@ -1987,14 +2004,17 @@ public class Landblock : IActor
                     continue;
                 }
 
-                fellowshipMember.Value.EnqueueBroadcast(new GameMessageSystemChat(
-                    $" -{activeLandblockMod.Key}",
+                fellowPlayer.Session.Network.EnqueueSend(new GameMessageSystemChat(
+                    $" -{activeLandblockMod.Key}: +{activeLandblockMod.Value.LootQualityBonus * 100}%",
                     ChatMessageType.Broadcast
                 ));
             }
 
-            fellowshipMember.Value.EnqueueBroadcast(new GameMessageSystemChat(
-                $" -Total Loot Quality Bonus: +{Math.Round(LandblockLootQualityMod * 100)}%",
+            var totalBonus = baseBonus + completionBonus + Math.Round(LandblockLootQualityMod * 100);
+            var diminishedRoll = (float)(1 - Math.Exp(-1 * totalBonus / 100));
+
+            fellowPlayer.Session.Network.EnqueueSend(new GameMessageSystemChat(
+                $" -Total Loot Quality Bonus: +{totalBonus}%",
                 ChatMessageType.Broadcast
             ));
         }

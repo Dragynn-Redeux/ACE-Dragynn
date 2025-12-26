@@ -81,8 +81,20 @@ partial class Player
 
                     item.Destroy(); // cleanup for guid manager
                 }
+                else
+                {
+                    // trigger pickup emote on the created item (if present)
+                    try
+                    {
+                        item.EmoteManager?.OnPickup(this);
+                    }
+                    catch (Exception ex)
+                    {
+                        _log.Warning(ex, "[VENDOR] EmoteManager.OnPickup threw for {Item} during FinalizeBuyTransaction", item.Name);
+                    }
 
-                vendor.NumItemsSold++;
+                    vendor.NumItemsSold++;
+                }
             }
             else
             {
@@ -99,6 +111,16 @@ partial class Player
                 // this was only for when the unique item was sold to the vendor,
                 // to determine when the item should rot on the vendor. it gets removed now
                 item.SoldTimestamp = null;
+
+                // trigger pickup emote on the created unique item (if present)
+                try
+                {
+                    item.EmoteManager?.OnPickup(this);
+                }
+                catch (Exception ex)
+                {
+                    _log.Warning(ex, "[VENDOR] EmoteManager.OnPickup threw for unique {Item} during FinalizeBuyTransaction", item.Name);
+                }
 
                 vendor.NumItemsSold++;
             }

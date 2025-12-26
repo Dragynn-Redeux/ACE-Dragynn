@@ -54,9 +54,47 @@ public class Salvage : WorldObject
             return;
         }
 
-        // check workmanship max
+        var combineSalvage = false;
 
-        if (target.NumTimesTinkered >= target.Workmanship)
+        if (target is { WeenieType: WeenieType.Salvage })
+        {
+            if (source.Guid == target.Guid)
+            {
+                player.SendUseDoneEvent(WeenieError.YouDoNotPassCraftingRequirements);
+                return;
+            }
+
+            if (source.MaterialType != target.MaterialType)
+            {
+                player.Session.Network.EnqueueSend(
+                    new GameMessageSystemChat(
+                        $"Salvage bags must be the same material to combine them.",
+                        ChatMessageType.Broadcast
+                    )
+                );
+                player.SendUseDoneEvent(WeenieError.YouDoNotPassCraftingRequirements);
+                return;
+            }
+
+            if (target.Structure + source.Structure > 1000)
+            {
+                player.Session.Network.EnqueueSend(
+                    new GameMessageSystemChat(
+                        $"The resulting salvage bag cannot contain more than 1000 units.",
+                        ChatMessageType.Broadcast
+                    )
+                );
+                player.SendUseDoneEvent(WeenieError.YouDoNotPassCraftingRequirements);
+                return;
+            }
+
+            combineSalvage = true;
+        }
+
+        var message = "";
+
+        // check workmanship max
+        if (!combineSalvage && target.NumTimesTinkered >= target.Workmanship)
         {
             player.Session.Network.EnqueueSend(
                 new GameMessageSystemChat(
@@ -77,7 +115,7 @@ public class Salvage : WorldObject
         }
 
         var units = salvageCost == 1 ? "unit" : "units";
-        if (source.Structure < (ushort)salvageCost)
+        if (!combineSalvage && source.Structure < (ushort)salvageCost)
         {
             player.Session.Network.EnqueueSend(
                 new GameMessageSystemChat(
@@ -89,10 +127,11 @@ public class Salvage : WorldObject
             return;
         }
 
+
         // verify player has skill trained + that salvage type can be used on target
         var useableType = false;
 
-        if (source.MaterialType == null)
+        if (!combineSalvage && source.MaterialType == null)
         {
             player.Session.Network.EnqueueSend(
                 new GameMessageSystemChat(
@@ -107,7 +146,8 @@ public class Salvage : WorldObject
             return;
         }
 
-        if (TinkeringTarget.TryGetValue(source.MaterialType, out var tinkeringSkill))
+
+        if (TinkeringTarget.TryGetValue(source.MaterialType, out var tinkeringSkill) && !combineSalvage)
         {
             var skill = player.GetCreatureSkill(tinkeringSkill);
 
@@ -126,7 +166,7 @@ public class Salvage : WorldObject
             useableType = CheckTinkerType(player, source, target, tinkeringSkill);
         }
 
-        if (!useableType)
+        if (!combineSalvage && !useableType)
         {
             player.SendUseDoneEvent(WeenieError.YouDoNotPassCraftingRequirements);
             return;
@@ -148,6 +188,7 @@ public class Salvage : WorldObject
         var difficulty = (int)Math.Max(((baseDifficulty - workmanshipMod) * attemptMod), 1);
         var craftingXpDifficulty = baseDifficulty * attemptMod;
 
+
         // roll skill check
         var creatureSkill = player.GetCreatureSkill(tinkeringSkill);
         var successChance = SkillCheck.GetSkillChance((int)creatureSkill.Current, difficulty);
@@ -157,7 +198,7 @@ public class Salvage : WorldObject
             successChance /= 3.0f;
         }
 
-        if (PropertyManager.GetBool("bypass_crafting_checks").Item)
+        if (PropertyManager.GetBool("bypass_crafting_checks").Item || combineSalvage)
         {
             successChance = 1.0f;
         }
@@ -166,16 +207,32 @@ public class Salvage : WorldObject
 
         var craftingXpString = creatureSkill.Current < craftingXpDifficulty + 50 ? "will" : "will not";
 
-        var floorMsg =
+        message =
             $"You determine that you have a {percent} percent chance to succeed and will require {salvageCost} {units} of salvage.\n\n" +
             $"This craft {craftingXpString} award xp towards your {tinkeringSkill}.";
+        
+
+        if (combineSalvage)
+        {
+            var sourceWork = source.Workmanship ?? 1.0f;
+            var sourceStruct = source.Structure ?? 1;
+            var targetWork = target.Workmanship ?? 1.0f;
+            var targetStruct = target.Structure ?? 1;
+
+            var combinedWork = ((sourceWork * sourceStruct) + (targetWork * targetStruct)) / (targetStruct + sourceStruct);
+            combinedWork = (float)Math.Round(combinedWork, 2);
+
+            var combinedStruct = sourceStruct + targetStruct;
+
+            message = $"Combining this salvage will produce {combinedStruct} units with a workmanship of {combinedWork}. Would you like to proceed?";
+        }
 
         if (!confirmed)
         {
             if (
                 !player.ConfirmationManager.EnqueueSend(
                     new Confirmation_CraftInteration(player.Guid, source.Guid, target.Guid),
-                    floorMsg
+                    message
                 )
             )
             {
@@ -209,15 +266,22 @@ public class Salvage : WorldObject
             player,
             () =>
             {
-                HandleTinkering(
-                    player,
-                    source,
-                    target,
-                    successChance,
-                    (int)craftingXpDifficulty,
-                    creatureSkill,
-                    tinkeringSkill
-                );
+                if (combineSalvage)
+                {
+                    CombineSalvage(player, source, target);
+                }
+                else
+                {
+                    HandleTinkering(
+                        player,
+                        source,
+                        target,
+                        successChance,
+                        (int)craftingXpDifficulty,
+                        creatureSkill,
+                        tinkeringSkill
+                    );
+                }
             }
         );
 
@@ -234,6 +298,37 @@ public class Salvage : WorldObject
         actionChain.EnqueueChain();
 
         player.NextUseTime = DateTime.UtcNow.AddSeconds(animTime);
+    }
+
+    private static void CombineSalvage(Player player, WorldObject source, WorldObject target)
+    {
+        if (source is null || target is null)
+        {
+            return;
+        }
+
+        var sourceWork = source.Workmanship ?? 1.0;
+        var sourceStruct = source.Structure ?? 1;
+        var targetWork = target.Workmanship ?? 1.0;
+        var targetStruct = target.Structure ?? 1;
+
+        var newWork = ((sourceWork * sourceStruct) + (targetWork * targetStruct)) / (targetStruct + sourceStruct);
+        Console.WriteLine(newWork);
+        target.Workmanship = (float)Math.Round((newWork), 2);
+        target.Structure += sourceStruct;
+        target.Name = $"Salvage ({target.Structure})";
+
+        UpdateObj(player, target);
+
+        player.Session.Network.EnqueueSend(
+            new GameMessageSystemChat(
+                $"You combine both bags of salvage.",
+                ChatMessageType.Broadcast
+            )
+        );
+
+        player.TryConsumeFromInventoryWithNetworking(source);
+        player.Session.Network.EnqueueSend(new GameMessageDeleteObject(source));
     }
 
     public static bool CheckTinkerType(Player player, WorldObject source, WorldObject target, Skill tinkeringSkill)
@@ -327,6 +422,15 @@ public class Salvage : WorldObject
                 return true;
             }
         }
+
+        if (target is { WeenieType: WeenieType.Salvage}
+            && source.MaterialType == target.MaterialType
+            && source.Structure == 100
+            && target.Structure == 100)
+        {
+            return true;
+        }
+
         return false;
     }
 

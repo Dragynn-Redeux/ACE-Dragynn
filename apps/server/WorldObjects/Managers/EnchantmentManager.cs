@@ -396,7 +396,7 @@ public class EnchantmentManager
             && newEntry.CasterObjectId == enchantmentRegistry.CasterObjectId
         )
         {
-            _log.Error("EnchantmentManager.StartCooldown({Item}) - Attempting to add duplicate cooldown enchantment ({SpellId}) to registry. Aborting.", item.Name, newEntry.SpellId);
+            _log.Warning("EnchantmentManager.StartCooldown({Item}) - Attempting to add duplicate cooldown enchantment ({SpellId}) to registry. Aborting.", item.Name, newEntry.SpellId);
             return false;
         }
 
@@ -1681,19 +1681,19 @@ public class EnchantmentManager
         var tickAmountTotal = 0.0f;
         foreach (var enchantment in enchantments)
         {
-            //var totalAmount = enchantment.StatModValue;
-            //var totalTicks = GetNumTicks(enchantment);
-            var tickAmount = enchantment.StatModValue;
-
+            var tickAmount = GetDamagePerTick(enchantment, WorldObject.HeartbeatInterval ?? 5.0);
             tickAmountTotal += tickAmount;
         }
 
-        // apply healing ratings?
+        // apply healing ratings
         tickAmountTotal *= creature.GetHealingRatingMod();
 
         // do healing
         var healAmount = creature.UpdateVitalDelta(creature.Health, (int)Math.Round(tickAmountTotal));
-        creature.DamageHistory.OnHeal((uint)healAmount);
+        if (healAmount > 0)
+        {
+            creature.DamageHistory.OnHeal((uint)healAmount);
+        }
 
         if (creature is Player player)
         {
@@ -1851,9 +1851,20 @@ public class EnchantmentManager
                 bleedResistance = (float)(creature.ResistBleed ?? (1 / (creature.ArchetypePhysicality ?? 1)));
             }
 
+            var wardMod = creature.GetWardMod(damager as Creature, creature, 1.0f);
             var levelScalingMod = LevelScaling.GetMonsterDamageTakenHealthScalar(sourcePlayer, creature);
 
-            tickAmount *= resistanceMod * damageResistRatingMod * dotResistRatingMod * bleedResistance * levelScalingMod;
+            //Console.WriteLine($"DoT Tick (Damager: {damager?.Name}, Target: {creature?.Name})\n" +
+            //    $" -BaseTickAmount: {tickAmount}\n" +
+            //    $" -ResistanceMod: {resistanceMod}\n" +
+            //    $" -DamageResistRatingMod: {damageResistRatingMod}\n" +
+            //    $" -DotResistRatingMod: {dotResistRatingMod}\n" +
+            //    $" -BleedResistance: {bleedResistance}\n" +
+            //    $" -WardMod: {wardMod}\n" +
+            //    $" -LevelScalingMod: {levelScalingMod}\n" +
+            //    $" -FinalTickAmount: {tickAmount * resistanceMod * wardMod * damageResistRatingMod * dotResistRatingMod * bleedResistance * levelScalingMod}");
+
+            tickAmount *= resistanceMod * wardMod * damageResistRatingMod * dotResistRatingMod * bleedResistance * levelScalingMod;
 
             // make sure the target's current health is not exceeded
             if (tickAmountTotal + tickAmount >= creature.Health.Current)
@@ -1880,6 +1891,7 @@ public class EnchantmentManager
                 break;
             }
         }
+
 
         creature.TakeDamageOverTime(tickAmountTotal, damageType);
 

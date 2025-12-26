@@ -548,7 +548,7 @@ public class SpellTransference : Stackable
                         spellToReplaceId = (int)spellToReplace.Id;
                     }
 
-                    var potentialArcaneLoreReq = CalculateArcaneLore(target, (int)spellToAdd.Id, spellToReplaceId);
+                    var potentialArcaneLoreReq = CalculateArcaneLore(target, (int)spellToAdd.Id, spellToReplaceId, isProc);
                     var arcaneLoreString = potentialArcaneLoreReq > 0
                         ? $"The {target.Name}'s arcane lore activation requirement will become {potentialArcaneLoreReq}.\n\n" : "";
 
@@ -691,64 +691,63 @@ public class SpellTransference : Stackable
         }
     }
 
-    private static int CalculateArcaneLore(WorldObject target, int? potentialSpell = null, int? potentialRemovedSpell = null)
+    private static int CalculateArcaneLore(WorldObject target, int? potentialSpell = null, int? potentialRemovedSpell = null, bool isProcSpell = false)
     {
         var numSpells = 0;
         var increasedDifficulty = 0.0f;
 
         var targetSpellBook = target.Biota.PropertiesSpellBook;
+        var targetProcSpell = target.ProcSpell;
 
-        if (targetSpellBook == null)
+        if (targetSpellBook != null)
         {
-            return 0;
-        }
+            var spellBook = new Dictionary<int, float>(targetSpellBook);
 
-        var spellBook = new Dictionary<int,float>(targetSpellBook);
-
-        if (potentialSpell != null)
-        {
-            spellBook.Add(potentialSpell.Value, 1.0f);
-        }
-
-        if (potentialRemovedSpell != null)
-        {
-            spellBook.Remove(potentialRemovedSpell.Value);
-        }
-
-        int MINOR = 0,
-            MAJOR = 1,
-            EPIC = 2,
-            LEGENDARY = 3;
-
-        foreach (SpellId spellId in spellBook.Keys)
-        {
-            numSpells++;
-
-            var cantripLevels = SpellLevelProgression.GetSpellLevels(spellId);
-
-            var cantripLevel = cantripLevels.IndexOf(spellId);
-
-            if (cantripLevel == MINOR)
+            if (potentialSpell != null)
             {
-                increasedDifficulty += 5;
+                spellBook.Add(potentialSpell.Value, 1.0f);
             }
-            else if (cantripLevel == MAJOR)
+
+            if (potentialRemovedSpell != null)
             {
-                increasedDifficulty += 10;
+                spellBook.Remove(potentialRemovedSpell.Value);
             }
-            else if (cantripLevel == EPIC)
+
+            int MINOR = 0,
+                MAJOR = 1,
+                EPIC = 2,
+                LEGENDARY = 3;
+
+            foreach (SpellId spellId in spellBook.Keys)
             {
-                increasedDifficulty += 15;
-            }
-            else if (cantripLevel == LEGENDARY)
-            {
-                increasedDifficulty += 20;
+                numSpells++;
+
+                var cantripLevels = SpellLevelProgression.GetSpellLevels(spellId);
+
+                var cantripLevel = cantripLevels.IndexOf(spellId);
+
+                if (cantripLevel == MINOR)
+                {
+                    increasedDifficulty += 5;
+                }
+                else if (cantripLevel == MAJOR)
+                {
+                    increasedDifficulty += 10;
+                }
+                else if (cantripLevel == EPIC)
+                {
+                    increasedDifficulty += 15;
+                }
+                else if (cantripLevel == LEGENDARY)
+                {
+                    increasedDifficulty += 20;
+                }
             }
         }
 
         var tier = (target.Tier ?? 1) - 1;
 
-        if (target.ProcSpell != null)
+        if (targetProcSpell != null || isProcSpell)
         {
             numSpells++;
             increasedDifficulty += Math.Max(5 * tier, 5);
@@ -758,7 +757,7 @@ public class SpellTransference : Stackable
         var armorSlots = target.ArmorSlots ?? 1;
         var spellsPerSlot = (float)numSpells / armorSlots;
 
-        if (spellsPerSlot > 1 || target.ProcSpell != null)
+        if (spellsPerSlot > 1 || targetProcSpell != null || isProcSpell)
         {
             var baseDifficulty = ActivationDifficultyPerTier(tier);
 

@@ -426,7 +426,7 @@ public class SpellProjectile : WorldObject
 
         if (player is { OverloadStanceIsActive: true } or {BatteryStanceIsActive: true})
         {
-            player.IncreaseChargedMeter(Spell);
+            player.IncreaseChargedMeter(Spell, FromProc);
         }
 
         if (targetPlayer != null && damage != null)
@@ -434,7 +434,7 @@ public class SpellProjectile : WorldObject
             SigilTrinketSpellDamageReduction = 1.0f;
 
             targetPlayer.CheckForSigilTrinketOnSpellHitReceivedEffects(this, Spell, (int)damage, Skill.MagicDefense,
-                (int)SigilTrinketMagicDefenseEffect.Absorption);
+                SigilTrinketMagicDefenseEffect.Absorption);
 
             if (!damage.HasValue || damage < 0 || damage > uint.MaxValue)
             {
@@ -485,7 +485,7 @@ public class SpellProjectile : WorldObject
             // EMPOWERED SCARAB - Detonation Check for Cast-On-Strike
             if (player != null && FromProc)
             {
-                player.CheckForSigilTrinketOnCastEffects(target, Spell, true, Skill.WarMagic, (int)SigilTrinketWarMagicEffect.ScarabDetonate, creatureTarget);
+                player.CheckForSigilTrinketOnCastEffects(target, Spell, true, Skill.WarMagic, SigilTrinketWarMagicEffect.Detonate, creatureTarget);
             }
 
             if (sourceCreature != null && ProjectileTarget != null && !FromProc)
@@ -515,7 +515,7 @@ public class SpellProjectile : WorldObject
                     // EMPOWERED SCARAB - Detonate
                     if (player != null)
                     {
-                        player.CheckForSigilTrinketOnCastEffects(target, Spell, false, Skill.WarMagic, (int)SigilTrinketWarMagicEffect.ScarabDetonate, creatureTarget);
+                        player.CheckForSigilTrinketOnCastEffects(target, Spell, false, Skill.WarMagic, SigilTrinketWarMagicEffect.Detonate, creatureTarget);
                     }
                 }
                 else
@@ -615,7 +615,7 @@ public class SpellProjectile : WorldObject
         var resistSource = IsWeaponSpell ? weapon : source;
 
         var weaponAttackMod = 1.0;
-        if (sourcePlayer is not null)
+        if (sourcePlayer?.GetEquippedWeapon() != null)
         {
             weaponAttackMod = sourcePlayer.GetEquippedWeapon().WeaponOffense ?? 1.0;
         }
@@ -635,16 +635,9 @@ public class SpellProjectile : WorldObject
         var resistedMod = 1.0f;
         _partialEvasion = partialEvasion;
 
-        if (!overpower && sourcePlayer != null)
+        if (!overpower)
         {
             if (GetResistedMod(out resistedMod))
-            {
-                return null;
-            }
-        }
-        else
-        {
-            if (resisted && !overpower)
             {
                 return null;
             }
@@ -690,7 +683,7 @@ public class SpellProjectile : WorldObject
             // EMPOWERED SCARAB - Crushing
             if (criticalHit && sourcePlayer != null && Spell.School == MagicSchool.WarMagic)
             {
-                sourcePlayer.CheckForSigilTrinketOnCastEffects(target, Spell, false, Skill.WarMagic, (int)SigilTrinketWarMagicEffect.ScarabCrit, null, true);
+                sourcePlayer.CheckForSigilTrinketOnCastEffects(target, Spell, false, Skill.WarMagic, SigilTrinketWarMagicEffect.Crushing, null, true);
             }
         }
 
@@ -743,12 +736,10 @@ public class SpellProjectile : WorldObject
         var batteryDamageMod = CheckForCombatAbilityBatteryDamageMod(sourcePlayer);
 
         var attributeMod = 1.0f;
-        var lethalityMod = 1.0f;
 
         if (sourceCreature is not null)
         {
-            attributeMod = sourceCreature.GetAttributeMod(weapon, true, target);
-            lethalityMod = Convert.ToSingle(sourceCreature.ArchetypeLethality ?? 1.0f);
+            attributeMod = sourceCreature.GetAttributeMod(weapon, true);
         }
 
         var specDefenseMod = CheckForMagicDefenseSpecDefenseMod(targetPlayer, sourceCreature);
@@ -761,10 +752,13 @@ public class SpellProjectile : WorldObject
 
         var damageMultiplier = (float)DamageMultiplier;
 
+        // proc spells & enchanted blade receive 1% of spellcraft as a damage multipler (300 spellcraft = x3 damage)
         var spellcraftMod = 1.0f;
         if (FromProc && weapon?.ItemSpellcraft != null)
         {
-            spellcraftMod = (weapon.ItemSpellcraft ?? 1) * 0.01f;
+            var spellcraft = weapon.ItemSpellcraft.Value + (int)CheckForArcaneLoreSpecSpellcraftBonus(sourceCreature);
+
+            spellcraftMod = spellcraft * 0.01f;
         }
 
         // for traps and creatures that don't have a lethality mod,
@@ -783,102 +777,42 @@ public class SpellProjectile : WorldObject
         // life magic projectiles: ie., martyr's hecatomb
         if (Spell.MetaSpellType == ACE.Entity.Enum.SpellType.LifeProjectile)
         {
-            lifeMagicDamage = LifeProjectileDamage * Spell.DamageRatio * overloadDamageMod * batteryDamageMod;
+            baseDamage = (int)(LifeProjectileDamage * Spell.DamageRatio * overloadDamageMod * batteryDamageMod);
 
-            // could life magic projectiles crit?
-            // if so, did they use the same 1.5x formula as war magic, instead of 2.0x?
             if (criticalHit)
             {
-                // verify: CriticalMultiplier only applied to the additional crit damage,
-                // whereas CD/CDR applied to the total damage (base damage + additional crit damage)
                 weaponCritDamageMod = GetWeaponCritDamageMod(weapon, sourceCreature, attackSkill, target);
-
-                criticalDamageMod = 2.0f + weaponCritDamageMod;
+                criticalDamageMod = 1.0f + weaponCritDamageMod;
             }
-
-            weaponResistanceMod = GetWeaponResistanceModifier(
-                weapon,
-                sourceCreature,
-                attackSkill,
-                Spell.DamageType,
-                target
-            );
-
-            // if attacker/weapon has IgnoreMagicResist directly, do not transfer to spell projectile
-            // only pass if SpellProjectile has it directly, such as 2637 - Invoking Aun Tanua
-
-            resistanceMod = (float)
-                Math.Max(0.0f, target.GetResistanceMod(resistanceType, this, null, weaponResistanceMod));
-
-            finalDamage =
-                lifeMagicDamage
-                * criticalDamageMod
-                * elementalDamageMod
-                * slayerMod
-                * attributeMod
-                * resistanceMod
-                * absorbMod
-                * wardMod
-                * resistedMod
-                * specDefenseMod
-                * jewelRedFury
-                * jewelBlueFury
-                * jewelSelfHarm
-                * lethalityMod
-                * levelScalingMod
-                * damageMultiplier
-                * spellcraftMod
-                * landblockScalingMod;
         }
         // war/void magic projectiles
         else
         {
             if (criticalHit)
             {
-                // Original:
-                // http://acpedia.org/wiki/Announcements_-_2002/08_-_Atonement#Letter_to_the_Players
-
-                // Critical Strikes: In addition to the skill-based damage bonus, each projectile spell has a 2% chance of causing a critical hit on the target and doing increased damage.
-                // A magical critical hit is similar in some respects to melee critical hits (although the damage calculation is handled differently).
-                // While a melee critical hit automatically does twice the maximum damage of the weapon, a magical critical hit will do an additional half the minimum damage of the spell.
-                // For instance, a magical critical hit from a level 7 spell, which does 110-180 points of damage, would add an additional 55 points of damage to the spell.
-
-                // Later updated for PvE only:
-
-                // http://acpedia.org/wiki/Announcements_-_2004/07_-_Treaties_in_Stone#Letter_to_the_Players
-
-                // Currently when a War Magic spell scores a critical hit, it adds a multiple of the base damage of the spell to a normal damage roll.
-                // Starting in July, War Magic critical hits will instead add a multiple of the maximum damage of the spell.
-                // No more crits that do less damage than non-crits!
-
-                if (isPVP) // PvP: 50% of the MIN damage added to normal damage roll
-                {
-                    critDamageBonus = Spell.MinDamage * 0.5f;
-                }
-                else // PvE: 50% of the MAX damage added to normal damage roll
-                {
-                    critDamageBonus = Spell.MaxDamage * 0.5f;
-                }
-
-                // verify: CriticalMultiplier only applied to the additional crit damage,
-                // whereas CD/CDR applied to the total damage (base damage + additional crit damage)
                 weaponCritDamageMod = GetWeaponCritDamageMod(weapon, sourceCreature, attackSkill, target);
                 weaponCritDamageMod += CheckForWarMagicSpecCriticalDamageBonus(sourcePlayer, weapon);
 
-                critDamageBonus *= weaponCritDamageMod;
+                var jewelBludgeCritDamageMod =
+                    1.0f + Jewel.GetJewelEffectMod(sourcePlayer, PropertyInt.GearBludgeon, "Bludgeon");
 
-                criticalDamageMod = 2.0f + weaponCritDamageMod;
-                criticalDamageMod *= 1.0f + Jewel.GetJewelEffectMod(sourcePlayer, PropertyInt.GearBludgeon, "Bludgeon");
+                criticalDamageMod = (1.0f + weaponCritDamageMod) * jewelBludgeCritDamageMod;
+
+                baseDamage = Spell.MaxDamage;
+
+                // monster spell crits are based on median damage instead of max
+                if (sourceCreature is not Player)
+                {
+                    baseDamage = Spell.MedianDamage;
+                }
             }
-
-            baseDamage = ThreadSafeRandom.Next(Spell.MinDamage, Spell.MaxDamage);
-
-            if (criticalHit && sourceCreature is not Player)
+            else
             {
-                baseDamage = Spell.MedianDamage;
+                baseDamage = ThreadSafeRandom.Next(Spell.MinDamage, Spell.MaxDamage);
             }
+        }
 
-            weaponResistanceMod = GetWeaponResistanceModifier(weapon, sourceCreature, attackSkill, Spell.DamageType, target);
+        weaponResistanceMod = GetWeaponResistanceModifier(weapon, sourceCreature, attackSkill, Spell.DamageType, target);
 
             // if attacker/weapon has IgnoreMagicResist directly, do not transfer to spell projectile
             // only pass if SpellProjectile has it directly, such as 2637 - Invoking Aun Tanua
@@ -933,7 +867,11 @@ public class SpellProjectile : WorldObject
                 * jewelRedFury
                 * jewelBlueFury
                 * strikethroughMod
-                * archetypeSpellDamageMod;
+                * archetypeSpellDamageMod
+                * levelScalingMod
+                * damageMultiplier
+                * spellcraftMod
+                * landblockScalingMod;
 
             finalDamage =
                 damageBeforeMitigation
@@ -942,10 +880,7 @@ public class SpellProjectile : WorldObject
                 * resistanceMod
                 * resistedMod
                 * specDefenseMod
-                * ratingDamageTypeWard
-                * levelScalingMod
-                * damageMultiplier
-                * spellcraftMod;
+                * ratingDamageTypeWard;
 
             // balance testing. TODO: update base spells damage and ward levels once ideal balance is found
             if (sourcePlayer is not null)
@@ -959,32 +894,38 @@ public class SpellProjectile : WorldObject
                 finalDamage *= monsterSpellDamageMultiplier;
             }
 
-            if (sourcePlayer != null)
-            {
-                //Console.WriteLine($"\n{sourceCreature.Name} casted {Spell.Name} on {target.Name} for {Math.Round(finalDamage, 0)}.\n" +
-                //    $" -baseDamage: {baseDamage}\n" +
-                //    $" -critMultiplier: {criticalDamageMod}\n" +
-                //    $" -attributeMod: {attributeMod}\n" +
-                //    $" -elementalDamageMod: {elementalDamageMod}\n" +
-                //    $" -slayerMod: {slayerMod}\n" +
-                //    $" -overload: {overloadDamageMod}\n" +
-                //    $" -batteryMod: {batteryDamageMod}\n" +
-                //    $" -jewelElementalist: {jewelElementalist}\n" +
-                //    $" -jewelElemental: {jewelElemental}\n" +
-                //    $" -jewelSelfHarm: {jewelSelfHarm}\n" +
-                //    $" -jewelRedFury: {jewelRedFury}\n" +
-                //    $" -jewelBlueFury: {jewelBlueFury}\n" +
-                //    $" -strikethrough: {strikethroughMod}\n" +
-                //    $" -archetypeSpellDamageMod: {archetypeSpellDamageMod}\n" +
-                //    $" -absorbMod: {absorbMod}\n" +
-                //    $" -wardMod: {wardMod}\n" +
-                //    $" -resistanceMod: {resistanceMod}\n" +
-                //    $" -resistedMod: {resistedMod}\n" +
-                //    $" -specDefMod: {specDefenseMod}\n" +
-                //    $" -ratingDamageTypeWard: {ratingDamageTypeWard}\n" +
-                //    $" -FinalBeforeRatings: {finalDamage}");
-            }
-        }
+        //if (sourcePlayer is not null)
+        //{
+        //    Console.WriteLine($"\n{sourceCreature.Name} casted {Spell.Name} on {target.Name} for {Math.Round(finalDamage, 0)}.\n" +
+        //        $" -baseDamage: {baseDamage}\n" +
+        //        $" -critMultiplier: {criticalDamageMod}\n" +
+        //        $" -attributeMod: {attributeMod}\n" +
+        //        $" -elementalDamageMod: {elementalDamageMod}\n" +
+        //        $" -slayerMod: {slayerMod}\n" +
+        //        $" -overload: {overloadDamageMod}\n" +
+        //        $" -batteryMod: {batteryDamageMod}\n" +
+        //        $" -jewelElementalist: {jewelElementalist}\n" +
+        //        $" -jewelElemental: {jewelElemental}\n" +
+        //        $" -jewelSelfHarm: {jewelSelfHarm}\n" +
+        //        $" -jewelRedFury: {jewelRedFury}\n" +
+        //        $" -jewelBlueFury: {jewelBlueFury}\n" +
+        //        $" -strikethrough: {strikethroughMod}\n" +
+        //        $" -archetypeSpellDamageMod: {archetypeSpellDamageMod}\n" +
+        //        $" -levelscaling: {levelScalingMod}\n" +
+        //        $" -damageMultiplier: {damageMultiplier}\n" +
+        //        $" -spellcraftMod: {spellcraftMod}\n" +
+        //        $" -landblockScalingMod: {landblockScalingMod}\n" +
+        //        $" -damageBeforeMitigation: {damageBeforeMitigation}\n" +
+        //        $" -absorbMod: {absorbMod}\n" +
+        //        $" -wardMod: {wardMod}\n" +
+        //        $" -resistanceMod: {resistanceMod}\n" +
+        //        $" -resistedMod: {resistedMod}\n" +
+        //        $" -specDefMod: {specDefenseMod}\n" +
+        //        $" -ratingDamageTypeWard: {ratingDamageTypeWard}\n" +
+        //        $" -playerSpellDamageMultiplier: {(float)PropertyManager.GetDouble("player_spell_damage_multiplier").Item}\n" +
+        //        $" -FinalBeforeRatings: {finalDamage}");
+        //}
+
 
         // show debug info
         if (sourceCreature != null && sourceCreature.DebugDamage.HasFlag(Creature.DebugDamageType.Attacker))
@@ -1044,11 +985,7 @@ public class SpellProjectile : WorldObject
             ? LevelScaling.GetMonsterDamageDealtHealthScalar(playerDefender, attacker)
             : LevelScaling.GetMonsterDamageTakenHealthScalar(attacker, defender);
 
-        var timeToKillMonsterScalingMod = playerDefender != null
-            ? 1.0f
-            : LevelScaling.GetMonsterDamageTakenTtkScalar(attacker, defender);
-
-        return monsterHealthScalingMod * timeToKillMonsterScalingMod;
+        return monsterHealthScalingMod;
     }
 
     /// <summary>
@@ -1117,7 +1054,7 @@ public class SpellProjectile : WorldObject
     /// </summary>
     private static bool CheckForPerceptionSpecCriticalDefense(Player targetPlayer, CreatureSkill attackSkill)
     {
-        if (targetPlayer == null)
+        if (targetPlayer == null || attackSkill == null)
         {
             return false;
         }
@@ -1323,9 +1260,7 @@ public class SpellProjectile : WorldObject
 
     private float GetWardMod(Creature caster, Creature target, float ignoreWardMod)
     {
-        var wardBuffDebuffMod = target.EnchantmentManager.GetWardMultiplicativeMod();
-
-        var wardLevel = target.GetWardLevel() * wardBuffDebuffMod;
+        var wardLevel = target.GetWardLevel();
 
         if (caster is Player)
         {
@@ -1336,7 +1271,9 @@ public class SpellProjectile : WorldObject
             wardLevel = Convert.ToInt32(wardLevel * LevelScaling.GetPlayerArmorWardScalar(target, caster));
         }
 
-        return SkillFormula.CalcWardMod(wardLevel * ignoreWardMod);
+        var wardBuffDebuffMod = target.EnchantmentManager.GetWardMultiplicativeMod();
+
+        return SkillFormula.CalcWardMod(wardLevel * ignoreWardMod * wardBuffDebuffMod);
     }
 
     /// <summary>
@@ -1516,7 +1453,8 @@ public class SpellProjectile : WorldObject
 
             percent = damage / target.Health.MaxValue;
 
-            //Console.WriteLine($"Damage rating: " + Creature.ModToRating(damageRatingMod));
+            //Console.WriteLine($"DamageRating mod: {damageRatingMod}\n" +
+            //    $"DamageResistRating mod: {damageResistRatingMod}");
 
             equippedCloak = target.EquippedCloak;
 

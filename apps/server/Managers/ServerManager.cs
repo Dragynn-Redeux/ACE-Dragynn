@@ -88,7 +88,9 @@ public static class ServerManager
             new GameMessageSystemChat(
                 "Broadcast from System> ATTENTION - This Asheron's Call Server is shutting down NOW!!!!",
                 ChatMessageType.WorldBroadcast
-            )
+            ), "Broadcast from System> ATTENTION - This Asheron's Call Server is shutting down NOW!!!!",
+            "System"
+
         );
         ShutdownServer();
     }

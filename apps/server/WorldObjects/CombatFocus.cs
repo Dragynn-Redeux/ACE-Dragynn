@@ -140,6 +140,38 @@ public class CombatFocus : WorldObject
         }
     }
 
+    public int? CombatFocusSkill3SpellRemoved
+    {
+        get => GetProperty(PropertyInt.CombatFocusSkill3SpellRemoved);
+        set
+        {
+            if (!value.HasValue)
+            {
+                RemoveProperty(PropertyInt.CombatFocusSkill3SpellRemoved);
+            }
+            else
+            {
+                SetProperty(PropertyInt.CombatFocusSkill3SpellRemoved, value.Value);
+            }
+        }
+    }
+
+    public int? CombatFocusSkill3SpellAdded
+    {
+        get => GetProperty(PropertyInt.CombatFocusSkill3SpellAdded);
+        set
+        {
+            if (!value.HasValue)
+            {
+                RemoveProperty(PropertyInt.CombatFocusSkill3SpellAdded);
+            }
+            else
+            {
+                SetProperty(PropertyInt.CombatFocusSkill3SpellAdded, value.Value);
+            }
+        }
+    }
+
     public int? CombatFocusNumSkillsRemoved
     {
         get => GetProperty(PropertyInt.CombatFocusNumSkillsRemoved);
@@ -273,6 +305,8 @@ public class CombatFocus : WorldObject
 
     public void InitializeSpellList()
     {
+        CurrentSpells.Clear();
+
         var spellList = new List<SpellId>();
         switch (CombatFocusType)
         {
@@ -318,7 +352,18 @@ public class CombatFocus : WorldObject
 
         if (CombatFocusSkillSpellRemoved != null)
         {
-            CurrentSpells.Remove((SpellId)CombatFocusSkillSpellRemoved);
+            if (CombatFocusSkillSpellRemoved == (int)SpellId.FinesseWeaponsMasterySelf1
+            || CombatFocusSkillSpellRemoved == (int)SpellId.StaffMasterySelf1
+            || CombatFocusSkillSpellRemoved == (int)SpellId.UnarmedCombatMasterySelf1)
+            {
+                CurrentSpells.Remove(SpellId.FinesseWeaponsMasterySelf1);
+                CurrentSpells.Remove(SpellId.StaffMasterySelf1);
+                CurrentSpells.Remove(SpellId.UnarmedCombatMasterySelf1);
+            }
+            else
+            {
+                CurrentSpells.Remove((SpellId)CombatFocusSkillSpellRemoved);
+            }
         }
 
         if (CombatFocusSkill2SpellAdded != null)
@@ -328,7 +373,39 @@ public class CombatFocus : WorldObject
 
         if (CombatFocusSkill2SpellRemoved != null)
         {
-            CurrentSpells.Remove((SpellId)CombatFocusSkill2SpellRemoved);
+            if (CombatFocusSkill2SpellRemoved == (int)SpellId.FinesseWeaponsMasterySelf1
+            || CombatFocusSkill2SpellRemoved == (int)SpellId.StaffMasterySelf1
+            || CombatFocusSkill2SpellRemoved == (int)SpellId.UnarmedCombatMasterySelf1)
+            {
+                CurrentSpells.Remove(SpellId.FinesseWeaponsMasterySelf1);
+                CurrentSpells.Remove(SpellId.StaffMasterySelf1);
+                CurrentSpells.Remove(SpellId.UnarmedCombatMasterySelf1);
+            }
+            else
+            {
+                CurrentSpells.Remove((SpellId)CombatFocusSkill2SpellRemoved);
+            }
+        }
+
+        if (CombatFocusSkill3SpellAdded != null)
+        {
+            CurrentSpells.Add((SpellId)CombatFocusSkill3SpellAdded);
+        }
+
+        if (CombatFocusSkill3SpellRemoved != null)
+        {
+            if (CombatFocusSkill3SpellRemoved == (int)SpellId.FinesseWeaponsMasterySelf1
+            || CombatFocusSkill3SpellRemoved == (int)SpellId.StaffMasterySelf1
+            || CombatFocusSkill3SpellRemoved == (int)SpellId.UnarmedCombatMasterySelf1)
+            {
+                CurrentSpells.Remove(SpellId.FinesseWeaponsMasterySelf1);
+                CurrentSpells.Remove(SpellId.StaffMasterySelf1);
+                CurrentSpells.Remove(SpellId.UnarmedCombatMasterySelf1);
+            }
+            else
+            {
+                CurrentSpells.Remove((SpellId)CombatFocusSkill3SpellRemoved);
+            }
         }
 
         CombatFocusNumSkillsAdded = 0;
@@ -362,8 +439,8 @@ public class CombatFocus : WorldObject
 
         ActivateSpells(player, CurrentSpells);
 
-        var particalEffect = GetFocusParticleEffect();
-        player.PlayParticleEffect(particalEffect, player.Guid);
+        var particleEffect = GetFocusParticleEffect();
+        player.PlayParticleEffect(particleEffect, player.Guid);
 
         TriggerCooldownsOfUsableAbilities(player, (CombatFocusType)combatFocusType);
     }
@@ -379,7 +456,7 @@ public class CombatFocus : WorldObject
         var relentless = player.GetInventoryItemsOfWCID(1051127);
 
         var multishot = player.GetInventoryItemsOfWCID(1051131);
-        var steadyShot = player.GetInventoryItemsOfWCID(1051130);
+        var steadyStrike = player.GetInventoryItemsOfWCID(1051130);
         var evasiveStance = player.GetInventoryItemsOfWCID(1051114);
 
         var vanish = player.GetInventoryItemsOfWCID(1051112);
@@ -462,9 +539,9 @@ public class CombatFocus : WorldObject
 
         if (combatFocusType is WorldObjects.CombatFocusType.Archer or WorldObjects.CombatFocusType.Blademaster or WorldObjects.CombatFocusType.Vagabond)
         {
-            if (steadyShot.Count > 0)
+            if (steadyStrike.Count > 0)
             {
-                player.EnchantmentManager.StartCooldown(steadyShot[0]);
+                player.EnchantmentManager.StartCooldown(steadyStrike[0]);
             }
             if (evasiveStance.Count > 0)
             {
@@ -523,7 +600,11 @@ public class CombatFocus : WorldObject
         }
 
         DeactivateSpells(player, CurrentSpells, onLevelUp, startingLevel);
-        DisableActiveAbilities(player);
+
+        if (!onLevelUp)
+        {
+            DisableActiveAbilities(player);
+        }
     }
 
     private void ActivateSpells(Player player, List<SpellId> spellIds)
@@ -741,15 +822,18 @@ public class CombatFocus : WorldObject
                     CombatFocusNumSkillsRemoved++;
                 }
             }
-            else if (CombatFocusNumSkillsAdded < 1)
-            {
-                CombatFocusSkillSpellAdded = null;
-                CombatFocusNumSkillsAdded--;
-            }
             else
             {
-                CombatFocusSkill2SpellAdded = null;
-                CombatFocusNumSkillsAdded--;
+                if (CombatFocusSkill2SpellAdded != null)
+                {
+                    CombatFocusSkill2SpellAdded = null;
+                    CombatFocusNumSkillsAdded--;
+                }
+                else if (CombatFocusSkillSpellAdded != null)
+                {
+                    CombatFocusSkillSpellAdded = null;
+                    CombatFocusNumSkillsAdded--;
+                }
             }
         }
 
@@ -780,14 +864,14 @@ public class CombatFocus : WorldObject
         {
             if (IsBaseSpell(spellId))
             {
-                if (CombatFocusSkill2SpellRemoved != null)
-                {
-                    CombatFocusSkill2SpellRemoved = null;
-                    CombatFocusNumSkillsRemoved--;
-                }
-                else
+                if (CombatFocusSkillSpellRemoved != null)
                 {
                     CombatFocusSkillSpellRemoved = null;
+                    CombatFocusNumSkillsRemoved--;
+                }
+                else if (CombatFocusSkill2SpellRemoved != null)
+                {
+                    CombatFocusSkill2SpellRemoved = null;
                     CombatFocusNumSkillsRemoved--;
                 }
             }
@@ -953,7 +1037,7 @@ public class CombatFocus : WorldObject
                         "With this focus equipped, your chance to deal a critical hit is increased by 20% while performing sneak attacks. Normal hits deal 20% less damage.\n\n"
                         + "Activated Combat Ability: For the next 10 seconds, your attacks from behind cannot be evaded\n\n";
                     break;
-                case CombatAbility.SteadyShot:
+                case CombatAbility.SteadyStrike:
                     description +=
                         "With this focus equipped, the accuracy of your missile weapon attacks is increased by 20%.\n\n"
                         + "Activated Combat Ability: For the next 10 seconds, your arrows cannot be dodged and deal an additional 25% damage.\n\n";

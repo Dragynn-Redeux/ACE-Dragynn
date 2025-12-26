@@ -318,7 +318,7 @@ partial class Player
                     var angle = GetAngle(cleave);
                     var angleWrong = Math.Abs(angle) > CleaveAngle / 2.0f;
 
-                    if (angleWrong)
+                    if (angleWrong && !MultiShotIsActive) // Multishot can hit targets behind you (if within the 10 range limit)
                     {
                         continue;
                     }
@@ -382,7 +382,7 @@ partial class Player
         var linkTime = MotionTable.GetAnimationLength(MotionTableId, motionStance, MotionCommand.Reload, MotionCommand.Ready);
         //var cycleTime = MotionTable.GetCycleLength(MotionTableId, CurrentMotionState.Stance, MotionCommand.Ready);
 
-        LastAttackAnimationLength = linkTime;
+        LastAttackAnimationLength = (linkTime+launchTime+reloadTime) / animSpeed;
         //Console.WriteLine($"LaunchTime: {launchTime}, Reload: {reloadTime} (BaseReload: {reloadTime*animSpeed}), Link: {linkTime}, TOTAL: {LastAttackAnimationLength}");
 
         var staminaCost = GetAttackStamina((float)LastAttackAnimationLength, weapon);

@@ -153,6 +153,11 @@ public class GeneratorProfile
     /// </summary>
     public WorldObject Generator;
 
+    /// <summary>
+    /// The player world object that may be accessing this profile
+    /// </summary>
+    public Player Player;
+
     public RegenLocationType RegenLocationType => (RegenLocationType)Biota.WhereCreate;
 
     /// <summary>
@@ -678,9 +683,19 @@ public class GeneratorProfile
                 deathTreasure.LootQualityMod = (float)Generator.LootQualityMod;
             }
 
-            if (Generator.CurrentLandblock is { LandblockLootQualityMod: > 0 } landblock)
+            var landblock = Generator.CurrentLandblock;
+            if (landblock is not null)
             {
-                deathTreasure.LootQualityMod += (float)landblock.LandblockLootQualityMod;
+                if (landblock.LandblockLootQualityMod > 0)
+                {
+                    deathTreasure.LootQualityMod += (float)landblock.LandblockLootQualityMod;
+                }
+
+                if (Player is not null && landblock.IsFellowshipRequired())
+                {
+                    var capstonesCompletedMod = QuestManager.GetCapstonesCompleted(Player) * 0.02f;
+                    deathTreasure.LootQualityMod += capstonesCompletedMod;
+                }
             }
 
             // _log.Debug("{GeneratorName}.TreasureGenerator(): found death treasure {BiotaWcid}", Generator.Name, Biota.WeenieClassId);

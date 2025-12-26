@@ -205,7 +205,7 @@ public partial class Portal : WorldObject
                 );
             }
 
-            if (player.Level > MaxLevel && MaxLevel != 0 && !player.EnchantmentManager.HasSpell(5379))
+            if (player.Level > MaxLevel && MaxLevel != 0 && !player.EnchantmentManager.HasSpell((int)SpellId.Shrouded))
             {
                 // You are too powerful to interact with that portal!
                 return new ActivationResult(

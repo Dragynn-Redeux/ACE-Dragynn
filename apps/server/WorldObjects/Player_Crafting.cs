@@ -360,7 +360,7 @@ partial class Player
 
     public int TryAddSalvage(WorldObject salvageBag, WorldObject item, int tryAmount)
     {
-        var maxStructure = salvageBag.MaxStructure ?? 100;
+        var maxStructure = salvageBag.MaxStructure ?? 1000;
         var structure = salvageBag.Structure ?? 0;
 
         var space = maxStructure - structure;
@@ -427,13 +427,6 @@ partial class Player
 
     public int GetStructure(WorldObject salvageItem, SalvageResults salvageResults, ref SalvageMessage message)
     {
-        // By default, salvaging uses either a tinkering skill, or your salvaging skill that would yield the greatest amount of material.
-        // Tinkering skills can only yield at most the workmanship number in units of salvage.
-        // The salvaging skill can produce more units than workmanship.
-
-        // You can also significantly increase the amount of material returned by training the Ciandra's Fortune augmentation.
-        // This augmentation can be trained 4 times, each time providing an additional 25% bonus to the amount of material returned.
-
         // is this a bag of salvage?
         // if so, return its existing structure
 
@@ -442,13 +435,17 @@ partial class Player
             return salvageItem.Structure.Value;
         }
 
+        // Salvage units returned = 1 + (WK / 2)
+        // If WK % 2 is 1, give a 50% chance to round up, else round down
         var addStructure = 1;
-        double randomSalvageBonus = ThreadSafeRandom.Next(1, 10);
-        if (randomSalvageBonus <= salvageItem.Workmanship)
+
+        var bonus = (int)Math.Floor((salvageItem.Workmanship ?? 1) * 0.5);
+        if ((int)(salvageItem.Workmanship ?? 1) % 2 == 1 && ThreadSafeRandom.Next(0.0f, 1.0f) > 0.5f)
         {
-            addStructure++;
-            // Console.WriteLine("Added bonus unit of salvage.");
+            bonus += 1;
         }
+        
+        addStructure += bonus;
 
         message = salvageResults.GetMessage(
             salvageItem.MaterialType ?? ACE.Entity.Enum.MaterialType.Unknown,

@@ -15,6 +15,7 @@ using ACE.Server.Network.Enum;
 using ACE.Server.Network.GameEvent.Events;
 using ACE.Server.Network.GameMessages;
 using ACE.Server.Network.GameMessages.Messages;
+using ACE.Server.Network.Handlers;
 using ACE.Server.WorldObjects;
 using Serilog;
 using Biota = ACE.Entity.Models.Biota;
@@ -645,12 +646,22 @@ public static class PlayerManager
     /// <summary>
     /// Broadcasts GameMessage to all online sessions.
     /// </summary>
-    public static void BroadcastToAll(GameMessage msg)
+    public static void BroadcastToAll(GameMessage msg, string rawMessage = "", string channel = "System")
     {
         foreach (var player in GetAllOnline())
         {
             player.Session.Network.EnqueueSend(msg);
         }
+
+        if (rawMessage != "")
+        {
+            _ = SendChat("", rawMessage, channel);
+        }
+    }
+
+    private static async Task SendChat(string sender, string message, string channel)
+    {
+        await TurbineChatHandler.SendWebhookedChat(sender, message, ConfigManager.Config.Server.Network.DiscordCgWebhookUrl, channel);
     }
 
     public static void BroadcastToAuditChannel(Player issuer, string message)
@@ -936,7 +947,7 @@ public static class PlayerManager
 
                     var msg =
                         $"This world has been changed to a Player Killer world. All players will become Player Killers in {PropertyManager.GetDouble("pk_respite_timer").Item} seconds.";
-                    BroadcastToAll(new GameMessageSystemChat(msg, ChatMessageType.WorldBroadcast));
+                    BroadcastToAll(new GameMessageSystemChat(msg, ChatMessageType.WorldBroadcast), msg, "System");
                     LogBroadcastChat(Channel.AllBroadcast, null, msg);
                 }
                 else
@@ -954,7 +965,7 @@ public static class PlayerManager
 
                     var msg =
                         "This world has been changed to a Non Player Killer world. All players are now Non-Player Killers.";
-                    BroadcastToAll(new GameMessageSystemChat(msg, ChatMessageType.WorldBroadcast));
+                    BroadcastToAll(new GameMessageSystemChat(msg, ChatMessageType.WorldBroadcast), msg, "System");
                     LogBroadcastChat(Channel.AllBroadcast, null, msg);
                 }
                 break;
@@ -979,7 +990,7 @@ public static class PlayerManager
 
                     var msg =
                         $"This world has been changed to a Player Killer Lite world. All players will become Player Killer Lites in {PropertyManager.GetDouble("pk_respite_timer").Item} seconds.";
-                    BroadcastToAll(new GameMessageSystemChat(msg, ChatMessageType.WorldBroadcast));
+                    BroadcastToAll(new GameMessageSystemChat(msg, ChatMessageType.WorldBroadcast), msg, "System");
                     LogBroadcastChat(Channel.AllBroadcast, null, msg);
                 }
                 else
@@ -997,7 +1008,7 @@ public static class PlayerManager
 
                     var msg =
                         "This world has been changed to a Non Player Killer world. All players are now Non-Player Killers.";
-                    BroadcastToAll(new GameMessageSystemChat(msg, ChatMessageType.WorldBroadcast));
+                    BroadcastToAll(new GameMessageSystemChat(msg, ChatMessageType.WorldBroadcast), msg, "System");
                     LogBroadcastChat(Channel.AllBroadcast, null, msg);
                 }
                 break;

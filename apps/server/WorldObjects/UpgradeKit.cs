@@ -412,12 +412,12 @@ public class UpgradeKit : Stackable
         if (magicSkill == Skill.WarMagic)
         {
             target.SetProperty(PropertyFloat.ElementalDamageMod, final);
-            target.SetProperty(PropertyFloat.WeaponRestorationSpellsMod, 1 + (final - 1) / 2);
+            target.SetProperty(PropertyFloat.WeaponRestorationSpellsMod, 1 + (final - 1) / 4);
         }
         else
         {
-            target.SetProperty(PropertyFloat.WeaponRestorationSpellsMod, final);
             target.SetProperty(PropertyFloat.ElementalDamageMod, 1 + (final - 1) / 2);
+            target.SetProperty(PropertyFloat.WeaponRestorationSpellsMod, 1 + (final - 1) / 2);
         }
     }
 
@@ -616,9 +616,12 @@ public class UpgradeKit : Stackable
             };
         }
 
+        var necklaceMulti = target.ValidLocations is EquipMask.NeckWear ? 2 : 1;
+        armorStyleBaseWardLevel *= necklaceMulti;
+
         var currentLevel = target.WardLevel.Value;
         var armorSlots = target.ArmorSlots ?? 1;
-        var wardPerSlot = currentLevel / armorSlots;
+        var wardPerSlot = currentLevel / armorSlots * necklaceMulti;
 
         var currentTierMinimum = armorStyleBaseWardLevel * Math.Clamp(currentTier, 1, 7);
         var rolledAmount = wardPerSlot - currentTierMinimum;

@@ -78,19 +78,12 @@ public static partial class LootGenerationFactory
         };
     }
 
+    public const float MaxSpeedBonus = 0.1f;
     private static float RollWeaponSpeedMod(TreasureDeath treasureDeath)
     {
-        var qualityLevel = QualityChance.Roll(treasureDeath);
-
-        if (qualityLevel == 0)
-        {
-            return 1.0f; // no bonus
-        }
-
-        var rng = (float)ThreadSafeRandom.Next(-0.025f, 0.025f);
-
-        // min/max range: 97.5% - 102.5%
-        var weaponSpeedMod = 1.0f - (qualityLevel * 0.005f + rng);
+        // min/max range: 90% to 100%
+        var bonus = MaxSpeedBonus * GetDiminishingRoll(treasureDeath);
+        var weaponSpeedMod = 1.0f - bonus;
 
         //Console.WriteLine($"WeaponSpeedMod: {weaponSpeedMod}");
 

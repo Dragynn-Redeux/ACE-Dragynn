@@ -9,7 +9,7 @@ namespace ACE.Server.Entity;
 public static class LevelScaling
 {
     /* Level scaling is active when two main conditions are met:
-     *  -A player has a Weakening Curse active from using a Stone of Shrouding.
+     *  -A player has Shrouded active from using a Stone of Shrouding.
      *  -The player is in combat with an enemy that is lower level than them.
      *
      * When level scaling is active, the following adjustments are made to the player and enemy:
@@ -24,9 +24,6 @@ public static class LevelScaling
      *   -Player resistance is scaled down.
      *  -During player heals on other players:
      *   -Player heal amount is scaled down based on the target's level.
-     *
-     *   NOTE: May need an additional modifier to add more difficulty to higher level players if imbues and other crafting are too good.
-     *   Handled previously with this formula: (float gapMod = 1f - (float)(levelGap / 10f) / 12.5f)
      */
 
     private static readonly ILogger _log = Log.ForContext(typeof(LevelScaling));
@@ -34,10 +31,10 @@ public static class LevelScaling
     private static readonly int[] AvgPlayerHealthPerTier = [25, 60, 120, 150, 180, 210, 250, 300, 350];
     private static readonly int[] AvgPlayerArmorWardPerTier = [50, 100, 200, 300, 400, 500, 600, 700, 800];
     private static readonly int[] AvgPlayerAttributePerTier = [125, 175, 200, 215, 230, 250, 270, 290, 300];
-    private static readonly int[] AvgPlayerAttackSkillPerTier = [75, 150, 175, 200, 225, 275, 350, 500, 700];
-    private static readonly int[] AvgPlayerDefenseSkillPerTier = [75, 150, 175, 200, 225, 275, 350, 500, 700];
-    private static readonly float[] AvgPlayerResistancePerTier = [1.0f, 0.9f, 0.9f, 0.85f, 0.85f, 0.8f, 0.8f, 0.75f, 0.75f];
-    private static readonly int[] AvgPlayerBoostPerTier = [10, 15, 20, 25, 30, 35, 40, 40, 40];
+    private static readonly int[] AvgPlayerAttackSkillPerTier = [10, 60, 90, 120, 150, 180, 225, 300, 500];
+    private static readonly int[] AvgPlayerDefenseSkillPerTier = [10, 60, 90, 120, 150, 180, 225, 300, 500];
+    private static readonly float[] AvgPlayerResistancePerTier = [1.0f, 1.0f, 0.9f, 0.9f, 0.85f, 0.8f, 0.8f, 0.75f, 0.75f];
+    private static readonly float[] AvgPlayerBoostPerTier = [5.0f, 7.5f, 12.5f, 17.5f, 22.5f, 27.5f, 32.5f, 37.5f, 42.5f];
 
     private static readonly int[] AvgMonsterArmorWardPerTier = [20, 45, 68, 101, 152, 228, 342, 513, 600];
     private static readonly int[] AvgMonsterHealthPerTier = [10, 75, 150, 250, 400, 600, 800, 1000, 2000 ];
@@ -111,42 +108,6 @@ public static class LevelScaling
         }
 
         return (float)statAtMonsterLevel / statAtPlayerLevel;
-    }
-
-    public static float GetMonsterDamageTakenTtkScalar(Creature player, Creature monster)
-    {
-        return 1.0f; // TODO: reassess if this is needed
-
-        if (!CanScalePlayer(player, monster))
-        {
-            return 1.0f;
-        }
-
-        if (player.Level == null)
-        {
-            _log.Error("LevelScaling.GetMonsterDamageTakenTtkScalar() - Player ({Player}) level is null. Scaling set to x1.0.", player.Name);
-            return 1.0f;
-        }
-
-        if (monster.Level == null)
-        {
-            _log.Error("LevelScaling.GetMonsterDamageTakenTtkScalar() - Monster ({Monster}) level is null. Scaling set to x1.0.", monster.Name);
-            return 1.0f;
-        }
-
-
-        var statAtPlayerLevel = GetTtkMonsterAtLevel(player.Level.Value);
-        var statAtMonsterLevel = GetTtkMonsterAtLevel(monster.Level.Value);
-
-        if (PropertyManager.GetBool("debug_level_scaling_system").Item)
-        {
-            Console.WriteLine(
-                $"\nGetMonsterDamageTakenTtkScalar(Player {player.Name}, Monster {monster.Name})"
-                + $"\n  statAtPlayerLevel: {statAtPlayerLevel}, statAtMonsterLevel: {statAtMonsterLevel}, scalarMod: {(float)statAtMonsterLevel / statAtPlayerLevel}"
-            );
-        }
-
-        return (float)statAtPlayerLevel / statAtMonsterLevel;
     }
 
     public static float GetMonsterArmorWardScalar(Creature player, Creature monster)
@@ -390,7 +351,7 @@ public static class LevelScaling
     // --- Private Get At-Level Helpers ---
     private static int GetPlayerHealthAtLevel(int level)
     {
-        GetRangeAndStatWeight(level, out var range, out var statweight, true);
+        GetRangeAndStatWeight(level, out var range, out var statweight, 0.5f);
 
         var stat =
             (AvgPlayerHealthPerTier[range + 1] - AvgPlayerHealthPerTier[range]) * statweight
@@ -401,7 +362,7 @@ public static class LevelScaling
 
     private static int GetPlayerArmorWardAtLevel(int level)
     {
-        GetRangeAndStatWeight(level, out var range, out var statweight, true);
+        GetRangeAndStatWeight(level, out var range, out var statweight, 0.0f);
 
         var stat =
             (AvgPlayerArmorWardPerTier[range + 1] - AvgPlayerArmorWardPerTier[range]) * statweight
@@ -412,7 +373,7 @@ public static class LevelScaling
 
     private static int GetPlayerAttributeAtLevel(int level)
     {
-        GetRangeAndStatWeight(level, out var range, out var statweight, true);
+        GetRangeAndStatWeight(level, out var range, out var statweight, 1.0f);
 
         var stat =
             (AvgPlayerAttributePerTier[range + 1] - AvgPlayerAttributePerTier[range]) * statweight
@@ -423,7 +384,7 @@ public static class LevelScaling
 
     private static int GetPlayerAttackSkillAtLevel(int level)
     {
-        GetRangeAndStatWeight(level, out var range, out var statweight, true);
+        GetRangeAndStatWeight(level, out var range, out var statweight, 0.5f);
 
         var stat =
             (AvgPlayerAttackSkillPerTier[range + 1] - AvgPlayerAttackSkillPerTier[range]) * statweight
@@ -434,7 +395,7 @@ public static class LevelScaling
 
     private static int GetPlayerDefenseSkillAtLevel(int level)
     {
-        GetRangeAndStatWeight(level, out var range, out var statweight, true);
+        GetRangeAndStatWeight(level, out var range, out var statweight, 0.5f);
 
         var stat =
             (AvgPlayerDefenseSkillPerTier[range + 1] - AvgPlayerDefenseSkillPerTier[range]) * statweight
@@ -445,7 +406,7 @@ public static class LevelScaling
 
     private static float GetPlayerResistanceAtLevel(int level)
     {
-        GetRangeAndStatWeight(level, out var range, out var statweight, true);
+        GetRangeAndStatWeight(level, out var range, out var statweight, 0.0f);
 
         var stat =
             (AvgPlayerResistancePerTier[range + 1] - AvgPlayerResistancePerTier[range]) * statweight
@@ -454,20 +415,20 @@ public static class LevelScaling
         return stat;
     }
 
-    private static int GetPlayerBoostAtLevel(int level)
+    private static float GetPlayerBoostAtLevel(int level)
     {
-        GetRangeAndStatWeight(level, out var range, out var statweight, true);
+        GetRangeAndStatWeight(level, out var range, out var statweight, 0.0f);
 
         var stat =
             (AvgPlayerBoostPerTier[range + 1] - AvgPlayerBoostPerTier[range]) * statweight
             + AvgPlayerBoostPerTier[range];
 
-        return (int)stat;
+        return stat;
     }
 
     private static int GetMonsterHealthAtLevel(int level)
     {
-        GetRangeAndStatWeight(level, out var range, out var statweight);
+        GetRangeAndStatWeight(level, out var range, out var statweight, 0.5f);
 
         var stat =
             (AvgMonsterHealthPerTier[range + 1] - AvgMonsterHealthPerTier[range]) * statweight
@@ -500,7 +461,7 @@ public static class LevelScaling
 
     private static int GetMonsterArmorWardAtLevel(int level)
     {
-        GetRangeAndStatWeight(level, out var range, out var statweight);
+        GetRangeAndStatWeight(level, out var range, out var statweight, 0.0f);
 
         var stat =
             (AvgMonsterArmorWardPerTier[range + 1] - AvgMonsterArmorWardPerTier[range]) * statweight
@@ -509,46 +470,44 @@ public static class LevelScaling
         return (int)stat;
     }
 
-    private static void GetRangeAndStatWeight(int level, out int range, out float statweight, bool player = false)
+    private static void GetRangeAndStatWeight(int level, out int range, out float statweight, float scaleWeight = 1.0f)
     {
-        // Use playerScalar mod to account for the fact that player's receive a large jump in stats the moment
+        // Use scaleWeight mod to account for the fact that player's receive a large jump in stats the moment
         // they equip a new tier of gear. Progression during a tier of gear won't get them close to the next tier's stats.
-        // Perhaps up to 50% of the way.
-        var playerScalar = player ? 0.5f : 1.0f;
 
         switch (level)
         {
             case < 10:
                 range = 0;
-                statweight = (level - 10.0f) / 9 * playerScalar;
+                statweight = (level - 10.0f) / 9 * scaleWeight;
                 break;
             case < 20:
                 range = 1;
-                statweight = (level - 10.0f) / 10 * playerScalar;
+                statweight = (level - 10.0f) / 10 * scaleWeight;
                 break;
             case < 30:
                 range = 2;
-                statweight = (level - 20.0f) / 10 * playerScalar;
+                statweight = (level - 20.0f) / 10 * scaleWeight;
                 break;
             case < 40:
                 range = 3;
-                statweight = (level - 30.0f) / 10 * playerScalar;
+                statweight = (level - 30.0f) / 10 * scaleWeight;
                 break;
             case < 50:
                 range = 4;
-                statweight = (level - 40.0f) / 10 * playerScalar;
+                statweight = (level - 40.0f) / 10 * scaleWeight;
                 break;
             case < 75:
                 range = 5;
-                statweight = (level - 50.0f) / 25 * playerScalar;
+                statweight = (level - 50.0f) / 25 * scaleWeight;
                 break;
             case < 100:
                 range = 6;
-                statweight = (level - 75.0f) / 25 * playerScalar;
+                statweight = (level - 75.0f) / 25 * scaleWeight;
                 break;
             default:
                 range = 7;
-                statweight = (level - 100.0f) / 26 * playerScalar;
+                statweight = (level - 100.0f) / 26 * scaleWeight;
                 break;
         }
 
@@ -567,7 +526,7 @@ public static class LevelScaling
             return false;
         }
 
-        if (!player.EnchantmentManager.HasSpell((uint)SpellId.CurseWeakness1))
+        if (!player.EnchantmentManager.HasSpell((uint)SpellId.Shrouded))
         {
             return false;
         }
