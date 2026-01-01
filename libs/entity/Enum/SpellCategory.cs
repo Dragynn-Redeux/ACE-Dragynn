@@ -796,5 +796,7 @@ public enum SpellCategory : uint
     RatingMagicDefense = 798,
     Shrouded = 799,
     VoidRestorationPenalty = 800,
-    SigilTrinketShield = 801
+    SigilTrinketShield = 801,
+    NewcomersFortitude = 802,
+    NewcomersPersistence = 803,
 }

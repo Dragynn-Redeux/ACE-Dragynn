@@ -1393,7 +1393,7 @@ partial class Player
 
         var staminaCost = Math.Max(baseCost, 1);
 
-        if (GetEquippedCombatFocus() is { CombatFocusType: (int)CombatFocusType.Spellsword})
+        if (GetEquippedCombatFocus() is { CombatFocusTypeId: (int)CombatFocusType.Spellsword})
         {
             staminaCost = (int)Math.Round(staminaCost * 0.5f);
             var manaCost = staminaCost;

@@ -1524,7 +1524,7 @@ partial class Player
         switch (combatAbility)
         {
             case CombatAbility.Phalanx:
-                if (GetEquippedCombatFocus() is not {CombatFocusType: (int)CombatFocusType.Warrior})
+                if (GetEquippedCombatFocus() is not {CombatFocusTypeId: (int)CombatFocusType.Warrior})
                 {
                     Session.Network.EnqueueSend(
                         new GameMessageSystemChat(
@@ -1536,7 +1536,7 @@ partial class Player
                 }
                 break;
             case CombatAbility.Provoke:
-                if (GetEquippedCombatFocus() is not {CombatFocusType:
+                if (GetEquippedCombatFocus() is not {CombatFocusTypeId:
                         (int)CombatFocusType.Warrior
                         or (int)CombatFocusType.Spellsword
                         or (int)CombatFocusType.Blademaster})
@@ -1551,7 +1551,7 @@ partial class Player
                 }
                 break;
             case CombatAbility.Riposte:
-                if (GetEquippedCombatFocus() is not {CombatFocusType:
+                if (GetEquippedCombatFocus() is not {CombatFocusTypeId:
                         (int)CombatFocusType.Warrior
                         or (int)CombatFocusType.Spellsword
                         or (int)CombatFocusType.Blademaster})
@@ -1566,7 +1566,7 @@ partial class Player
                 }
                 break;
             case CombatAbility.WeaponMaster:
-                if (GetEquippedCombatFocus() is not {CombatFocusType: (int)CombatFocusType.Blademaster})
+                if (GetEquippedCombatFocus() is not {CombatFocusTypeId: (int)CombatFocusType.Blademaster})
                 {
                     Session.Network.EnqueueSend(
                         new GameMessageSystemChat(
@@ -1578,7 +1578,7 @@ partial class Player
                 }
                 break;
             case CombatAbility.Fury:
-                if (GetEquippedCombatFocus() is not {CombatFocusType:
+                if (GetEquippedCombatFocus() is not {CombatFocusTypeId:
                         (int)CombatFocusType.Blademaster
                         or (int)CombatFocusType.Warrior
                         or (int)CombatFocusType.Archer})
@@ -1593,7 +1593,7 @@ partial class Player
                 }
                 break;
             case CombatAbility.Relentless:
-                if (GetEquippedCombatFocus() is not {CombatFocusType:
+                if (GetEquippedCombatFocus() is not {CombatFocusTypeId:
                         (int)CombatFocusType.Blademaster
                         or (int)CombatFocusType.Warrior
                         or (int)CombatFocusType.Archer})
@@ -1608,7 +1608,7 @@ partial class Player
                 }
                 break;
             case CombatAbility.Multishot:
-                if (GetEquippedCombatFocus() is not {CombatFocusType: (int)CombatFocusType.Archer})
+                if (GetEquippedCombatFocus() is not {CombatFocusTypeId: (int)CombatFocusType.Archer})
                 {
                     Session.Network.EnqueueSend(
                         new GameMessageSystemChat(
@@ -1620,7 +1620,7 @@ partial class Player
                 }
                 break;
             case CombatAbility.SteadyStrike:
-                if (GetEquippedCombatFocus() is not {CombatFocusType:
+                if (GetEquippedCombatFocus() is not {CombatFocusTypeId:
                         (int)CombatFocusType.Archer
                         or (int)CombatFocusType.Blademaster
                         or (int)CombatFocusType.Vagabond})
@@ -1635,7 +1635,7 @@ partial class Player
                 }
                 break;
             case CombatAbility.ManaBarrier:
-                if (GetEquippedCombatFocus() is not {CombatFocusType:
+                if (GetEquippedCombatFocus() is not {CombatFocusTypeId:
                         (int)CombatFocusType.Sorcerer
                         or (int)CombatFocusType.Vagabond
                         or (int)CombatFocusType.Spellsword})
@@ -1650,7 +1650,7 @@ partial class Player
                 }
                 break;
             case CombatAbility.EvasiveStance:
-                if (GetEquippedCombatFocus() is not {CombatFocusType:
+                if (GetEquippedCombatFocus() is not {CombatFocusTypeId:
                         (int)CombatFocusType.Blademaster
                         or (int)CombatFocusType.Archer
                         or (int)CombatFocusType.Vagabond})
@@ -1665,7 +1665,7 @@ partial class Player
                 }
                 break;
             case CombatAbility.Vanish:
-                if (GetEquippedCombatFocus() is not {CombatFocusType: (int)CombatFocusType.Vagabond})
+                if (GetEquippedCombatFocus() is not {CombatFocusTypeId: (int)CombatFocusType.Vagabond})
                 {
                     Session.Network.EnqueueSend(
                         new GameMessageSystemChat(
@@ -1677,7 +1677,7 @@ partial class Player
                 }
                 break;
             case CombatAbility.Smokescreen:
-                if (GetEquippedCombatFocus() is not {CombatFocusType:
+                if (GetEquippedCombatFocus() is not {CombatFocusTypeId:
                         (int)CombatFocusType.Vagabond
                         or (int)CombatFocusType.Archer
                         or (int)CombatFocusType.Sorcerer})
@@ -1692,7 +1692,7 @@ partial class Player
                 }
                 break;
             case CombatAbility.Backstab:
-                if (GetEquippedCombatFocus() is not {CombatFocusType:
+                if (GetEquippedCombatFocus() is not {CombatFocusTypeId:
                         (int)CombatFocusType.Vagabond
                         or (int)CombatFocusType.Archer
                         or (int)CombatFocusType.Sorcerer})
@@ -1707,7 +1707,7 @@ partial class Player
                 }
                 break;
             case CombatAbility.Overload:
-                if (GetEquippedCombatFocus() is not {CombatFocusType: (int)CombatFocusType.Sorcerer})
+                if (GetEquippedCombatFocus() is not {CombatFocusTypeId: (int)CombatFocusType.Sorcerer})
                 {
                     Session.Network.EnqueueSend(
                         new GameMessageSystemChat(
@@ -1719,7 +1719,7 @@ partial class Player
                 }
                 break;
             case CombatAbility.Battery:
-                if (GetEquippedCombatFocus() is not {CombatFocusType:
+                if (GetEquippedCombatFocus() is not {CombatFocusTypeId:
                         (int)CombatFocusType.Sorcerer
                         or (int)CombatFocusType.Vagabond
                         or (int)CombatFocusType.Spellsword})
@@ -1734,7 +1734,7 @@ partial class Player
                 }
                 break;
             case CombatAbility.EnchantedBlade:
-                if (GetEquippedCombatFocus() is not {CombatFocusType: (int)CombatFocusType.Spellsword})
+                if (GetEquippedCombatFocus() is not {CombatFocusTypeId: (int)CombatFocusType.Spellsword})
                 {
                     Session.Network.EnqueueSend(
                         new GameMessageSystemChat(
@@ -1746,7 +1746,7 @@ partial class Player
                 }
                 break;
             case CombatAbility.Aegis:
-                if (GetEquippedCombatFocus() is not {CombatFocusType:
+                if (GetEquippedCombatFocus() is not {CombatFocusTypeId:
                         (int)CombatFocusType.Spellsword
                         or (int)CombatFocusType.Sorcerer
                         or (int)CombatFocusType.Warrior})
@@ -1761,7 +1761,7 @@ partial class Player
                 }
                 break;
             case CombatAbility.Reflect:
-                if (GetEquippedCombatFocus() is not {CombatFocusType:
+                if (GetEquippedCombatFocus() is not {CombatFocusTypeId:
                         (int)CombatFocusType.Spellsword
                         or (int)CombatFocusType.Sorcerer
                         or (int)CombatFocusType.Warrior})

@@ -6468,6 +6468,8 @@ public enum SpellId : uint
     SigilTrinketDamageBoost5,
     SigilTrinketDamageBoost6,
     SigilTrinketDamageBoost7,
+    NewcomersFortitude,
+    NewcomersPersistence,
 
     NumSpells = 8192,
 

@@ -108,6 +108,25 @@ public class LandblockStruct
         Init();
         Height = landblock.Height;
         Terrain = landblock.Terrain;
+        
+        // Validate landblock data before generating
+        var expectedHeightCount = 81; // 9x9 vertices for a standard landblock
+        if (Height == null || Height.Count == 0)
+        {
+            throw new InvalidOperationException(
+                $"CellLandblock {landblock.Id:X8} has no height data. " +
+                $"The DAT file may be missing this landblock or the data is corrupted."
+            );
+        }
+        
+        if (Height.Count != expectedHeightCount)
+        {
+            throw new InvalidOperationException(
+                $"CellLandblock {landblock.Id:X8} has invalid height data. " +
+                $"Expected {expectedHeightCount} height values but found {Height.Count}."
+            );
+        }
+        
         // originally called from LScape.update_block()
         Generate(landblock.Id, 1, LandDefs.Direction.Unknown);
     }

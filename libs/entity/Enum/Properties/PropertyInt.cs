@@ -748,7 +748,7 @@ public enum PropertyInt : ushort
     ArmorWeightClass = 393,
     GearMaxStamina = 394,
     GearMaxMana = 395,
-    CombatFocusType = 396,
+    CombatFocusTypeId = 396,
     WeightClassReqAmount = 397,
     ArmorStyle = 398,
     WeaponSubtype = 399,
@@ -870,6 +870,7 @@ public enum PropertyInt : ushort
     MonsterRank = 511,
     CombatFocusSkill3SpellRemoved = 512,
     CombatFocusSkill3SpellAdded = 513,
+    CombatFocusPrestigeVersionId = 514,
 
     [ServerOnly]
     PCAPRecordedAutonomousMovement = 8007,

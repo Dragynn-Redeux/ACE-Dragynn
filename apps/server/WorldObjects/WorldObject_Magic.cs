@@ -3495,9 +3495,7 @@ partial class WorldObject
                 spell.DamageType
             );
 
-            var baseAttributeDamageMod = creatureSource.GetAttributeMod(creatureSource.GetEquippedWeapon(), true);
-            var halfOfBonus = (baseAttributeDamageMod - 1.0f) * 0.5f;
-            attributeDamageMod = 1.0f + halfOfBonus;
+            attributeDamageMod = creatureSource.GetAttributeMod(creatureSource.GetEquippedWeapon(), true);
         }
 
         enchantment_statModVal *= elementalDamageMod * attributeDamageMod * damageRatingMod;

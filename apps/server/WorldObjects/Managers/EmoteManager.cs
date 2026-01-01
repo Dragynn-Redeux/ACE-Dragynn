@@ -540,9 +540,13 @@ public class EmoteManager
                     {
                         player.TryConsumeFromInventoryWithNetworking(wo, 1);
                     }
-                    else
+                    else if (wo?.StackSize == 1)
                     {
                         player.TryConsumeFromInventoryWithNetworking(wo);
+                    }
+                    else
+                    {
+                        WorldObject.DeleteObject();
                     }
                 }
                 else

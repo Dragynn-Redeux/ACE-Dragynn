@@ -12,7 +12,7 @@ partial class Creature
     private static bool DebugArchetypeSystem = false;
 
     // Stat ranges by tier
-    private static readonly int[] enemyHealth = { 10, 75, 150, 250, 400, 600, 800, 1000, 2000 };
+    private static readonly int[] enemyHealth = { 10, 100, 200, 300, 500, 750, 1000, 1500, 2000 };
     private static readonly int[] enemyStaminaMana = { 20, 100, 150, 225, 325, 450, 650, 950, 1250 };
     private static readonly int[] enemyHealthRegen = { 1, 2, 5, 10, 20, 30, 40, 50, 100 };
     private static readonly int[] enemyStaminaManaRegen = { 1, 2, 5, 10, 15, 20, 25, 30, 50 };
@@ -25,7 +25,7 @@ partial class Creature
 
     private static readonly float[] enemyDamage = { 1.0f, 2.0f, 3.0f, 4.5f, 6.0f, 7.0f, 8.0f, 9.0f, 10.0f }; // percentage of player health to be taken per second after all stats (of player and enemy) are considered
 
-    private static readonly int[] avgPlayerHealth = { 25, 60, 120, 150, 180, 210, 250, 300, 350 };
+    private static readonly int[] avgPlayerHealth = { 75, 110, 170, 200, 230, 260, 300, 350, 400 };
     private static readonly float[] avgPlayerArmorReduction = { 0.75f, 0.57f, 0.40f, 0.31f, 0.25f, 0.21f, 0.18f, 0.16f, 0.1f };
     private static readonly float[] avgPlayerLifeProtReduction = { 1.0f, 1.0f, 0.9f, 0.9f, 0.85f, 0.8f, 0.8f, 0.75f, 0.75f };
     private static readonly int[] avgPlayerPhysicalMagicDefense = { 10, 60, 90, 120, 150, 180, 225, 300, 500 };
