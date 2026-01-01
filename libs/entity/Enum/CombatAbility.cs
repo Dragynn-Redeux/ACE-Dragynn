@@ -10,7 +10,7 @@ public enum CombatAbility
     Riposte,
     Fury,
     Backstab,
-    SteadyShot,
+    SteadyStrike,
     Smokescreen,
     Relentless,
     Overload,

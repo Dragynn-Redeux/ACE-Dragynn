@@ -260,13 +260,11 @@ partial class Creature
 
         var augBonus = 0;
         var lumAugBonus = 0;
-        var specBonus = 0;
 
         if (this is Player player)
         {
             augBonus = player.AugmentationDamageReduction * 3;
             lumAugBonus = player.LumAugDamageReductionRating;
-            specBonus = GetSpecDefenseBonus(combatType);
         }
 
         return damageResistRating
@@ -274,8 +272,7 @@ partial class Creature
             + enchantments
             - netherDotDamageRating
             + augBonus
-            + lumAugBonus
-            + specBonus;
+            + lumAugBonus;
     }
 
     public float GetDamageResistRatingMod(CombatType? combatType = null, bool directDamage = true)

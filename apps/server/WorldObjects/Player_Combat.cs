@@ -160,11 +160,14 @@ partial class Player
 
         var damageEvent = DamageEvent.CalculateDamage(this, target, damageSource, null, null, cleaveHits);
 
-        CheckForSigilTrinketOnAttackEffects(target, damageEvent, Skill.TwoHandedCombat, (int)SigilTrinketTwohandedCombatEffect.Aggression);
-        CheckForSigilTrinketOnAttackEffects(target, damageEvent, Skill.Shield, (int)SigilTrinketShieldEffect.Aggression);
-        CheckForSigilTrinketOnAttackEffects(target, damageEvent, Skill.DualWield, (int)SigilTrinketDualWieldEffect.Assailment, damageEvent.IsCritical);
-        CheckForSigilTrinketOnAttackEffects(target, damageEvent, Skill.Thievery, (int)SigilTrinketThieveryEffect.Treachery, damageEvent.IsCritical);
-        CheckForSigilTrinketOnAttackEffects(target, damageEvent, Skill.Deception, (int)SigilTrinketDeceptionEffect.Avoidance);
+        CheckForSigilTrinketOnAttackEffects(target, damageEvent, Skill.TwoHandedCombat, SigilTrinketShieldTwohandedCombatEffect.Aggression);
+        CheckForSigilTrinketOnAttackEffects(target, damageEvent, Skill.Shield, SigilTrinketShieldTwohandedCombatEffect.Aggression);
+        CheckForSigilTrinketOnAttackEffects(target, damageEvent, Skill.DualWield, SigilTrinketDualWieldMissileEffect.Assailment, damageEvent.IsCritical);
+        CheckForSigilTrinketOnAttackEffects(target, damageEvent, Skill.Bow, SigilTrinketDualWieldMissileEffect.Assailment, damageEvent.IsCritical);
+        CheckForSigilTrinketOnAttackEffects(target, damageEvent, Skill.DualWield, SigilTrinketDualWieldMissileEffect.SwiftKiller);
+        CheckForSigilTrinketOnAttackEffects(target, damageEvent, Skill.Bow, SigilTrinketDualWieldMissileEffect.SwiftKiller);
+        CheckForSigilTrinketOnAttackEffects(target, damageEvent, Skill.Thievery, SigilTrinketThieveryEffect.Treachery, damageEvent.IsCritical);
+        CheckForSigilTrinketOnAttackEffects(target, damageEvent, Skill.Deception, SigilTrinketDeceptionEffect.Avoidance);
 
         target.OnAttackReceived(
             this,
@@ -1360,7 +1363,7 @@ partial class Player
     {
         var weaponTier = Math.Max(GetMainHandWeaponTier(), GetOffHandWeaponTier());
         var powerAccuracyLevel = GetEquippedMissileWeapon() != null ? AccuracyLevel : PowerLevel;
-        var weightClassPenalty = (float)(1 + GetArmorResourcePenalty() ?? 0);
+        var weightClassPenalty = (float)(1 + (GetArmorResourcePenalty() ?? 0));
         var baseCost = StaminaTable.GetStaminaCost(weaponTier, attackAnimLength, powerAccuracyLevel, weightClassPenalty);
 
         var staminaCostReductionMod = GetStaminaReductionMod(weapon);
@@ -1372,7 +1375,7 @@ partial class Player
         var ripostePenaltyMod = RiposteIsActive ? 0.25f : 0.0f;
         var furyPenaltyMod = FuryEnrageIsActive ? 0.25f : 0.0f;
         var multiShotPenaltyMod = MultiShotIsActive ? 0.25f : 0.0f;
-        var steadyShotPenaltyMod = SteadyShotIsActive ? 0.25f : 0.0f;
+        var steadyStrikePenaltyMod = SteadyStrikeIsActive ? 0.25f : 0.0f;
         var smokescreenPenaltyMod = SmokescreenIsActive ? 0.25f : 0.0f;
         var backstabPenaltyMod = BackstabIsActive ? 0.25f : 0.0f;
         var abilityPenaltyMod = 1.0f
@@ -1382,13 +1385,33 @@ partial class Player
                                 + ripostePenaltyMod
                                 + furyPenaltyMod
                                 + multiShotPenaltyMod
-                                + steadyShotPenaltyMod
+                                + steadyStrikePenaltyMod
                                 + smokescreenPenaltyMod
                                 + backstabPenaltyMod;
 
         baseCost *= staminaCostReductionMod * abilityPenaltyMod;
 
         var staminaCost = Math.Max(baseCost, 1);
+
+        if (GetEquippedCombatFocus() is { CombatFocusTypeId: (int)CombatFocusType.Spellsword})
+        {
+            staminaCost = (int)Math.Round(staminaCost * 0.5f);
+            var manaCost = staminaCost;
+
+            if (BatteryDischargeIsActive)
+            {
+                manaCost = 0;
+            }
+            else if (BatteryStanceIsActive)
+            {
+                var batteryMod = ManaChargeMeter * 0.5f;
+                manaCost = (int)Math.Round(manaCost * (1.0f - batteryMod));
+            }
+
+            UpdateVitalDelta(Mana, (int)-manaCost);
+
+            return (int)Math.Round(staminaCost);
+        }
 
         return (int)Math.Round(staminaCost);
     }
@@ -1412,14 +1435,14 @@ partial class Player
         }
 
         // to account for the combat run debuff, if run is not spec we use half the expected skill
-        var expectedRunSkill = skillRun.AdvancementClass is SkillAdvancementClass.Specialized? (float)(Level * 5) : (float)(Level * 2.5);
+        var expectedRunSkill = skillRun.AdvancementClass is SkillAdvancementClass.Specialized ? (float)(Level * 5) : (float)(Level * 2.5);
         var expectedJumpSkill = (float)(Level * 5);
 
         var baseRunMod = skillRun.AdvancementClass is SkillAdvancementClass.Specialized ? 0.25f : 0.5f;
         var baseJumpMod = skillJump.AdvancementClass is SkillAdvancementClass.Specialized ? 0.25f : 0.5f;
 
-        var skillModifierRun = Math.Max(expectedRunSkill / currentSkillRun, baseRunMod);
-        var skillModifierJump = Math.Max(expectedJumpSkill / currentSkillJump, baseJumpMod);
+        var skillModifierRun = Math.Max(expectedRunSkill / currentSkillRun * baseRunMod, baseRunMod);
+        var skillModifierJump = Math.Max(expectedJumpSkill / currentSkillJump * baseJumpMod, baseJumpMod);
 
         // Use whichever skill prevents more stamina loss
         return Math.Min(skillModifierRun, skillModifierJump);

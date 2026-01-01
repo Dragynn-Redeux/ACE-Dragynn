@@ -1388,7 +1388,7 @@ partial class Creature
             return;
         }
 
-        player.QuestManager.Stamp($"Quest{nearestTown}");
+        player.QuestManager.Stamp($"Quest{simplifiedTownName}");
     }
 
     private uint GetCreatureTier()
@@ -1408,7 +1408,7 @@ partial class Creature
 
     private void OnDeath_HandleKillTracking(DamageHistoryInfo lastDamager)
     {
-        if (this is Player && lastDamager.Name is not null)
+        if (this is Player && lastDamager is { Name: not null})
         {
             //var creatureName = lastDamager.Name.Replace(" ", "");
             QuestManager.Stamp($"KilledByTracking-{lastDamager.Name}");

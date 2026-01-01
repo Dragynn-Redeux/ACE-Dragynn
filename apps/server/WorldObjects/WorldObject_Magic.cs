@@ -30,6 +30,7 @@ partial class WorldObject
 {
     public float SigilTrinketSpellDamageReduction;
     private bool _isSigilTrinketSpell = false;
+    private PartialEvasion _partialEvasion;
 
     /// <summary>
     /// Instantly casts a spell for a WorldObject (ie. spell traps)
@@ -203,11 +204,30 @@ partial class WorldObject
             }
         }
 
-        // If playerDefender has Phalanx active, 50% chance to convert a full hit into a partial hit.
-        if (targetPlayer is { PhalanxIsActive: true } && ThreadSafeRandom.Next(0.0f, 1.0f) > 0.5f)
+        // If playerDefender has Phalanx active, 25-50% chance to convert a full hit into a partial hit, depending on shield size.
+        if (targetPlayer is { PhalanxIsActive: true } && (targetPlayer.GetEquippedShield() is not null || targetPlayer.GetEquippedWeapon() is { IsTwoHanded: true}))
         {
-            partialResist = PartialEvasion.Some;
-            return false;
+            var phalanxChance = 0.25;
+
+            if (targetPlayer.GetEquippedShield() is not null)
+            {
+                phalanxChance = targetPlayer.GetEquippedShield().ArmorStyle switch
+                {
+                    (int)ACE.Entity.Enum.ArmorStyle.CovenantShield => 0.5f,
+                    (int)ACE.Entity.Enum.ArmorStyle.TowerShield => 0.45f,
+                    (int)ACE.Entity.Enum.ArmorStyle.LargeShield => 0.4f,
+                    (int)ACE.Entity.Enum.ArmorStyle.StandardShield => 0.35f,
+                    (int)ACE.Entity.Enum.ArmorStyle.SmallShield => 0.3f,
+                    (int)ACE.Entity.Enum.ArmorStyle.Buckler => 0.3f,
+                    _ => 0.25f
+                };
+            }
+
+            if (ThreadSafeRandom.Next(0.0f, 1.0f) < phalanxChance)
+            {
+                partialResist = PartialEvasion.Some;
+                return false;
+            }
         }
 
         partialResist = PartialEvasion.None;
@@ -229,6 +249,7 @@ partial class WorldObject
     )
     {
         partialResist = PartialEvasion.None;
+        _partialEvasion = partialResist;
 
         // fix hermetic void?
         if (!spell.IsResistable && spell.Category != SpellCategory.ManaConversionModLowering || spell.IsSelfTargeted)
@@ -269,6 +290,11 @@ partial class WorldObject
             // Retrieve caster's skill level in the Magic School
             var magicSchool = spell.School;
 
+            if (magicSchool is MagicSchool.VoidMagic)
+            {
+                magicSchool = MagicSchool.LifeMagic;
+            }
+
             // Retrieve the casters Magic mods from worn armor
             if (magicSchool is MagicSchool.WarMagic or MagicSchool.LifeMagic)
             {
@@ -280,10 +306,14 @@ partial class WorldObject
             // Retrieve caster's secondary attribute mod (1% per 20 attributes)
             var secondaryAttributeMod = casterCreature.Focus.Current * 0.0005 + 1;
 
-            // if enchanted blade spell, average caster's skill with the weapon's spellcraft
-            if (weaponSpellcraft > magicSkill)
+            // if proc spell or enchanted blade spell
+            if (weaponSpellcraft is not null)
             {
-                magicSkill = (uint)((magicSkill + weaponSpellcraft) * 0.5);
+                weaponSpellcraft += (int)CheckForArcaneLoreSpecSpellcraftBonus(casterCreature);
+
+                var spellcraftBonus = (uint)(weaponSpellcraft * 0.1);
+
+                magicSkill += spellcraftBonus;
             }
 
             if (weaponAttackMod is not null)
@@ -311,12 +341,11 @@ partial class WorldObject
                         ? wielder.GetModdedWarMagicSkill()
                         : wielder.GetModdedLifeMagicSkill();
 
-                spellcraft = CheckForArcaneLoreSpecSpellcraftBonus(wielder, spellcraft);
+                spellcraft += CheckForArcaneLoreSpecSpellcraftBonus(wielder);
 
-                if (spellcraft > magicSkill)
-                {
-                    magicSkill = (uint)((spellcraft + casterMagicSkill) * 0.5);
-                }
+                var spellcraftBonus = (uint)(spellcraft * 0.1);
+
+                magicSkill = casterMagicSkill + spellcraftBonus;
             }
         }
         else if (caster.Wielder is Creature wielder)
@@ -340,6 +369,7 @@ partial class WorldObject
         var resisted = MagicDefenseCheck(magicSkill, difficulty, out var pResist, out var resistChance, targetPlayer);
 
         partialResist = pResist;
+        _partialEvasion = pResist;
 
         if (targetPlayer != null)
         {
@@ -457,18 +487,23 @@ partial class WorldObject
     }
 
     /// <summary>
-    /// SPEC BONUS - Arcane Lore: Spellcraft averaged with Arcane Lore
+    /// SPEC BONUS - Arcane Lore: 50% of skill is added to Spellcraft
     /// </summary>
-    private static uint CheckForArcaneLoreSpecSpellcraftBonus(Creature wielder, uint spellcraft)
+    public static uint CheckForArcaneLoreSpecSpellcraftBonus(Creature wielder)
     {
+        if (wielder == null)
+        {
+            return 0;
+        }
+
         var arcaneLore = wielder.GetCreatureSkill(Skill.ArcaneLore);
 
         if (arcaneLore.AdvancementClass == SkillAdvancementClass.Specialized)
         {
-            spellcraft = (uint)Math.Max((spellcraft + arcaneLore.Current) * 0.5f, spellcraft);
+            return (uint)(arcaneLore.Current * 0.5);
         }
 
-        return spellcraft;
+        return 0;
     }
 
     private static void ShowResistInfo(
@@ -566,17 +601,17 @@ partial class WorldObject
                 switch (spell.School)
                 {
                     case MagicSchool.LifeMagic:
-                        player?.CheckForSigilTrinketOnCastEffects(targetCreature, spell, true, Skill.LifeMagic, (int)SigilTrinketLifeMagicEffect.ScarabIntensity, null, false, _isSigilTrinketSpell);
-                        player?.CheckForSigilTrinketOnCastEffects(targetCreature, spell, true, Skill.LifeMagic, (int)SigilTrinketLifeMagicEffect.ScarabShield, null, false, _isSigilTrinketSpell);
-                        player?.CheckForSigilTrinketOnCastEffects(targetCreature, spell, true, Skill.LifeMagic, (int)SigilTrinketLifeMagicEffect.ScarabCastProt, null, false, _isSigilTrinketSpell);
-                        player?.CheckForSigilTrinketOnCastEffects(targetCreature, spell, true, Skill.LifeMagic, (int)SigilTrinketLifeMagicEffect.ScarabCastVuln, null, false, _isSigilTrinketSpell);
-                        player?.CheckForSigilTrinketOnCastEffects(targetCreature, spell, true, Skill.LifeMagic, (int)SigilTrinketLifeMagicEffect.ScarabCastItemBuff, null, false, _isSigilTrinketSpell);
-                        player?.CheckForSigilTrinketOnCastEffects(targetCreature, spell, true, Skill.LifeMagic, (int)SigilTrinketLifeMagicEffect.ScarabCastVitalRate, null, false, _isSigilTrinketSpell);
+                        player?.CheckForSigilTrinketOnCastEffects(targetCreature, spell, true, Skill.LifeMagic, SigilTrinketLifeWarMagicEffect.Intensity, null, false, _isSigilTrinketSpell);
+                        player?.CheckForSigilTrinketOnCastEffects(targetCreature, spell, true, Skill.LifeMagic, SigilTrinketLifeWarMagicEffect.Shielding, null, false, _isSigilTrinketSpell);
+                        player?.CheckForSigilTrinketOnCastEffects(targetCreature, spell, true, Skill.LifeMagic, SigilTrinketLifeMagicEffect.CastProt, null, false, _isSigilTrinketSpell);
+                        player?.CheckForSigilTrinketOnCastEffects(targetCreature, spell, true, Skill.LifeMagic, SigilTrinketLifeMagicEffect.CastVuln, null, false, _isSigilTrinketSpell);
+                        player?.CheckForSigilTrinketOnCastEffects(targetCreature, spell, true, Skill.LifeMagic, SigilTrinketLifeMagicEffect.CastItemBuff, null, false, _isSigilTrinketSpell);
+                        player?.CheckForSigilTrinketOnCastEffects(targetCreature, spell, true, Skill.LifeMagic, SigilTrinketLifeMagicEffect.CastVitalRate, null, false, _isSigilTrinketSpell);
                         break;
                     case MagicSchool.WarMagic:
-                        player?.CheckForSigilTrinketOnCastEffects(targetCreature, spell, true, Skill.WarMagic, (int)SigilTrinketWarMagicEffect.ScarabIntensity, null, false, _isSigilTrinketSpell);
-                        player?.CheckForSigilTrinketOnCastEffects(targetCreature, spell, true, Skill.WarMagic, (int)SigilTrinketWarMagicEffect.ScarabShield, null, false, _isSigilTrinketSpell);
-                        player?.CheckForSigilTrinketOnCastEffects(targetCreature, spell, true, Skill.WarMagic, (int)SigilTrinketWarMagicEffect.ScarabDuplicate, null, false, _isSigilTrinketSpell);
+                        player?.CheckForSigilTrinketOnCastEffects(targetCreature, spell, true, Skill.WarMagic, SigilTrinketLifeWarMagicEffect.Intensity, null, false, _isSigilTrinketSpell);
+                        player?.CheckForSigilTrinketOnCastEffects(targetCreature, spell, true, Skill.WarMagic, SigilTrinketLifeWarMagicEffect.Shielding, null, false, _isSigilTrinketSpell);
+                        player?.CheckForSigilTrinketOnCastEffects(targetCreature, spell, true, Skill.WarMagic, SigilTrinketWarMagicEffect.Duplicate, null, false, _isSigilTrinketSpell);
                         break;
                 }
             }
@@ -592,6 +627,15 @@ partial class WorldObject
                     GenerateSupportSpellThreat(spell, targetCreature);
                 }
 
+                var playerCaster = this as Player;
+
+                if (playerCaster is { OverloadStanceIsActive: true } or { BatteryStanceIsActive: true } &&
+                    spell.School is MagicSchool.VoidMagic &&
+                    targetCreature != playerCaster)
+                {
+                    playerCaster.IncreaseChargedMeter(spell, fromProc);
+                }
+                
                 // TODO: replace with some kind of 'rootOwner unless equip' concept?
                 if (itemCaster != null && (equip || itemCaster is Gem || itemCaster is Food))
                 {
@@ -617,7 +661,7 @@ partial class WorldObject
                     GenerateSupportSpellThreat(spell, targetCreature);
                 }
 
-                HandleCastSpell_Transfer(spell, targetCreature, showMsg, weapon);
+                HandleCastSpell_Transfer(spell, targetCreature, showMsg, weapon, fromProc);
                 break;
 
             case SpellType.Projectile:
@@ -696,7 +740,7 @@ partial class WorldObject
             return;
         }
 
-        if (spell.IsSelfTargeted || spell.Id == 5206) // Surge of Protection
+        if (!spell.IsFellowshipSpell && (spell.IsSelfTargeted || spell.Id == 5206)) // Surge of Protection
         {
             target = caster;
         }
@@ -728,8 +772,9 @@ partial class WorldObject
     )
     {
         // weird itemCaster -> caster collapsing going on here -- fixme
-
+        
         var player = this as Player;
+        var targetCreature = target as Creature;
 
         var aetheriaProc = false;
         var cloakProc = false;
@@ -772,7 +817,7 @@ partial class WorldObject
 
             if (addResult.Enchantment.StatModValue < 0 && targetPlayerWard > 0)
             {
-                //Console.WriteLine($"StatModValue Before: {addResult.Enchantment.StatModType} {addResult.Enchantment.StatModValue}\n" +
+                //Console.WriteLine($"StatModValue Before: {addResult.Enchantment.StatModType} {addResult.Enchantment.StatModValue} {addResult.Enchantment.Duration}\n" +
                 //    $" -Target Ward Level: {targetPlayer.GetWardLevel()}");
 
                 var ignoreWardMod = 1.0f;
@@ -789,11 +834,13 @@ partial class WorldObject
                     ignoreWardMod *= 1.0f - Jewel.GetJewelEffectMod(player, PropertyInt.GearWardPen, "WardPen");
                 }
 
-                var wardMod = GetWardMod(caster as Creature, targetPlayer, ignoreWardMod) / 10;
+                var wardMod = GetWardMod(caster as Creature, targetPlayer, ignoreWardMod);
 
-                addResult.Enchantment.StatModValue *= wardMod;
+                wardMod += (1 - wardMod) * 0.5f;
+
+                //addResult.Enchantment.StatModValue *= wardMod;
                 addResult.Enchantment.Duration *= wardMod;
-                //Console.WriteLine($"StatModValue After: {addResult.Enchantment.StatModType} {addResult.Enchantment.StatModValue}");
+                //Console.WriteLine($"StatModValue After: {addResult.Enchantment.StatModType} {addResult.Enchantment.StatModValue} {addResult.Enchantment.Duration}");
             }
         }
 
@@ -830,18 +877,29 @@ partial class WorldObject
 
             if (casterCheck || target == this || caster != target)
             {
+                var chargedPercent = Math.Round(player.ManaChargeMeter * 100);
+                var chargedMsg = player is { OverloadStanceIsActive: true } or { BatteryStanceIsActive: true } ? $"{chargedPercent}% Charged! " : "";
+
+                chargedMsg = player switch
+                {
+                    { OverloadDischargeIsActive: true } => "Overload Discharge! ",
+                    { BatteryDischargeIsActive: true } => "Battery Discharge! ",
+                    _ => chargedMsg
+                };
+
                 var casterName = casterCheck ? "You" : caster.Name;
                 var targetName = target.Name;
                 if (target == this)
                 {
                     targetName = casterCheck ? "yourself" : "you";
+                    chargedMsg = "";
                 }
 
                 if (showMsg)
                 {
                     player.SendChatMessage(
                         player,
-                        $"{casterName} cast {spell.Name} on {targetName}{suffix}",
+                        $"{chargedMsg}{casterName} cast {spell.Name} on {targetName}{suffix}",
                         ChatMessageType.Magic
                     );
                 }
@@ -930,6 +988,19 @@ partial class WorldObject
             weaponRestorationMod = weapon.WeaponRestorationSpellsMod;
         }
 
+        // Resist
+        if (targetPlayer is { ReflectIsActive: true, ReflectFirstSpell: true })
+        {
+            CheckForCombatAbilityReflectSpell(true, targetPlayer, this as Creature, spell);
+            targetPlayer.ReflectFirstSpell = false;
+        }
+        else
+        {
+            CheckForCombatAbilityReflectSpell(_partialEvasion is PartialEvasion.All or PartialEvasion.Some, targetPlayer, this as Creature, spell);
+        }
+
+        var resistedMod = GetResistedMod(_partialEvasion);
+
         var selfTargetProcSpellMod = SelfTargetSpellProcMod(fromProc, spell, weapon, player);
 
         var tryBoost = (int)(
@@ -1000,7 +1071,8 @@ partial class WorldObject
         var spellcraftMod = 1.0f;
         if (fromProc && weapon?.ItemSpellcraft != null)
         {
-            spellcraftMod = (weapon.ItemSpellcraft ?? 1) * 0.01f;
+            var spellcraft = weapon.ItemSpellcraft.Value + CheckForArcaneLoreSpecSpellcraftBonus(player);
+            spellcraftMod += spellcraft * 0.01f;
         }
 
         // for traps and creatures that don't have a lethality mod,
@@ -1011,7 +1083,7 @@ partial class WorldObject
             landblockScalingMod *= (1.0f + (float)CurrentLandblock.GetLandblockLethalityMod());
         }
 
-        tryBoost = (int)(tryBoost * overloadMod * batterMod * damageMultiplier * spellcraftMod * landblockScalingMod);
+        tryBoost = (int)(tryBoost * overloadMod * batterMod * damageMultiplier * spellcraftMod * landblockScalingMod * resistedMod);
 
         string srcVital;
 
@@ -1023,6 +1095,12 @@ partial class WorldObject
 
             // reductions
             tryBoost = Convert.ToInt32(tryBoost * (1.0f - Jewel.GetJewelEffectMod(player, PropertyInt.GearVitalsTransfer)));
+
+            // Recent Void Spell Cast Mod - Lower all healing spell effects for 10 seconds.
+            if (player is not null && player.LastVoidSpellCastTime + player.LastVoidSpellCastPenaltyLength > Time.GetUnixTime())
+            {
+                tryBoost = Convert.ToInt32(tryBoost * 0.5f);
+            }
         }
         else // harm
         {
@@ -1030,6 +1108,9 @@ partial class WorldObject
             tryBoost = Convert.ToInt32(tryBoost * (1.0f + Jewel.GetJewelRedFury(player)));
             tryBoost = Convert.ToInt32(tryBoost * (1.0f + Jewel.GetJewelBlueFury(player)));
             tryBoost = Convert.ToInt32(tryBoost * (1.0f + Jewel.GetJewelEffectMod(player, PropertyInt.GearSelfHarm)));
+
+            var attributeMod = creature?.GetAttributeMod(weapon, true) ?? 1.0f;
+            tryBoost = Convert.ToInt32(tryBoost * attributeMod);
 
             // reductions
             tryBoost = Convert.ToInt32(tryBoost * (1.0f - Jewel.GetJewelEffectMod(targetPlayer, PropertyInt.GearNullification,"Nullification")));
@@ -1045,14 +1126,8 @@ partial class WorldObject
 
         if (creature is not null)
         {
-            var lethalityMod = Convert.ToSingle(creature.ArchetypeLethality ?? 1.0f);
-            tryBoost = Convert.ToInt32(tryBoost * lethalityMod);
-
             var archetypeSpellDamageMod = (float)(creature.ArchetypeSpellDamageMultiplier ?? 1.0);
             tryBoost = Convert.ToInt32(tryBoost * archetypeSpellDamageMod);
-
-            var attributeMod = creature.GetAttributeMod(weapon, true, targetCreature);
-            tryBoost = Convert.ToInt32(tryBoost * attributeMod);
         }
 
         // LEVEL SCALING - Reduces harms against enemies, and restoration for players
@@ -1060,7 +1135,7 @@ partial class WorldObject
         tryBoost = (int)(tryBoost * scalar);
 
         SigilTrinketSpellDamageReduction = 1.0f;
-        targetPlayer?.CheckForSigilTrinketOnSpellHitReceivedEffects(this, spell, tryBoost, Skill.MagicDefense, (int)SigilTrinketMagicDefenseEffect.Absorption);
+        targetPlayer?.CheckForSigilTrinketOnSpellHitReceivedEffects(this, spell, tryBoost, Skill.MagicDefense, SigilTrinketMagicDefenseEffect.Absorption);
         tryBoost = Convert.ToInt32(tryBoost * SigilTrinketSpellDamageReduction);
 
         switch (spell.VitalDamageType)
@@ -1084,7 +1159,7 @@ partial class WorldObject
 
                     if (player is { OverloadStanceIsActive: true } or {BatteryStanceIsActive: true} && boost > 0)
                     {
-                        player.IncreaseChargedMeter(spell);
+                        player.IncreaseChargedMeter(spell, fromProc);
                     }
                 }
                 else if (creature is { IsMonster: false } && targetCreature.IsMonster)
@@ -1094,7 +1169,7 @@ partial class WorldObject
 
                     if (player is { OverloadStanceIsActive: true } or {BatteryStanceIsActive: true} && boost < 0)
                     {
-                        player.IncreaseChargedMeter(spell);
+                        player.IncreaseChargedMeter(spell, fromProc);
                     }
                 }
                 break;
@@ -1108,6 +1183,8 @@ partial class WorldObject
         {
             HandlePostHealRatingEffects(player, targetPlayer);
         }
+
+        var partialResist = _partialEvasion == PartialEvasion.Some ? "Partial Resist! " : "";
 
         if (player != null)
         {
@@ -1127,18 +1204,18 @@ partial class WorldObject
             {
                 if (spell.IsBeneficial)
                 {
-                    casterMessage = $"{chargedMsg}{critMessage}With {spell.Name} you restore {boost} points of {srcVital} to {targetCreature.Name}.";
+                    casterMessage = $"{partialResist}{chargedMsg}{critMessage}With {spell.Name} you restore {boost} points of {srcVital} to {targetCreature.Name}.";
                 }
                 else
                 {
-                    casterMessage = $"{chargedMsg}{critMessage}With {spell.Name} you drain {Math.Abs(boost)} points of {srcVital} from {targetCreature.Name}.";
+                    casterMessage = $"{partialResist}{chargedMsg}{critMessage}With {spell.Name} you drain {Math.Abs(boost)} points of {srcVital} from {targetCreature.Name}.";
                 }
             }
             else
             {
                 var verb = spell.IsBeneficial ? "restore" : "drain";
 
-                casterMessage = $"{chargedMsg}{critMessage}You cast {spell.Name} and {verb} {Math.Abs(boost)} points of your {srcVital}.";
+                casterMessage = $"{partialResist}{chargedMsg}{critMessage}You cast {spell.Name} and {verb} {Math.Abs(boost)} points of your {srcVital}.";
             }
 
             if (showMsg)
@@ -1153,11 +1230,11 @@ partial class WorldObject
 
             if (spell.IsBeneficial)
             {
-                targetMessage = $"{critMessage}{Name} casts {spell.Name} and restores {boost} points of your {srcVital}.";
+                targetMessage = $"{partialResist}{critMessage}{Name} casts {spell.Name} and restores {boost} points of your {srcVital}.";
             }
             else
             {
-                targetMessage = $"{critMessage}{Name} casts {spell.Name} and drains {Math.Abs(boost)} points of your {srcVital}.";
+                targetMessage = $"{partialResist}{critMessage}{Name} casts {spell.Name} and drains {Math.Abs(boost)} points of your {srcVital}.";
 
                 if (creature != null)
                 {
@@ -1196,6 +1273,39 @@ partial class WorldObject
         }
 
         HandleBoostTransferDeath(creature, targetCreature);
+    }
+
+    /// <summary>
+    /// COMBAT ABILITY - Reflect: Reflect resisted spells back to the caster.
+    /// </summary>
+    private void CheckForCombatAbilityReflectSpell(bool resisted, Player targetPlayer, Creature sourceCreature, Spell spell)
+    {
+        if (!resisted || targetPlayer == null || sourceCreature == null || targetPlayer == sourceCreature || spell.IsBeneficial)
+        {
+            return;
+        }
+
+        if (targetPlayer.ReflectIsActive)
+        {
+            targetPlayer.TryCastSpell(spell, sourceCreature, null, null, false, false, false);
+        }
+    }
+
+    /// <summary>
+    /// If resist succeeded, determine if resist was partial or full.
+    /// </summary>
+    private float GetResistedMod(PartialEvasion partialEvasion)
+    {
+        switch (partialEvasion)
+        {
+            case PartialEvasion.None:
+                return 1.0f;
+            case PartialEvasion.Some:
+                return 0.5f;
+            case PartialEvasion.All:
+            default:
+                return 0.0f;
+        }
     }
 
     private static void HandlePostDamageRatingEffects(Creature target, float damage, Player sourcePlayer, Player targetPlayer, Creature sourceCreature, Spell spell, ProjectileSpellType projectileSpellType)
@@ -1429,7 +1539,7 @@ partial class WorldObject
     /// Handles casting SpellType.Transfer spells
     /// usually for Life Magic, ie. Stamina to Mana, Drain
     /// </summary>
-    private void HandleCastSpell_Transfer(Spell spell, Creature targetCreature, bool showMsg = true, WorldObject weapon = null)
+    private void HandleCastSpell_Transfer(Spell spell, Creature targetCreature, bool showMsg = true, WorldObject weapon = null, bool fromProc = false)
     {
         var player = this as Player;
         var creature = this as Creature;
@@ -1544,18 +1654,17 @@ partial class WorldObject
                 destVitalChange = (uint)(destVitalChange * overloadMod * batterMod);
             }
 
-            // Attribute Mod
-            if (player is not null)
-            {
-                var attributeMod = player.GetAttributeMod(weapon, true, targetCreature);
-                destVitalChange = Convert.ToUInt32(destVitalChange * attributeMod);
-            }
-
             // Archetype Mod
             if (creature is not null)
             {
                 var archetypeSpellDamageMod = (float)(creature.ArchetypeSpellDamageMultiplier ?? 1.0);
                 destVitalChange = Convert.ToUInt32(destVitalChange * archetypeSpellDamageMod);
+            }
+
+            // Recent Void Spell Cast Mod - Lower all healing spell effects for 10 seconds.
+            if (player is not null && player.LastVoidSpellCastTime + player.LastVoidSpellCastPenaltyLength > Time.GetUnixTime())
+            {
+                destVitalChange = (uint)(destVitalChange * 0.5f);
             }
 
             // LEVEL SCALING - Reduce Drain effectiveness vs. monsters, and increase vs. player
@@ -1593,6 +1702,20 @@ partial class WorldObject
 
                         transferSource.DamageHistory.Add(this, DamageType.Health, srcVitalChange);
                         break;
+                }
+
+                // Determine if this drain/infuse should increase the charge meter. Self-transfer does not increase charge.
+                var shouldIncreaseCharge =
+                    destVitalChange > 0 &&
+                    (
+                        transferSource is not Player || 
+                        (transferSource is Player && destination != transferSource)
+                    );
+
+                if (shouldIncreaseCharge &&
+                    player is { OverloadStanceIsActive: true } or { BatteryStanceIsActive: true })
+                {
+                    player.IncreaseChargedMeter(spell, fromProc);
                 }
             }
 
@@ -1833,7 +1956,7 @@ partial class WorldObject
 
             if (caster is Player playerCaster and ({ OverloadStanceIsActive: true } or {BatteryStanceIsActive: true}))
             {
-                playerCaster.IncreaseChargedMeter(spell);
+                playerCaster.IncreaseChargedMeter(spell, fromProc);
             }
         }
 
@@ -3283,19 +3406,12 @@ partial class WorldObject
     /// </summary>
     /// <param name="spell">A spell with a DotDuration</param>
     public float CalculateDotEnchantment_StatModValue(
-        Spell spell,
-        WorldObject target,
-        WorldObject weapon,
-        float statModVal
-    )
+    Spell spell,
+    WorldObject target,
+    WorldObject weapon,
+    float statModVal
+)
     {
-        // here are all the dots with current content:
-
-        // - 3 void dots (2 projectiles, 1 direct enchantment)
-        // - surge of affliction (target loses health over time)
-        // - surge of regeneration (caster gains health over time)
-        // - dirty fighting bleed
-
         if (spell.DotDuration == 0)
         {
             return statModVal;
@@ -3307,34 +3423,27 @@ partial class WorldObject
 
         if (spell.Category == SpellCategory.AetheriaProcHealthOverTimeRaising)
         {
-            // no healing boost rating modifier found in retail pcaps on apply,
-            // could there have been one on tick?
-            //if (creatureTarget != null)
-            //enchantment_statModVal *= creatureTarget.GetHealingRatingMod();
-
             return enchantment_statModVal;
         }
 
         if (spell.Category == SpellCategory.AetheriaProcDamageOverTimeRaising)
         {
-            // no mods found in retail pcaps
             return enchantment_statModVal;
         }
 
         var player = this as Player;
         var creatureSource = this as Creature;
 
+        var equippedWeapon = player.GetEquippedWeapon() ?? player.GetEquippedWand();
+
         var damageRatingMod = 1.0f;
 
         if (creatureSource != null)
         {
-            // damage rating mod
             var damageRating = creatureSource.GetDamageRating();
 
             if (player != null)
             {
-                // TODO: merge this with damage rating
-                var equippedWeapon = player.GetEquippedWeapon() ?? player.GetEquippedWand();
                 if (player.GetHeritageBonus(equippedWeapon))
                 {
                     damageRating += 5;
@@ -3350,7 +3459,6 @@ partial class WorldObject
 
         if (spell.Category is SpellCategory.DFBleedDamage)
         {
-            // retail pcaps have modifiers in the range of 1.1x - 1.7x
             return enchantment_statModVal * damageRatingMod;
         }
 
@@ -3370,43 +3478,33 @@ partial class WorldObject
             return enchantment_statModVal;
         }
 
-        // factors:
-        // - damage rating
-        // - heritage bonus (universal masteries at end of retail, TODO: merge this with damage rating)
-        // - caster damage type bonus (pvm, half for pvp)
-        // - skill in magic school vs. spell difficulty (for projectiles)
-
-        // thanks to Xenocide for figuring this part out!
+        if (spell.Category is SpellCategory.HealKitRegen or SpellCategory.StaminaKitRegen or SpellCategory.ManaKitRegen)
+        {
+            return enchantment_statModVal;
+        }
 
         var elementalDamageMod = 1.0f;
-        var skillMod = 1.0f;
+        var attributeDamageMod = 1.0f;
 
         if (creatureSource != null)
         {
-            // elemental damage mod
             elementalDamageMod = GetCasterElementalDamageModifier(
-                weapon,
+                equippedWeapon,
                 creatureSource,
                 creatureTarget,
                 spell.DamageType
             );
 
-            // skillMod only applied to projectiles -- no destructive curse
-            if (player != null && spell.NumProjectiles > 0)
-            {
-                // from SpellProjectile, slightly modified
-                // convert this to common function
-                var magicSkill = player.GetCreatureSkill(spell.School).Current;
-
-                if (magicSkill > spell.Power)
-                {
-                    var percentageBonus = (magicSkill - spell.Power) / 1000.0f;
-
-                    skillMod = 1.0f + percentageBonus;
-                }
-            }
+            attributeDamageMod = creatureSource.GetAttributeMod(creatureSource.GetEquippedWeapon(), true);
         }
-        enchantment_statModVal *= skillMod * elementalDamageMod * damageRatingMod;
+
+        enchantment_statModVal *= elementalDamageMod * attributeDamageMod * damageRatingMod;
+
+        //Console.WriteLine($"\nCalculateDotEnchantment_StatModValue()\n" +
+        //    $" -elementalDamageMod: {elementalDamageMod}\n" +
+        //    $" -attributeDamageMod: {attributeDamageMod}\n" +
+        //    $" -damageRatingMod: {damageRatingMod}\n" +
+        //    $" -statModVal: {enchantment_statModVal}");
 
         return enchantment_statModVal;
     }
@@ -3695,30 +3793,22 @@ partial class WorldObject
             return 1.0f;
         }
 
-        var spellcraft = (uint)(weapon.ItemSpellcraft ?? 1);
-        var arcaneLore = player.GetCreatureSkill(Skill.ArcaneLore);
-
-        if (arcaneLore.AdvancementClass == SkillAdvancementClass.Specialized)
-        {
-            spellcraft = (uint)Math.Max((spellcraft + arcaneLore.Current) * 0.5f, spellcraft);
-        }
+        var spellcraft = (uint)(weapon.ItemSpellcraft ?? 1) + CheckForArcaneLoreSpecSpellcraftBonus(player);
 
         var playerSpellSkill =
             spell.School == MagicSchool.WarMagic
                 ? player.GetModdedWarMagicSkill()
                 : player.GetModdedLifeMagicSkill();
-        var procSpellSkill = (playerSpellSkill + spellcraft) * 0.5f;
 
+        var procSpellSkill = (int)(playerSpellSkill + spellcraft * 0.1);
         var mod = procSpellSkill / spell.Power;
 
         return Math.Clamp(mod, 0.5f, 2.0f);
     }
 
-    private float GetWardMod(Creature caster, Creature target, float ignoreWardMod)
+    public float GetWardMod(Creature caster, Creature target, float ignoreWardMod)
     {
-        var wardBuffDebuffMod = target.EnchantmentManager.GetWardMultiplicativeMod();
-
-        var wardLevel = target.GetWardLevel() * wardBuffDebuffMod;
+        var wardLevel = target.GetWardLevel();
 
         if (caster is Player)
         {
@@ -3729,6 +3819,8 @@ partial class WorldObject
             wardLevel = Convert.ToInt32(wardLevel * LevelScaling.GetPlayerArmorWardScalar(target, caster));
         }
 
-        return SkillFormula.CalcWardMod(wardLevel * ignoreWardMod);
+        var wardBuffDebuffMod = target.EnchantmentManager.GetWardMultiplicativeMod();
+
+        return SkillFormula.CalcWardMod(wardLevel * ignoreWardMod * wardBuffDebuffMod);
     }
 }

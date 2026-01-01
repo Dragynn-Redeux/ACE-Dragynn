@@ -748,7 +748,7 @@ public enum PropertyInt : ushort
     ArmorWeightClass = 393,
     GearMaxStamina = 394,
     GearMaxMana = 395,
-    CombatFocusType = 396,
+    CombatFocusTypeId = 396,
     WeightClassReqAmount = 397,
     ArmorStyle = 398,
     WeaponSubtype = 399,
@@ -756,7 +756,7 @@ public enum PropertyInt : ushort
     SigilTrinketColor = 401,
 
     [ServerOnly]
-    SigilTrinketSchool = 402,
+    SigilTrinketSkill = 402,
 
     [ServerOnly]
     SigilTrinketEffectId = 403,
@@ -868,6 +868,9 @@ public enum PropertyInt : ushort
     StaminaOverTime = 509,
     ManaOverTime = 510,
     MonsterRank = 511,
+    CombatFocusSkill3SpellRemoved = 512,
+    CombatFocusSkill3SpellAdded = 513,
+    CombatFocusPrestigeVersionId = 514,
 
     [ServerOnly]
     PCAPRecordedAutonomousMovement = 8007,

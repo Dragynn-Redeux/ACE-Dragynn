@@ -12,23 +12,23 @@ partial class Creature
     private static bool DebugArchetypeSystem = false;
 
     // Stat ranges by tier
-    private static readonly int[] enemyHealth = { 10, 75, 150, 250, 400, 600, 800, 1000, 2000 };
+    private static readonly int[] enemyHealth = { 10, 100, 200, 300, 500, 750, 1000, 1500, 2000 };
     private static readonly int[] enemyStaminaMana = { 20, 100, 150, 225, 325, 450, 650, 950, 1250 };
     private static readonly int[] enemyHealthRegen = { 1, 2, 5, 10, 20, 30, 40, 50, 100 };
     private static readonly int[] enemyStaminaManaRegen = { 1, 2, 5, 10, 15, 20, 25, 30, 50 };
 
     private static readonly int[] enemyArmorWard = { 10, 20, 45, 68, 101, 152, 228, 342, 513 };
-    private static readonly int[] enemyAttack = { 10, 50, 150, 200, 250, 300, 400, 500, 1000 };
-    private static readonly int[] enemyDefense = { 10, 50, 150, 225, 300, 400, 500, 600, 1000 };
-    private static readonly int[] enemyAssessDeception = { 10, 50, 100, 150, 200, 250, 300, 350, 400 };
+    private static readonly int[] enemyAttack = { 10, 60, 100, 150, 175, 200, 250, 350, 500 };
+    private static readonly int[] enemyDefense = { 10, 60, 100, 150, 175, 200, 250, 350, 500 };
+    private static readonly int[] enemyAssessDeception = { 10, 40, 80, 120, 160, 200, 250, 300, 400 };
     private static readonly int[] enemyRun = { 10, 100, 150, 200, 250, 300, 400, 500, 600 };
 
-    private static readonly float[] enemyDamage = { 1.0f, 2.0f, 3.0f, 4.0f, 6.0f, 7.0f, 7.5f, 8.0f, 10.0f }; // percentage of player health to be taken per second after all stats (of player and enemy) are considered
+    private static readonly float[] enemyDamage = { 1.0f, 2.0f, 3.0f, 4.5f, 6.0f, 7.0f, 8.0f, 9.0f, 10.0f }; // percentage of player health to be taken per second after all stats (of player and enemy) are considered
 
-    private static readonly int[] avgPlayerHealth = { 25, 60, 120, 150, 180, 210, 250, 300, 350 };
+    private static readonly int[] avgPlayerHealth = { 75, 110, 170, 200, 230, 260, 300, 350, 400 };
     private static readonly float[] avgPlayerArmorReduction = { 0.75f, 0.57f, 0.40f, 0.31f, 0.25f, 0.21f, 0.18f, 0.16f, 0.1f };
-    private static readonly float[] avgPlayerLifeProtReduction = { 1.0f, 0.9f, 0.9f, 0.85f, 0.85f, 0.8f, 0.8f, 0.75f, 0.75f };
-    private static readonly int[] avgPlayerPhysicalMagicDefense = { 10, 75, 150, 175, 200, 225, 275, 350, 500 };
+    private static readonly float[] avgPlayerLifeProtReduction = { 1.0f, 1.0f, 0.9f, 0.9f, 0.85f, 0.8f, 0.8f, 0.75f, 0.75f };
+    private static readonly int[] avgPlayerPhysicalMagicDefense = { 10, 60, 90, 120, 150, 180, 225, 300, 500 };
 
     private int _tier;
     private float _statWeight;
@@ -322,6 +322,7 @@ partial class Creature
                 var newVital = GetNewHealthLevel(tier, statWeight, toughness, physicality);
 
                 Vitals[PropertyAttribute2nd.MaxHealth].StartingValue = newVital;
+                Health.Current = Health.MaxValue;
             }
         }
 
@@ -342,6 +343,7 @@ partial class Creature
                 var newVital = GetNewStaminaLevel(tier, statWeight, physicality, dexterity);
 
                 Vitals[PropertyAttribute2nd.MaxStamina].StartingValue = newVital;
+                Stamina.Current = Stamina.MaxValue;
             }
         }
 
@@ -362,6 +364,7 @@ partial class Creature
                 var newVital = GetNewManaLevel(tier, statWeight, magic);
 
                 Vitals[PropertyAttribute2nd.MaxMana].StartingValue = newVital;
+                Mana.Current = Mana.MaxValue;
             }
         }
 
@@ -1236,9 +1239,9 @@ partial class Creature
     {
         // target enemy damage per second. If enemy uses nearby player scaling, use highest tier enemy damage.
         var weightedEnemyDamage = (enemyDamage[tier] + (enemyDamage[tier + 1] - enemyDamage[tier]) * statWeight);
-        if (UseNearbyPlayerScaling is true && weightedEnemyDamage < 5.0f)
+        if (CurrentLandblock is not null && CurrentLandblock.IsFellowshipRequired())
         {
-            weightedEnemyDamage = 7.0f; // level 50 enemy dps
+            weightedEnemyDamage = enemyDamage[5]; // capstone dps setting
         }
 
         var weightedPlayerHealth = (
@@ -1249,11 +1252,15 @@ partial class Creature
         // player melee def
         var weightedPlayerMeleeDef =
             avgPlayerPhysicalMagicDefense[tier] + (avgPlayerPhysicalMagicDefense[tier + 1] - avgPlayerPhysicalMagicDefense[tier]) * statWeight;
-        var enemyAttackSkill = Skills[Skill.MartialWeapons].Current;
+
+        // enemy attack
+        var weaponSkill = GetEquippedWeapon() is null ? Skill.UnarmedCombat : (Skill)(GetEquippedWeapon().WieldSkillType2 ?? (int)Skill.MartialWeapons);
+        var archetypeSkillMulti = ((ArchetypePhysicality ?? 1.0) + (ArchetypeDexterity ?? 1.0)) / 2;
+        var enemyAttackSkill = Math.Round(Skills[weaponSkill].Current / archetypeSkillMulti);
 
         // player evade
         var playerEvadeChance = 1 - SkillCheck.GetSkillChance((int)enemyAttackSkill, (int)weightedPlayerMeleeDef);
-        var playerEvadeDamageReduction = 1 - (playerEvadeChance * 0.67f);
+        var playerEvadeDamageReduction = 1 - (playerEvadeChance * 0.5f);
 
         // player armor
         var weightedPlayerArmorReduction =
@@ -1268,7 +1275,7 @@ partial class Creature
         var weapon = GetEquippedWeapon();
         var creatureAnimLength = MonsterAverageAnimationLength.GetValueMod(CreatureType);
 
-        var enemyAvgAttackSpeed = 1 / (creatureAnimLength / animSpeed + ((PowerupTime ?? 1.0) / 2));
+        var enemyAvgAttackSpeed = 1 / (creatureAnimLength / animSpeed + (0.5f)); // 0.5f being average powerup time
 
         if (weapon is not null
             && (weapon.W_AttackType.HasFlag(AttackType.TripleStrike)
@@ -1291,8 +1298,8 @@ partial class Creature
         }
 
         // enemy attribute mod
-        var strength = (int)Strength.Base;
-        var enemyAttributeMod = SkillFormula.GetAttributeMod(strength, Skill.Sword);
+        var attributeAmount = weaponSkill is Skill.MartialWeapons or Skill.ThrownWeapon ? (int)Strength.Base : (int)Coordination.Base;
+        var enemyAttributeMod = SkillFormula.GetAttributeMod(attributeAmount, weaponSkill);
 
         // final base damage
         var baseAvgDamage =
@@ -1315,6 +1322,7 @@ partial class Creature
                     + $"  / evadeReduction ({Math.Round(playerEvadeDamageReduction, 2)}) - weightedPlayerMeleeDef ({weightedPlayerMeleeDef}), enemyAttackSkill ({enemyAttackSkill}), playerEvadeChance ({Math.Round(playerEvadeChance, 2)})  \n"
                     + $"  / enemyAttacksPerSecond ({Math.Round(enemyAvgAttackSpeed, 2)})  \n"
                     + $"  / enemyAttributeMod ({enemyAttributeMod})\n"
+                    + $"  * lethality ({lethality})\n"
             );
         }
 
@@ -1325,16 +1333,23 @@ partial class Creature
     {
         // target enemy damage per second
         var weightedEnemyDamage = (enemyDamage[tier] + (enemyDamage[tier + 1] - enemyDamage[tier]) * statWeight);
+        if (CurrentLandblock is not null && CurrentLandblock.IsFellowshipRequired())
+        {
+            weightedEnemyDamage = enemyDamage[5]; // capstone dps setting
+        }
+
         var weightedPlayerHealth = (avgPlayerHealth[tier] + (avgPlayerHealth[tier + 1] - avgPlayerHealth[tier]) * statWeight);
         var targetEnemyDamage = weightedEnemyDamage / 100 * weightedPlayerHealth;
 
         // player magic def
         var weightedPlayerMagicDef = avgPlayerPhysicalMagicDefense[tier] + (avgPlayerPhysicalMagicDefense[tier + 1] - avgPlayerPhysicalMagicDefense[tier]) * statWeight;
+        var archetypeSkillMulti = ArchetypeMagic ?? 1.0;
         var enemyMagicSkill = Skills[Skill.WarMagic].Current > Skills[Skill.LifeMagic].Current ? Skills[Skill.WarMagic].Current : Skills[Skill.LifeMagic].Current;
+        enemyMagicSkill = (uint)(enemyMagicSkill / archetypeSkillMulti);
 
         // player evade
         var playerResistChance = 1 - SkillCheck.GetSkillChance((int)enemyMagicSkill, (int)weightedPlayerMagicDef);
-        var playerResistDamageReduction = 1 - (playerResistChance * 0.67f);
+        var playerResistDamageReduction = 1 - (playerResistChance * 0.5f);
 
         // player armor
         var weightedPlayerWardReduction =
@@ -1345,7 +1360,7 @@ partial class Creature
         var playerLifeProtReduction = avgPlayerLifeProtReduction[tier];
 
         // enemy cast speed
-        var enemyAvgAttackSpeed = 1 / (WeaponAnimationLength.GetSpellCastAnimationLength(Server.Entity.ProjectileSpellType.Blast, 1) + (AiUseMagicDelay ?? 1.0));
+        var enemyAvgAttackSpeed = 1 / (WeaponAnimationLength.GetSpellCastAnimationLength(Server.Entity.ProjectileSpellType.Blast, 1) + 1.0); // 1.0 on the end for the default AiUseMagicDelay
 
         // enemy attribute mod
         var self = (int)Self.Base;
@@ -1368,7 +1383,7 @@ partial class Creature
         if (DebugArchetypeSystem)
         {
             Console.WriteLine(
-                $"\nDamage Calc for {Name} ({WeenieClassId})\n "
+                $"\nSpell Damage Calc for {Name} ({WeenieClassId})\n "
                     + $" BaseAvgDamage: {Math.Round(baseAvgDamage, 1)} = \n"
                     + $"  targetEnemyDamage ({Math.Round(targetEnemyDamage, 1)}) - weightedEnemyDamage ({Math.Round(weightedEnemyDamage, 1)}% per second), weightedPlayerHealth ({Math.Round(weightedPlayerHealth, 1)}) \n"
                     + $"  / armorReduction ({weightedPlayerWardReduction})\n"

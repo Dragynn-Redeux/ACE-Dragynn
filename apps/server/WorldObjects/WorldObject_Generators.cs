@@ -569,14 +569,7 @@ partial class WorldObject
                 || (!string.IsNullOrEmpty(GeneratorEvent) && RegenerationInterval == 0)
             )
             {
-                if (Tier != null)
-                {
-                    Generator_Generate(Tier);
-                }
-                else
-                {
-                    Generator_Generate();
-                }
+                Generator_Generate(Tier);
             }
 
             if (InitCreate == 0)
@@ -795,7 +788,7 @@ partial class WorldObject
     /// Called every [RegenerationInterval] seconds<para />
     /// Also called from EmoteManager, Chest.Reset(), WorldObject.OnGenerate()
     /// </summary>
-    public void Generator_Generate(int? tier = null)
+    public void Generator_Generate(int? tier = null, Player player = null)
     {
         //Console.WriteLine($"{Name}.Generator_Generate({RegenerationInterval})");
 
@@ -835,6 +828,7 @@ partial class WorldObject
 
         foreach (var profile in GeneratorProfiles)
         {
+            profile.Player = player;
             profile.Spawn_HeartBeat(tier);
         }
     }

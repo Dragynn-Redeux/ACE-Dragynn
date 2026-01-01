@@ -26,7 +26,7 @@ partial class Creature
     {
         var sysMessage = new GameMessageSystemChat(message, messageType);
 
-        PlayerManager.BroadcastToAll(sysMessage);
+        PlayerManager.BroadcastToAll(sysMessage, message, "World");
         PlayerManager.LogBroadcastChat(Channel.AllBroadcast, this, message);
     }
 

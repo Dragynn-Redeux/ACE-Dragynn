@@ -73,11 +73,13 @@ public class DamageEvent
     private float _ratingRedFury;
     private float _ratingYellowFury;
     private float _ratingSelfHarm;
+    private float _ratingPierceResistanceBonus;
     private float _recklessnessMod;
     private float _resistanceMod;
     private float _slayerMod;
     private float _specDefenseMod;
-    private float _combatAbilitySteadyShotDamageBonus;
+    private float _swarmedDamageReductionMod;
+    private float _combatAbilitySteadyStrikeDamageBonus;
     private float _twohandedCombatDamageBonus;
     private float _weaponResistanceMod;
 
@@ -283,7 +285,7 @@ public class DamageEvent
     }
 
     /// <summary>
-    /// Checks for Overpower, Steady Shot, Fury, and Backstab auto-hits.
+    /// Checks for Overpower, Steady Strike, Fury, and Backstab auto-hits.
     /// If evade succeeded, determine if evade was full, partial, or none.
     /// Equal chance for each evasion type to occur.
     /// </summary>
@@ -313,23 +315,32 @@ public class DamageEvent
 
         // Roll combat hit chance
         var attackRoll = ThreadSafeRandom.Next(0.0f, 1.0f);
-
-        if (playerDefender is { EvasiveStanceIsActive: true })
-        {
-            var luckyRoll = ThreadSafeRandom.Next(0.0f, 1.0f);
-            if (luckyRoll < attackRoll)
-            {
-                attackRoll = luckyRoll;
-            }
-        }
-
         if (attackRoll > GetEvadeChance(attacker, defender))
         {
-            // If playerDefender has Phalanx active, 50% chance to convert a full hit into a partial hit.
-            if (playerDefender is { PhalanxIsActive: true } && ThreadSafeRandom.Next(0.0f, 1.0f) > 0.5f)
+            // If playerDefender has Phalanx active, 25-50% chance to convert a full hit into a partial hit, depending on shield size.
+            if (playerDefender is { PhalanxIsActive: true } && (playerDefender.GetEquippedShield() is not null || playerDefender.GetEquippedWeapon() is { IsTwoHanded: true}))
             {
-                _evasionMod = 0.5f;
-                PartialEvasion = PartialEvasion.Some;
+                var phalanxChance = 0.25;
+
+                if (playerDefender.GetEquippedShield() is not null)
+                {
+                    phalanxChance = playerDefender.GetEquippedShield().ArmorStyle switch
+                    {
+                        (int)ArmorStyle.CovenantShield => 0.5f,
+                        (int)ArmorStyle.TowerShield => 0.45f,
+                        (int)ArmorStyle.LargeShield => 0.4f,
+                        (int)ArmorStyle.StandardShield => 0.35f,
+                        (int)ArmorStyle.SmallShield => 0.3f,
+                        (int)ArmorStyle.Buckler => 0.3f,
+                        _ => 0.25f
+                    };
+                }
+
+                if (ThreadSafeRandom.Next(0.0f, 1.0f) < phalanxChance)
+                {
+                    _evasionMod = 0.5f;
+                    PartialEvasion = PartialEvasion.Some;
+                }
             }
 
             return;
@@ -363,12 +374,31 @@ public class DamageEvent
                 break;
             default:
                 // If playerDefender has Phalanx active, 50% chance to convert a full hit into a partial hit.
-                if (playerDefender is { PhalanxIsActive: true } && ThreadSafeRandom.Next(0.1f, 1.0f) > 0.5f)
+                if (playerDefender is { PhalanxIsActive: true } && (playerDefender.GetEquippedShield() is not null || playerDefender.GetEquippedWeapon() is { IsTwoHanded: true}))
                 {
-                    _evasionMod = 0.5f;
-                    PartialEvasion = PartialEvasion.Some;
-                    Evaded = false;
-                    break;
+                    var phalanxChance = 0.25;
+
+                    if (playerDefender.GetEquippedShield() is not null)
+                    {
+                        phalanxChance = playerDefender.GetEquippedShield().ArmorStyle switch
+                        {
+                            (int)ArmorStyle.CovenantShield => 0.5f,
+                            (int)ArmorStyle.TowerShield => 0.45f,
+                            (int)ArmorStyle.LargeShield => 0.4f,
+                            (int)ArmorStyle.StandardShield => 0.35f,
+                            (int)ArmorStyle.SmallShield => 0.3f,
+                            (int)ArmorStyle.Buckler => 0.3f,
+                            _ => 0.25f
+                        };
+                    }
+
+                    if (ThreadSafeRandom.Next(0.0f, 1.0f) < phalanxChance)
+                    {
+                        _evasionMod = 0.5f;
+                        PartialEvasion = PartialEvasion.Some;
+                        Evaded = false;
+                        break;
+                    }
                 }
 
                 _evasionMod = 1.0f;
@@ -379,7 +409,7 @@ public class DamageEvent
 
         if (playerDefender is not null && PartialEvasion == PartialEvasion.Some)
         {
-            playerDefender.CheckForSigilTrinketOnAttackEffects(playerAttacker, this, Skill.PhysicalDefense, (int)SigilTrinketPhysicalDefenseEffect.Evasion);
+            playerDefender.CheckForSigilTrinketOnAttackEffects(playerAttacker, this, Skill.PhysicalDefense, SigilTrinketPhysicalDefenseEffect.Evasion);
         }
     }
 
@@ -462,13 +492,26 @@ public class DamageEvent
             return;
         }
 
-        // If playerDefender has Phalanx active, 50% chance to convert partial hits into blocks/parries.
+        // If playerDefender has Phalanx active, up to 50% chance to convert partial hits into blocks/parries.
         if (playerDefender is { PhalanxIsActive: true }
-            && PartialEvasion == PartialEvasion.Some
-            && ThreadSafeRandom.Next(0.0f, 1.0f) > 0.5f)
+            && PartialEvasion == PartialEvasion.Some)
         {
-            Blocked = true;
-            return;
+            var phalanxChance = playerDefender.GetEquippedShield().ArmorStyle switch
+            {
+                (int)ArmorStyle.CovenantShield => 0.5f,
+                (int)ArmorStyle.TowerShield => 0.45f,
+                (int)ArmorStyle.LargeShield => 0.4f,
+                (int)ArmorStyle.StandardShield => 0.35f,
+                (int)ArmorStyle.SmallShield => 0.3f,
+                (int)ArmorStyle.Buckler => 0.3f,
+                _ => 0.25f
+            };
+
+            if (ThreadSafeRandom.Next(0.0f, 1.0f) < phalanxChance)
+            {
+                Blocked = true;
+                return;
+            }
         }
 
         // base block/parry chance is 5%
@@ -522,9 +565,19 @@ public class DamageEvent
 
         const float effectiveAngle = 180.0f;
         var parryAngle = Math.Abs(defender.GetAngle(attacker)) < effectiveAngle / 2.0f;
+        var twohandPhalanxActive = playerDefender is { PhalanxIsActive: true } && playerDefender.GetEquippedWeapon() is { IsTwoHanded: true };
 
-        if (!parryAngle)
+        if (!parryAngle && !twohandPhalanxActive)
         {
+            return;
+        }
+
+        // If playerDefender has Phalanx active, 50% chance to convert partial hits into blocks/parries.
+        if (playerDefender is { PhalanxIsActive: true }
+            && PartialEvasion == PartialEvasion.Some
+            && ThreadSafeRandom.Next(0.0f, 1.0f) > 0.25f)
+        {
+            Parried = true;
             return;
         }
 
@@ -568,8 +621,8 @@ public class DamageEvent
         var roll = ThreadSafeRandom.Next(0.0f, 1.0f);
         if (roll > _criticalChance || GetCriticalDefendedFromAug(attacker, defender) || CheckForSpecPerceptionCriticalDefense(defender as Player))
         {
-            _playerAttacker?.CheckForSigilTrinketOnAttackEffects(defender, this, Skill.TwoHandedCombat, (int)SigilTrinketTwohandedCombatEffect.Might);
-            _playerAttacker?.CheckForSigilTrinketOnAttackEffects(defender, this, Skill.Shield, (int)SigilTrinketShieldEffect.Might);
+            _playerAttacker?.CheckForSigilTrinketOnAttackEffects(defender, this, Skill.TwoHandedCombat, SigilTrinketShieldTwohandedCombatEffect.Might);
+            _playerAttacker?.CheckForSigilTrinketOnAttackEffects(defender, this, Skill.Shield, SigilTrinketShieldTwohandedCombatEffect.Might);
 
             if (!CriticalOverridedByTrinket)
             {
@@ -610,7 +663,7 @@ public class DamageEvent
         var playerDefender = defender as Player;
 
         _powerMod = powerMod ?? attacker.GetPowerMod(Weapon);
-        _attributeMod = attacker.GetAttributeMod(Weapon, false, defender);
+        _attributeMod = attacker.GetAttributeMod(Weapon, false);
         _slayerMod = WorldObject.GetWeaponCreatureSlayerModifier(Weapon, attacker, defender);
         _damageRatingMod = Creature.GetPositiveRatingMod(attacker.GetDamageRating());
         _dualWieldDamageBonus = GetDualWieldDamageBonus(playerAttacker, defender);
@@ -618,11 +671,12 @@ public class DamageEvent
         _combatAbilityMultishotDamagePenalty = GetCombatAbilityMultishotDamagePenalty(playerAttacker);
         _combatAbilityFuryDamageBonus = GetCombatAbilityFuryDamageBonus(playerAttacker, playerDefender);
         _combatAbilityRelentlessDamagePenalty = GetCombatAbilityRelentlessDamagePenalty(playerAttacker);
-        _combatAbilitySteadyShotDamageBonus = GetCombatAbilitySteadyShotDamageBonus(playerAttacker);
+        _combatAbilitySteadyStrikeDamageBonus = GetCombatAbilitySteadySrikeDamageBonus(playerAttacker);
         _recklessnessMod = Creature.GetRecklessnessMod(attacker, defender);
         SneakAttackMod = attacker.GetSneakAttackMod(defender);
         _attackHeightDamageBonus += GetHighAttackHeightBonus(playerAttacker);
         _ratingElementalDamageBonus = Jewel.HandleElementalBonuses(playerAttacker, DamageType);
+        _ratingPierceResistanceBonus = GetRatingPierceResistanceBonus(defender, playerAttacker);
         _levelScalingMod = GetLevelScalingMod(attacker, defender, playerDefender);
         _ammoEffectMod = GetAmmoEffectMod(Weapon, playerAttacker);
 
@@ -682,6 +736,8 @@ public class DamageEvent
     /// </summary>
     private float GetCombatAbilityMultishotDamagePenalty(Player playerAttacker)
     {
+        return 1.0f; // TODO: Decide if this damage penalty is needed
+
         if (playerAttacker is not { MultiShotIsActive: true})
         {
             return 1.0f;
@@ -757,13 +813,13 @@ public class DamageEvent
     }
 
     /// <summary>
-    /// COMBAT ABILITY - Steady Shot: +25% damage with missile weapons.
+    /// COMBAT ABILITY - Steady Strike: +25% damage with melee/missile weapons.
     /// </summary>
     /// <param name="playerAttacker"></param>
     /// <returns></returns>
-    private float GetCombatAbilitySteadyShotDamageBonus(Player playerAttacker)
+    private float GetCombatAbilitySteadySrikeDamageBonus(Player playerAttacker)
     {
-        if (playerAttacker?.GetEquippedMissileWeapon() is null)
+        if (playerAttacker?.GetEquippedWeapon() is null)
         {
             return 1.0f;
         }
@@ -773,17 +829,17 @@ public class DamageEvent
             return 1.0f;
         }
 
-        return playerAttacker is {SteadyShotIsActive: true} ? 1.25f : 1.0f;
+        return playerAttacker is {SteadyStrikeIsActive: true} ? 1.25f : 1.0f;
     }
 
     /// <summary>
-    /// ATTACK HEIGHT BONUS - High: (10% increased damage, 15% if weapon is specialized)
+    /// ATTACK HEIGHT BONUS - High: (10% increased damage, 20% if weapon is specialized)
     /// </summary>
     private float GetHighAttackHeightBonus(Player playerAttacker)
     {
         if (playerAttacker is { AttackHeight: AttackHeight.High })
         {
-            return WeaponIsSpecialized(playerAttacker) ? 1.15f : 1.10f;
+            return WeaponIsSpecialized(playerAttacker) ? 1.2f : 1.10f;
         }
 
         return 1.0f;
@@ -795,11 +851,7 @@ public class DamageEvent
             ? LevelScaling.GetMonsterDamageDealtHealthScalar(playerDefender, attacker)
             : LevelScaling.GetMonsterDamageTakenHealthScalar(attacker, defender);
 
-        var timeToKillMonsterScalingMod = playerDefender != null
-            ? 1.0f
-            : LevelScaling.GetMonsterDamageTakenTtkScalar(attacker, defender);
-
-        return monsterHealthScalingMod * timeToKillMonsterScalingMod;
+        return monsterHealthScalingMod;
     }
 
     private float GetCriticalChance(Creature attacker, Creature defender)
@@ -840,7 +892,7 @@ public class DamageEvent
         var playerDefender = defender as Player;
 
         CriticalDamageBonusFromTrinket = 1.0f;
-        playerAttacker?.CheckForSigilTrinketOnAttackEffects(defender, this, Skill.Thievery, (int)SigilTrinketThieveryEffect.Treachery, true);
+        playerAttacker?.CheckForSigilTrinketOnAttackEffects(defender, this, Skill.Thievery, SigilTrinketThieveryEffect.Treachery, true);
 
         _criticalDamageMod = 1.0f + WorldObject.GetWeaponCritDamageMod(Weapon, attacker, _attackSkill, defender);
         _criticalDamageMod += GetMaceSpecCriticalDamageBonus(playerAttacker);
@@ -877,9 +929,13 @@ public class DamageEvent
                * _combatAbilityMultishotDamagePenalty
                * _combatAbilityFuryDamageBonus
                * _combatAbilityRelentlessDamagePenalty
-               * _combatAbilitySteadyShotDamageBonus
+               * _combatAbilitySteadyStrikeDamageBonus
+               * _ratingElementalDamageBonus
+               * _ratingPierceResistanceBonus
+               * _recklessnessMod
                * SneakAttackMod
                * _attackHeightDamageBonus
+               * _ammoEffectMod
                * _levelScalingMod;
     }
 
@@ -889,6 +945,7 @@ public class DamageEvent
         // {
         //     Console.WriteLine($"Before Mitigaion\n" +
         //                       $" -Base Damage{_baseDamage}\n" +
+        //                       $" -Attribute: {_attributeMod}\n" +
         //                       $" -Power: {_powerMod}\n" +
         //                       $" -Slayer: {_slayerMod}\n" +
         //                       $" -DamageRating: {_damageRatingMod}\n" +
@@ -896,13 +953,30 @@ public class DamageEvent
         //                       $" -SneakAttack: {SneakAttackMod}\n" +
         //                       $" -AttackHeight: {_attackHeightDamageBonus}\n" +
         //                       $" -ElementalDamageRating: {_ratingElementalDamageBonus}\n" +
+        //                       $" -PierceResistanceRating: {_ratingPierceResistanceBonus}\n" +
         //                       $" -DualWield: {_dualWieldDamageBonus}\n" +
         //                       $" -TwoHand: {_twohandedCombatDamageBonus}\n" +
         //                       $" -MultiShot: {_combatAbilityMultishotDamagePenalty}\n" +
-        //                       $" -Provoke: {_combatAbilityProvokeDamageBonus}\n" +
         //                       $" -Fury: {_combatAbilityFuryDamageBonus}\n" +
-        //                       $" -SteadyShot: {_combatAbilitySteadyShotDamageBonus}\n" +
-        //                       $" -LevelScaling: {_levelScalingMod}");
+        //                       $" -SteadyStrike: {_combatAbilitySteadyStrikeDamageBonus}\n" +
+        //                       $" -LevelScaling: {_levelScalingMod}\n" +
+        //                       $" -TOTAL: {_baseDamage
+        //                                   * _attributeMod
+        //                                   * _powerMod
+        //                                   * _slayerMod
+        //                                   * _damageRatingMod
+        //                                   * _recklessnessMod
+        //                                   * SneakAttackMod
+        //                                   * _attackHeightDamageBonus
+        //                                   * _ratingElementalDamageBonus
+        //                                   * _dualWieldDamageBonus
+        //                                   * _twohandedCombatDamageBonus
+        //                                   * _combatAbilityMultishotDamagePenalty
+        //                                   * _combatAbilityFuryDamageBonus
+        //                                   * _combatAbilityRelentlessDamagePenalty
+        //                                   * _combatAbilitySteadyStrikeDamageBonus
+        //                                   * _ammoEffectMod
+        //                                   * _levelScalingMod}");
         // }
 
         return _baseDamage
@@ -914,12 +988,13 @@ public class DamageEvent
                * SneakAttackMod
                * _attackHeightDamageBonus
                * _ratingElementalDamageBonus
+               * _ratingPierceResistanceBonus
                * _dualWieldDamageBonus
                * _twohandedCombatDamageBonus
                * _combatAbilityMultishotDamagePenalty
                * _combatAbilityFuryDamageBonus
                * _combatAbilityRelentlessDamagePenalty
-               * _combatAbilitySteadyShotDamageBonus
+               * _combatAbilitySteadyStrikeDamageBonus
                * _ammoEffectMod
                * _levelScalingMod;
     }
@@ -935,6 +1010,11 @@ public class DamageEvent
 
     private float GetMitigation(Creature attacker, Creature defender)
     {
+        if (attacker is null || defender is null)
+        {
+            return 1.0f;
+        }
+
         var playerAttacker = attacker as Player;
         var playerDefender = defender as Player;
 
@@ -977,6 +1057,8 @@ public class DamageEvent
             _ => 1.0f
         };
 
+        _swarmedDamageReductionMod = GetSwarmedMod(playerDefender);
+
         // if (playerAttacker is not null)
         // {
         //     Console.WriteLine(
@@ -993,7 +1075,43 @@ public class DamageEvent
                * _ratingDamageTypeWard
                * _ratingSelfHarm
                * _ratingRedFury
-               * _ratingYellowFury;
+               * _ratingYellowFury
+               * _swarmedDamageReductionMod;
+    }
+
+    /// <summary>
+    /// Calculates a modifier that reduces damage taken for a defending player based on the number of
+    /// nearby enemies.
+    /// </summary>
+    /// <remarks>The modifier is multiplicatively reduced by 10% for each nearby enemy beyond the first,
+    /// within a radius of 3 units. This effect only applies if the player has a melee weapon equipped.</remarks>
+    /// <param name="playerDefender">The player who is defending and whose damage reduction will be modified. Cannot be null.</param>
+    /// <returns>A floating-point value representing the swarmed modifier. Returns 1.0 if the player or their equipped melee
+    /// weapon is null, or if there is one or no nearby enemy; otherwise, returns a value less than 1.0 that decreases
+    /// as the number of nearby enemies increases.</returns>
+    private static float GetSwarmedMod(Player playerDefender)
+    {
+        var swarmedMod = 1.0f;
+
+        if (playerDefender is null || playerDefender.GetEquippedMeleeWeapon() is null)
+        {
+            return swarmedMod;
+        }
+
+        var numNearbyEnemies = playerDefender.GetNearbyMonsters(3).Count;
+
+        if (numNearbyEnemies <= 1)
+        {
+            return swarmedMod;
+        }
+
+        // start loop at 1 to only count mobs beyond the first
+        for (var i = 1; i < numNearbyEnemies; i++)
+        {
+            swarmedMod *= 0.9f;
+        }
+
+        return swarmedMod;
     }
 
     private float GetIgnoreArmorMod(Creature attacker, Creature defender)
@@ -1068,6 +1186,23 @@ public class DamageEvent
         // select random body part @ current attack height
         GetBodyPart(defender, _quadrant);
 
+        // Defensive check: GetBodyPart may have failed to populate _creaturePart when there's no body part table.
+        if (_creaturePart == null)
+        {
+            _log.Error(
+                "DamageEvent.GetArmorMod({Attacker} ({AttackerGuid}), {Defender} ({DefenderGuid})) - no creature body part available for wcid {DefenderWeenieClassId}; returning neutral armor mod.",
+                attacker?.Name,
+                attacker?.Guid,
+                defender?.Name,
+                defender?.Guid,
+                defender.WeenieClassId
+            );
+
+            // Mark as evaded (GetBodyPart already sets Evaded when appropriate), but ensure we return a safe neutral modifier.
+            Evaded = true;
+            return 1.0f;
+        }
+
         _armor = _creaturePart.GetArmorLayers(_propertiesBodyPart.Key);
 
         // get target armor
@@ -1096,14 +1231,14 @@ public class DamageEvent
     {
         if (playerAttacker == null)
         {
-            return 0.0f;
+            return 1.0f;
         }
 
         var rating = playerAttacker.GetEquippedAndActivatedItemRatingSum(PropertyInt.GearPierce);
 
         if (rating <= 0 || DamageType != DamageType.Pierce)
         {
-            return 0.0f;
+            return 1.0f;
         }
 
         var rampPercentage = (float)defender.QuestManager.GetCurrentSolves($"{playerAttacker.Name},Pierce") / 100;
@@ -1111,7 +1246,7 @@ public class DamageEvent
         const float baseMod = 0.2f;
         const float bonusPerRating = 0.01f;
 
-        return rampPercentage * (baseMod + bonusPerRating * rating);
+        return 1.0f + (rampPercentage * (baseMod + bonusPerRating * rating));
     }
 
     private void PostDamageMitigationEffects(Creature attacker, Creature defender, WorldObject damageSource)
@@ -1715,6 +1850,11 @@ public class DamageEvent
             return;
         }
 
+        if (defender.GetEquippedWeapon() is null)
+        {
+            return;
+        }
+
         SetCombatSources(attacker, defender, defender.GetEquippedWeapon());
         SetBaseDamage(attacker, defender, damageSource);
         SetDamageModifiers(attacker, defender);
@@ -1727,7 +1867,7 @@ public class DamageEvent
         attacker.DamageHistory.Add(playerDefender, DamageType.Health, (uint)thornsAmount);
         playerDefender.ShieldReprisal = (int)thornsAmount;
 
-        var msg = $"You deflect {thornsAmount} damage back to the attacker!";
+        var msg = $"You deflect {(int)thornsAmount} damage back to the attacker!";
         playerDefender.Session.Network.EnqueueSend(new GameMessageSystemChat(msg, ChatMessageType.CombatSelf));
 
         if (!attacker.IsDead)
@@ -1838,7 +1978,7 @@ public class DamageEvent
         EffectiveAttackSkill = (uint)(attacker.GetEffectiveAttackSkill() * LevelScaling.GetPlayerAttackSkillScalar(playerAttacker, defender));
 
         EffectiveAttackSkill = Convert.ToUInt32(EffectiveAttackSkill * CheckForAttackHeightMediumAttackSkillBonus(playerAttacker));
-        EffectiveAttackSkill = Convert.ToUInt32(EffectiveAttackSkill * CheckForCombatAbilitySteadyShotAttackSkillBonus(playerAttacker));
+        EffectiveAttackSkill = Convert.ToUInt32(EffectiveAttackSkill * CheckForCombatAbilitySteadyStrikeAttackSkillBonus(playerAttacker));
         EffectiveAttackSkill = Convert.ToUInt32(EffectiveAttackSkill * (1.0f + Jewel.GetJewelEffectMod(playerAttacker, PropertyInt.GearBravado, "Bravado")));
 
         _effectiveDefenseSkill = (uint)(defender.GetEffectiveDefenseSkill(CombatType) * LevelScaling.GetPlayerDefenseSkillScalar(playerDefender, attacker)
@@ -1876,11 +2016,11 @@ public class DamageEvent
     }
 
     /// <summary>
-    /// COMBAT ABILITY - Steady Shot: Increased attack skill with missile attacks by 20%.
+    /// COMBAT ABILITY - Steady Strike: Increased attack skill with melee/missile attacks by 25%.
     /// </summary>
-    private float CheckForCombatAbilitySteadyShotAttackSkillBonus(Player playerAttacker)
+    private float CheckForCombatAbilitySteadyStrikeAttackSkillBonus(Player playerAttacker)
     {
-        if (playerAttacker?.GetEquippedMissileWeapon() is null)
+        if (playerAttacker?.GetEquippedWeapon() is null)
         {
             return 1.0f;
         }
@@ -1890,31 +2030,31 @@ public class DamageEvent
             return 1.0f;
         }
 
-        return playerAttacker is {SteadyShotIsActive: true} ? 1.25f : 1.0f;
+        return playerAttacker is {SteadyStrikeIsActive: true} ? 1.25f : 1.0f;
     }
 
     /// <summary>
-    /// ATTACK HEIGHT BONUS: Low (+10% physical defense skill, +15% if weapon specialized)
+    /// ATTACK HEIGHT BONUS: Low (+10% physical defense skill, +20% if weapon specialized)
     /// </summary>
     /// <returns></returns>
     private float CheckForAttackHeightLowDefenseSkillBonus(Player playerDefender, Player playerAttacker)
     {
         if (playerDefender is { AttackHeight: AttackHeight.Low })
         {
-            return WeaponIsSpecialized(playerAttacker) ? 1.15f : 1.1f;
+            return WeaponIsSpecialized(playerAttacker) ? 1.2f : 1.1f;
         }
 
         return 1.0f;
     }
 
     /// <summary>
-    /// ATTACK HEIGHT BONUS: Medium (+10% attack skill, +15% if weapon specialized)
+    /// ATTACK HEIGHT BONUS: Medium (+10% attack skill, +20% if weapon specialized)
     /// </summary>
     private float CheckForAttackHeightMediumAttackSkillBonus(Player playerAttacker)
     {
         if (playerAttacker is { AttackHeight: AttackHeight.Medium })
         {
-            return WeaponIsSpecialized(playerAttacker) ? 1.15f : 1.1f;
+            return WeaponIsSpecialized(playerAttacker) ? 1.2f : 1.1f;
         }
 
         return 1.0f;
@@ -1999,6 +2139,18 @@ public class DamageEvent
     {
         // get cached body parts table
         var bodyParts = Creature.GetBodyParts(defender.WeenieClassId);
+
+        if (bodyParts == null)
+        {
+            _log.Debug(
+                "DamageEvent.GetBodyPart({Defender} ({DefenderGuid}) ) - no body parts table for wcid {DefenderWeenieClassId}",
+                defender.Name,
+                defender.Guid,
+                defender.WeenieClassId
+            );
+            Evaded = true;
+            return;
+        }
 
         // rng roll for body part
         var bodyPart = bodyParts.RollBodyPart(quadrant);
@@ -2172,7 +2324,7 @@ public class DamageEvent
             * _damageRatingMod
             * _dualWieldDamageBonus
             * _twohandedCombatDamageBonus
-            * _combatAbilitySteadyShotDamageBonus;
+            * _combatAbilitySteadyStrikeDamageBonus;
         var averageDpsBeforeMitigation = averageDamageBeforeMitigation / timeSinceLastAttack;
 
         var averageDamageAfterMitigation =
@@ -2191,7 +2343,7 @@ public class DamageEvent
             + $"AverageDamageNonCrit: {avgNonCritHit}, AverageDamageCrit: {critHit}, AverageDamageHit: {averageDamage}\n"
             + $"DPS Base: {baseDps}\n\n"
             + $"-- Before Mitigation --\n"
-            + $"PowerMod: {_powerMod}, AttributeMod: {_attributeMod}, SlayerMod: {_slayerMod}, DamageRatingMod: {_damageRatingMod}, DualWieldMod: {_dualWieldDamageBonus}, TwoHandMod: {_twohandedCombatDamageBonus}, SteadyShotMod: {_combatAbilitySteadyShotDamageBonus}\n"
+            + $"PowerMod: {_powerMod}, AttributeMod: {_attributeMod}, SlayerMod: {_slayerMod}, DamageRatingMod: {_damageRatingMod}, DualWieldMod: {_dualWieldDamageBonus}, TwoHandMod: {_twohandedCombatDamageBonus}, SteadyStrikeMod: {_combatAbilitySteadyStrikeDamageBonus}\n"
             + $"AverageDamage Before Mitigation: {averageDamageBeforeMitigation}\n"
             + $"DPS Before Mitigation: {averageDpsBeforeMitigation}\n\n"
             + $"-- After Mitigation --\n"

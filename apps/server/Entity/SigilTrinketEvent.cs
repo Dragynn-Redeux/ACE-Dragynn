@@ -1,9 +1,9 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using ACE.Common;
 using ACE.Entity.Enum;
 using ACE.Server.Entity.Actions;
-using ACE.Server.Factories;
 using ACE.Server.Factories.Tables;
 using ACE.Server.Network.GameMessages.Messages;
 using ACE.Server.WorldObjects;
@@ -18,8 +18,8 @@ public class SigilTrinketEvent
     // General variables
     public bool OnCrit;
     public Skill Skill;
-    public int EffectId;
-    private List<string> _effectsUsed = [];
+    public Enum EffectId;
+    private List<string> _effectsUsed = new List<string>();
     public Player Player;
     public WorldObject Target;
 
@@ -62,10 +62,24 @@ public class SigilTrinketEvent
         }
 
         // This trinket's trigger successfully occurred. Add the effect ID to a list to prevent other equipped trinkets with the same effect from triggering for this spell.
-        if (sigilTrinket.SigilTrinketEffectId != null && sigilTrinket.WieldSkillType != null)
+        if (sigilTrinket.SigilTrinketEffectId != null && sigilTrinket.AllowedSpecializedSkills != null && sigilTrinket.AllowedSpecializedSkills.Count > 0)
+        {
+            foreach (var allowedSkill in sigilTrinket.AllowedSpecializedSkills)
+            {
+                var effectName = SigilTrinket.GetEffectName(allowedSkill, (int)sigilTrinket.SigilTrinketEffectId);
+                if (!_effectsUsed.Contains(effectName))
+                {
+                    _effectsUsed.Add(effectName);
+                }
+            }
+        }
+        else if (sigilTrinket.SigilTrinketEffectId != null && sigilTrinket.WieldSkillType != null)
         {
             var effectName = SigilTrinket.GetEffectName((Skill)sigilTrinket.WieldSkillType, (int)sigilTrinket.SigilTrinketEffectId);
-            _effectsUsed.Add(effectName);
+            if (!_effectsUsed.Contains(effectName))
+            {
+                _effectsUsed.Add(effectName);
+            }
         }
 
         sigilTrinket.NextTrinketTriggerTime = Time.GetUnixTime() + sigilTrinket.CooldownDuration ?? 20.0;
@@ -100,20 +114,44 @@ public class SigilTrinketEvent
         sigilTrinket.IsWeaponSpell = IsWeaponSpell;
         sigilTrinket.SigilTrinketTarget = Target;
 
-        switch ((sigilTrinket.WieldSkillType, sigilTrinket.SigilTrinketEffectId))
+        var skillsToCheck = GetAllowedSkills(sigilTrinket).ToList();
+        if (skillsToCheck.Count == 0)
         {
-            case ((int)Skill.LifeMagic, (int)SigilTrinketLifeMagicEffect.ScarabCastVuln):
-            case ((int)Skill.LifeMagic, (int)SigilTrinketLifeMagicEffect.ScarabCastProt):
-            case ((int)Skill.LifeMagic, (int)SigilTrinketLifeMagicEffect.ScarabCastItemBuff):
-            case ((int)Skill.LifeMagic, (int)SigilTrinketLifeMagicEffect.ScarabCastVitalRate):
-                var maxLevel = sigilTrinket.SigilTrinketMaxTier ?? 1;
-                sigilTrinket.SpellLevel = (uint)Math.Min(sigilTrinket.TriggerSpell.Level, maxLevel);
+            _log.Error("StartSigilTrinketEffect({SigilTrinket}) - No allowed skills found.", sigilTrinket.Name);
+            return;
+        }
+        
+        switch (Skill, EffectId)
+        {
+            case (Skill.LifeMagic, SigilTrinketLifeMagicEffect.CastVuln):
+            case (Skill.LifeMagic, SigilTrinketLifeMagicEffect.CastProt):
+            case (Skill.LifeMagic, SigilTrinketLifeMagicEffect.CastItemBuff):
+            case (Skill.LifeMagic, SigilTrinketLifeMagicEffect.CastVitalRate):
+                CastSigilTrinketSpell(sigilTrinket, true);
+                break;
 
+            case (Skill.WarMagic, SigilTrinketWarMagicEffect.Duplicate):
+                sigilTrinket.SigilTrinketCastSpellId = sigilTrinket.TriggerSpell.Id;
                 CastSigilTrinketSpell(sigilTrinket);
                 break;
-            case ((int)Skill.LifeMagic, (int)SigilTrinketLifeMagicEffect.ScarabIntensity):
-            case ((int)Skill.WarMagic, (int)SigilTrinketWarMagicEffect.ScarabIntensity):
 
+            case (Skill.WarMagic, SigilTrinketWarMagicEffect.Detonate):
+                sigilTrinket.SigilTrinketCastSpellId = DetonateSpellId(sigilTrinket.TriggerSpell);
+                sigilTrinket.SpellIntensityMultiplier = AoeSpellIntensity(sigilTrinket.TriggerSpell);
+                sigilTrinket.CreatureToCastSpellFrom = CreatureToCastSpellFrom;
+
+                if (sigilTrinket.SigilTrinketCastSpellId != null)
+                {
+                    CastSigilTrinketSpell(sigilTrinket, false);
+                }
+                break;
+
+            case (Skill.WarMagic, SigilTrinketWarMagicEffect.Crushing):
+                CastSigilTrinketSpell(sigilTrinket, true);
+                break;
+
+            case (Skill.LifeMagic, SigilTrinketLifeWarMagicEffect.Intensity):
+            case (Skill.WarMagic, SigilTrinketLifeWarMagicEffect.Intensity):
                 if (sigilTrinket.SigilTrinketIntensity != null)
                 {
                     sigilTrinket.TriggerSpell.SpellPowerMod = (float)sigilTrinket.SigilTrinketIntensity + 1;
@@ -126,47 +164,14 @@ public class SigilTrinketEvent
                     );
                 }
                 break;
-            case ((int)Skill.LifeMagic, (int)SigilTrinketLifeMagicEffect.ScarabShield):
-            case ((int)Skill.WarMagic, (int)SigilTrinketWarMagicEffect.ScarabShield):
 
-                maxLevel = sigilTrinket.SigilTrinketMaxTier ?? 1;
-                sigilTrinket.SpellLevel = (uint)Math.Min(sigilTrinket.TriggerSpell.Level, maxLevel);
-                sigilTrinket.SigilTrinketCastSpellId = 5206; // Surge of Protection
-
-                CastSigilTrinketSpell(sigilTrinket, false);
+            case (Skill.LifeMagic, SigilTrinketLifeWarMagicEffect.Shielding):
+            case (Skill.WarMagic, SigilTrinketLifeWarMagicEffect.Shielding):
+                CastSigilTrinketSpell(sigilTrinket, true);
                 break;
-            case ((int)Skill.WarMagic, (int)SigilTrinketWarMagicEffect.ScarabDuplicate):
 
-                maxLevel = sigilTrinket.SigilTrinketMaxTier ?? 1;
-                sigilTrinket.SpellLevel = (uint)Math.Min(sigilTrinket.TriggerSpell.Level, maxLevel);
-                sigilTrinket.SigilTrinketCastSpellId = sigilTrinket.TriggerSpell.Id;
-
-                CastSigilTrinketSpell(sigilTrinket);
-                break;
-            case ((int)Skill.WarMagic, (int)SigilTrinketWarMagicEffect.ScarabDetonate):
-
-                maxLevel = sigilTrinket.SigilTrinketMaxTier ?? 1;
-                sigilTrinket.SpellLevel = (uint)Math.Min(sigilTrinket.TriggerSpell.Level, maxLevel);
-                sigilTrinket.SigilTrinketCastSpellId = DetonateSpellId(sigilTrinket.TriggerSpell);
-                sigilTrinket.SpellIntensityMultiplier = AoeSpellIntensity(sigilTrinket.TriggerSpell);
-                sigilTrinket.CreatureToCastSpellFrom = CreatureToCastSpellFrom;
-
-                if (sigilTrinket.SigilTrinketCastSpellId != null)
-                {
-                    CastSigilTrinketSpell(sigilTrinket, false);
-                }
-                break;
-            case ((int)Skill.WarMagic, (int)SigilTrinketWarMagicEffect.ScarabCrit):
-
-                maxLevel = sigilTrinket.SigilTrinketMaxTier ?? 1;
-                sigilTrinket.SpellLevel = (uint)Math.Min(sigilTrinket.TriggerSpell.Level, maxLevel);
-                sigilTrinket.SigilTrinketCastSpellId = (int)SpellId.SigilTrinketCriticalDamageBoost;
-
-                CastSigilTrinketSpell(sigilTrinket, false);
-                break;
-            case ((int)Skill.TwoHandedCombat, (int)SigilTrinketTwohandedCombatEffect.Might):
-            case ((int)Skill.Shield, (int)SigilTrinketShieldEffect.Might):
-
+            case (Skill.TwoHandedCombat, SigilTrinketShieldTwohandedCombatEffect.Might):
+            case (Skill.Shield, SigilTrinketShieldTwohandedCombatEffect.Might):
                 if (DamageEvent is null)
                 {
                     _log.Error("StartSigilTrinketEffect({SigilTrinket}) - DamageEvent is null for Compass of Might case.", sigilTrinket.Name);
@@ -181,14 +186,13 @@ public class SigilTrinketEvent
                         ChatMessageType.CombatSelf
                     )
                 );
-
                 break;
-            case ((int)Skill.TwoHandedCombat, (int)SigilTrinketTwohandedCombatEffect.Aggression):
-            case ((int)Skill.Shield, (int)SigilTrinketShieldEffect.Aggression):
-            {
-                if (Target is Creature creatureTarget)
+
+            case (Skill.TwoHandedCombat, SigilTrinketShieldTwohandedCombatEffect.Aggression):
+            case (Skill.Shield, SigilTrinketShieldTwohandedCombatEffect.Aggression):
+                if (Target is Creature creatureTargetAgg)
                 {
-                    creatureTarget.DoubleThreatFromNextAttackTargets.Add(Player);
+                    creatureTargetAgg.DoubleThreatFromNextAttackTargets.Add(Player);
 
                     Player.Session.Network.EnqueueSend(
                         new GameMessageSystemChat(
@@ -197,15 +201,11 @@ public class SigilTrinketEvent
                         )
                     );
                 }
-
                 break;
-            }
-            case ((int)Skill.DualWield, (int)SigilTrinketDualWieldEffect.Assailment):
-                maxLevel = sigilTrinket.SigilTrinketMaxTier ?? 1;
-                sigilTrinket.SpellLevel = (uint)maxLevel; // TODO: if wielding a lower tier weapon, cast lower tier spell (like war/life checks)
-                sigilTrinket.SigilTrinketCastSpellId = (int)SpellId.SigilTrinketCriticalChanceBoost;
 
-                CastSigilTrinketSpell(sigilTrinket, false);
+            case (Skill.DualWield, SigilTrinketDualWieldMissileEffect.Assailment):
+            case (Skill.Bow, SigilTrinketDualWieldMissileEffect.Assailment):
+                CastSigilTrinketSpell(sigilTrinket, true);
 
                 Player.Session.Network.EnqueueSend(
                     new GameMessageSystemChat(
@@ -213,10 +213,21 @@ public class SigilTrinketEvent
                         ChatMessageType.CombatSelf
                     )
                 );
-
                 break;
-            case ((int)Skill.Thievery, (int)SigilTrinketThieveryEffect.Treachery):
 
+            case (Skill.DualWield, SigilTrinketDualWieldMissileEffect.SwiftKiller):
+            case (Skill.Bow, SigilTrinketDualWieldMissileEffect.SwiftKiller):
+                CastSigilTrinketSpell(sigilTrinket, true);
+
+                Player.Session.Network.EnqueueSend(
+                    new GameMessageSystemChat(
+                        $"Sigil Puzzle Box of Swift Killer boosts your attack speed!",
+                        ChatMessageType.CombatSelf
+                    )
+                );
+                break;
+
+            case (Skill.Thievery, SigilTrinketThieveryEffect.Treachery):
                 if (DamageEvent is null)
                 {
                     _log.Error("StartSigilTrinketEffect({SigilTrinket}) - DamageEvent is null for Puzzle Box of Treachery case.", sigilTrinket.Name);
@@ -231,10 +242,9 @@ public class SigilTrinketEvent
                         ChatMessageType.CombatSelf
                     )
                 );
-
                 break;
-            case ((int)Skill.PhysicalDefense, (int)SigilTrinketPhysicalDefenseEffect.Evasion):
 
+            case (Skill.PhysicalDefense, SigilTrinketPhysicalDefenseEffect.Evasion):
                 if (DamageEvent is null)
                 {
                     _log.Error("StartSigilTrinketEffect({SigilTrinket}) - DamageEvent is null for Pocket Watch of Evasion case.", sigilTrinket.Name);
@@ -250,10 +260,9 @@ public class SigilTrinketEvent
                         ChatMessageType.CombatSelf
                     )
                 );
-
                 break;
-            case ((int)Skill.MagicDefense, (int)SigilTrinketMagicDefenseEffect.Absorption):
 
+            case (Skill.MagicDefense, SigilTrinketMagicDefenseEffect.Absorption):
                 if (Target is null)
                 {
                     _log.Error("StartSigilTrinketEffect({SigilTrinket}) - Target is null for Top of Absorption case.", sigilTrinket.Name);
@@ -273,26 +282,20 @@ public class SigilTrinketEvent
                         ChatMessageType.Magic
                     )
                 );
-
                 break;
-            case ((int)Skill.Perception, (int)SigilTrinketPerceptionEffect.Exposure):
 
-                maxLevel = sigilTrinket.SigilTrinketMaxTier ?? 1;
-                sigilTrinket.SpellLevel = (uint)maxLevel; // TODO: if wielding a lower tier weapon, cast lower tier spell (like war/life checks)
-                sigilTrinket.SigilTrinketCastSpellId = (int)SpellId.SigilTrinketDamageBoost;
-
+            case (Skill.Perception, SigilTrinketPerceptionEffect.Exposure):
                 CastSigilTrinketSpell(sigilTrinket, false);
 
                 Player.Session.Network.EnqueueSend(
                     new GameMessageSystemChat(
                         $"Sigil Goggles of Exposure boosts your damage for the next 10 seconds!",
-                        ChatMessageType.Magic
+                        ChatMessageType.CombatSelf
                     )
                 );
-
                 break;
-            case ((int)Skill.Deception, (int)SigilTrinketDeceptionEffect.Avoidance):
-            {
+
+            case (Skill.Deception, SigilTrinketDeceptionEffect.Avoidance):
                 if (Target is Creature creatureTarget)
                 {
                     creatureTarget.SkipThreatFromNextAttackTargets.Add(Player);
@@ -304,9 +307,7 @@ public class SigilTrinketEvent
                         )
                     );
                 }
-
                 break;
-            }
         }
     }
 
@@ -315,96 +316,229 @@ public class SigilTrinketEvent
     /// </summary>
     private void CastSigilTrinketSpell(SigilTrinket sigilTrinket, bool useProgression = true)
     {
-        SpellId castSpellLevel1Id;
+        var castSpellLevel1IdsToCastSet = new HashSet<SpellId>();
 
-        switch ((sigilTrinket.WieldSkillType, sigilTrinket.SigilTrinketEffectId))
+        if (sigilTrinket.TriggerSpell is not null)
         {
-            case ((int)Skill.LifeMagic, (int)SigilTrinketLifeMagicEffect.ScarabCastVitalRate):
+            sigilTrinket.SpellLevel = sigilTrinket.TriggerSpell.Level;
+        }
+
+        var skillsToCheck = GetAllowedSkills(sigilTrinket).ToList();
+
+        if (skillsToCheck.Count == 0)
+        {
+            _log.Error("CastSigilTrinketSpell({SigilTrinket}) - No allowed skills found.", sigilTrinket.Name);
+            return;
+        }
+
+        switch (Skill, EffectId)
+        {
+            case (Skill.LifeMagic, SigilTrinketLifeMagicEffect.CastVitalRate):
                 switch (sigilTrinket.TriggerSpell.Category)
                 {
                     case SpellCategory.HealthRaising:
                     case SpellCategory.HealingRaising:
-                        castSpellLevel1Id = SpellId.RegenerationOther1;
+                        castSpellLevel1IdsToCastSet.Add(SpellId.RegenerationOther1);
                         break;
                     case SpellCategory.StaminaRaising:
-                        castSpellLevel1Id = SpellId.RejuvenationOther1;
+                        castSpellLevel1IdsToCastSet.Add(SpellId.RejuvenationOther1);
                         break;
                     case SpellCategory.ManaRaising:
-                        castSpellLevel1Id = SpellId.ManaRenewalOther1;
+                        castSpellLevel1IdsToCastSet.Add(SpellId.ManaRenewalOther1);
                         break;
                     case SpellCategory.HealthLowering:
-                        castSpellLevel1Id = SpellId.FesterOther1;
+                        castSpellLevel1IdsToCastSet.Add(SpellId.FesterOther1);
                         break;
                     case SpellCategory.StaminaLowering:
-                        castSpellLevel1Id = SpellId.ExhaustionOther1;
+                        castSpellLevel1IdsToCastSet.Add(SpellId.ExhaustionOther1);
                         break;
                     case SpellCategory.ManaLowering:
-                        castSpellLevel1Id = SpellId.ManaDepletionOther1;
+                        castSpellLevel1IdsToCastSet.Add(SpellId.ManaDepletionOther1);
                         break;
                     default:
-                        return;
+                        break;
                 }
                 break;
-            case ((int)Skill.LifeMagic, (int)SigilTrinketLifeMagicEffect.ScarabCastItemBuff):
+
+            case (Skill.LifeMagic, SigilTrinketLifeMagicEffect.CastItemBuff):
                 switch (sigilTrinket.TriggerSpell.Category)
                 {
                     case SpellCategory.HealthRaising:
                     case SpellCategory.HealingRaising:
-                        castSpellLevel1Id = SpellId.DefenderOther1;
+                        castSpellLevel1IdsToCastSet.Add(SpellId.DefenderOther1);
                         break;
                     case SpellCategory.StaminaRaising:
-                        castSpellLevel1Id = SpellId.BloodDrinkerOther1;
+                        castSpellLevel1IdsToCastSet.Add(SpellId.BloodDrinkerOther1);
                         break;
                     case SpellCategory.ManaRaising:
-                        castSpellLevel1Id = SpellId.SpiritDrinkerOther1;
+                        castSpellLevel1IdsToCastSet.Add(SpellId.SpiritDrinkerOther1);
                         break;
-                    //case SpellCategory.HealthLowering: castSpellLevel1Id = SpellId.FesterOther1; break;
-                    //case SpellCategory.StaminaLowering: castSpellLevel1Id = SpellId.ExhaustionOther1; break;
-                    //case SpellCategory.ManaLowering: castSpellLevel1Id = SpellId.ManaDepletionOther1; break;
                     default:
-                        return;
+                        break;
                 }
                 break;
+
+            case (Skill.LifeMagic, SigilTrinketLifeMagicEffect.CastProt):
+                if (Target is not Creature targetCreature)
+                {
+                    break;
+                }
+
+                castSpellLevel1IdsToCastSet.Add(SpellId.ArmorOther1);
+
+                var recentDamageTakenTypes = targetCreature.RecentDamageTypesTaken;
+
+                if (recentDamageTakenTypes.Count == 0)
+                {
+                    break;
+                }
+
+                foreach (var damageTakenType in recentDamageTakenTypes)
+                {
+                    switch (damageTakenType)
+                    {
+                        case DamageType.Slash:
+                            castSpellLevel1IdsToCastSet.Add(SpellId.BladeProtectionOther1);
+                            break;
+                        case DamageType.Pierce:
+                            castSpellLevel1IdsToCastSet.Add(SpellId.PiercingProtectionOther1);
+                            break;
+                        case DamageType.Bludgeon:
+                            castSpellLevel1IdsToCastSet.Add(SpellId.BludgeonProtectionOther1);
+                            break;
+                        case DamageType.Acid:
+                            castSpellLevel1IdsToCastSet.Add(SpellId.AcidProtectionOther1);
+                            break;
+                        case DamageType.Fire:
+                            castSpellLevel1IdsToCastSet.Add(SpellId.FireProtectionOther1);
+                            break;
+                        case DamageType.Cold:
+                            castSpellLevel1IdsToCastSet.Add(SpellId.ColdProtectionOther1);
+                            break;
+                        case DamageType.Electric:
+                            castSpellLevel1IdsToCastSet.Add(SpellId.LightningProtectionOther1);
+                            break;
+                        default:
+                            continue;
+                    }
+                }
+                break;
+
+            case (Skill.LifeMagic, SigilTrinketLifeMagicEffect.CastVuln):
+                if (Target is not Creature targetCreatureVuln)
+                {
+                    break;
+                }
+
+                var targetWeakestResistances = targetCreatureVuln.WeakestResistances;
+
+                if (targetWeakestResistances.Count == 0)
+                {
+                    break;
+                }
+
+                foreach (var elementalWeakness in targetWeakestResistances)
+                {
+                    switch (elementalWeakness)
+                    {
+                        case DamageType.Slash:
+                            castSpellLevel1IdsToCastSet.Add(SpellId.BladeVulnerabilityOther1);
+                            break;
+                        case DamageType.Pierce:
+                            castSpellLevel1IdsToCastSet.Add(SpellId.PiercingVulnerabilityOther1);
+                            break;
+                        case DamageType.Bludgeon:
+                            castSpellLevel1IdsToCastSet.Add(SpellId.BludgeonVulnerabilityOther1);
+                            break;
+                        case DamageType.Acid:
+                            castSpellLevel1IdsToCastSet.Add(SpellId.AcidVulnerabilityOther1);
+                            break;
+                        case DamageType.Fire:
+                            castSpellLevel1IdsToCastSet.Add(SpellId.FireVulnerabilityOther1);
+                            break;
+                        case DamageType.Cold:
+                            castSpellLevel1IdsToCastSet.Add(SpellId.ColdVulnerabilityOther1);
+                            break;
+                        case DamageType.Electric:
+                            castSpellLevel1IdsToCastSet.Add(SpellId.LightningVulnerabilityOther1);
+                            break;
+                        default:
+                            continue;
+                    }
+                }
+                break;
+
+            case (Skill.WarMagic, SigilTrinketWarMagicEffect.Crushing):
+            case (Skill.Perception, SigilTrinketPerceptionEffect.Exposure):
+                castSpellLevel1IdsToCastSet.Add(SpellId.SigilTrinketCriticalDamageBoost);
+                break;
+
+            case (Skill.LifeMagic, SigilTrinketLifeWarMagicEffect.Shielding):
+            case (Skill.WarMagic, SigilTrinketLifeWarMagicEffect.Shielding):
+                castSpellLevel1IdsToCastSet.Add(SpellId.SigilTrinketShield1);
+                break;
+
+            case (Skill.DualWield, SigilTrinketDualWieldMissileEffect.Assailment):
+            case (Skill.Bow, SigilTrinketDualWieldMissileEffect.Assailment):
+                castSpellLevel1IdsToCastSet.Add(SpellId.SigilTrinketCriticalDamageBoost);
+                break;
+
+            case (Skill.DualWield, SigilTrinketDualWieldMissileEffect.SwiftKiller):
+            case (Skill.Bow, SigilTrinketDualWieldMissileEffect.SwiftKiller):
+                castSpellLevel1IdsToCastSet.Add(SpellId.SwiftKillerSelf1);
+                break;
+
             default:
+                if (sigilTrinket.SigilTrinketCastSpellId != null)
+                {
+                    castSpellLevel1IdsToCastSet.Add((SpellId)sigilTrinket.SigilTrinketCastSpellId);
+                }
+                break;
+        }
+        
+
+        var castSpellLevel1IdsToCast = castSpellLevel1IdsToCastSet.ToList();
+        if (castSpellLevel1IdsToCast.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var castSpellLevel1Id in castSpellLevel1IdsToCast)
+        {
+            SpellId castSpellId;
+            if (useProgression && sigilTrinket.SpellLevel != null)
             {
-                castSpellLevel1Id = (SpellId)(sigilTrinket.SigilTrinketCastSpellId ?? 0);
-                if (castSpellLevel1Id == SpellId.Undef)
+                castSpellId = SpellLevelProgression.GetSpellAtLevel(castSpellLevel1Id, (int)sigilTrinket.SpellLevel, true);
+                if (castSpellId == SpellId.Undef)
                 {
                     return;
                 }
-                break;
             }
-        }
-
-        SpellId castSpellId;
-        if (useProgression && sigilTrinket.SpellLevel != null)
-        {
-            castSpellId = SpellLevelProgression.GetSpellAtLevel(castSpellLevel1Id, (int)sigilTrinket.SpellLevel, true);
-            if (castSpellId == SpellId.Undef)
+            else
             {
-                return;
+                castSpellId = castSpellLevel1Id;
             }
-        }
-        else
-        {
-            castSpellId = castSpellLevel1Id;
-        }
 
-        // Create Sigil Trinket Spell with different delays depending on the effect type
-        switch ((sigilTrinket.WieldSkillType, sigilTrinket.SigilTrinketEffectId))
-        {
-            case ((int)Skill.LifeMagic, (int)SigilTrinketLifeMagicEffect.ScarabCastVitalRate):
-                CreateSigilTrinketSpell(sigilTrinket, castSpellId, 1.0);
-                break;
-            case ((int)Skill.WarMagic, (int)SigilTrinketWarMagicEffect.ScarabDetonate):
-                if (sigilTrinket.CreatureToCastSpellFrom != null)
+            // Determine delay by checking allowed skills; default 0.5
+            var delay = 0.5;
+            foreach (var skill in skillsToCheck)
+            {
+                if (skill == Skill.LifeMagic && sigilTrinket.SigilTrinketEffectId == (int)SigilTrinketLifeMagicEffect.CastVitalRate)
                 {
-                    CreateSigilTrinketSpell(sigilTrinket, castSpellId, 0.0);
+                    delay = 1.0;
+                    break;
                 }
-                break;
-            default:
-                CreateSigilTrinketSpell(sigilTrinket, castSpellId, 0.5);
-                break;
+                if (skill == Skill.WarMagic && sigilTrinket.SigilTrinketEffectId == (int)SigilTrinketWarMagicEffect.Detonate)
+                {
+                    if (sigilTrinket.CreatureToCastSpellFrom != null)
+                    {
+                        delay = 0.0;
+                    }
+                    break;
+                }
+            }
+
+            CreateSigilTrinketSpell(sigilTrinket, castSpellId, delay);
         }
     }
 
@@ -504,185 +638,239 @@ public class SigilTrinketEvent
     // --- VALIDATION CHECKS ---
     private bool SigilTrinketValidationChecks(SigilTrinket sigilTrinket)
     {
-        if (sigilTrinket.SigilTrinketEffectId is null || sigilTrinket.SigilTrinketEffectId != EffectId)
+        var effectEnum = GetEffectIdEnum(sigilTrinket);
+
+        if (effectEnum is null || EffectId is null)
         {
             return false;
         }
 
-        if (sigilTrinket.WieldSkillType is null || (Skill)sigilTrinket.WieldSkillType != Skill)
+        if (sigilTrinket.SigilTrinketEffectId is null || effectEnum.ToString() != EffectId.ToString())
+        {
+            return false;
+        }
+        
+        // Validate that the triggering Skill is allowed by the trinket (supports AllowedSpecializedSkills list)
+        var allowedSkills = GetAllowedSkills(sigilTrinket).ToList();
+        var skillMatches = allowedSkills.Count > 0 && allowedSkills.Contains(Skill);
+
+        if (!skillMatches)
         {
             return false;
         }
 
         // Check if another trinket with the same effect is already in the process of activating
-        if (_effectsUsed.Contains(SigilTrinket.GetEffectName((Skill)sigilTrinket.WieldSkillType, (int)sigilTrinket.SigilTrinketEffectId)))
+        foreach (var skl in allowedSkills)
         {
-            return false;
+            var effectName = SigilTrinket.GetEffectName(skl, (int)sigilTrinket.SigilTrinketEffectId);
+            if (_effectsUsed.Contains(effectName))
+            {
+                return false;
+            }
         }
 
         // CHECK CONDITIONS OF EACH TRINKET TYPE
-        switch ((Skill, EffectId))
+        switch (Skill, EffectId)
         {
-            case (Skill.LifeMagic, (int)SigilTrinketLifeMagicEffect.ScarabCastVuln):
+            case (Skill.LifeMagic, SigilTrinketLifeMagicEffect.CastVuln):
                 return IsValidForCastVuln(sigilTrinket);
 
-            case (Skill.LifeMagic, (int)SigilTrinketLifeMagicEffect.ScarabCastProt):
+            case (Skill.LifeMagic, SigilTrinketLifeMagicEffect.CastProt):
                 return IsValidForCastProt(sigilTrinket);
 
-            case (Skill.LifeMagic, (int)SigilTrinketLifeMagicEffect.ScarabCastItemBuff):
+            case (Skill.LifeMagic, SigilTrinketLifeMagicEffect.CastItemBuff):
                 return IsValidForCastItemBuff(sigilTrinket);
 
-            case (Skill.LifeMagic, (int)SigilTrinketLifeMagicEffect.ScarabCastVitalRate):
+            case (Skill.LifeMagic, SigilTrinketLifeMagicEffect.CastVitalRate):
                 return IsValidForCastVitalRate(sigilTrinket);
 
-            case (Skill.LifeMagic, (int)SigilTrinketLifeMagicEffect.ScarabIntensity):
-            case (Skill.WarMagic, (int)SigilTrinketWarMagicEffect.ScarabIntensity):
+            case (Skill.LifeMagic, SigilTrinketLifeWarMagicEffect.Intensity):
+            case (Skill.WarMagic, SigilTrinketLifeWarMagicEffect.Intensity):
                 return IsValidForIntensity(sigilTrinket);
 
-            case (Skill.LifeMagic, (int)SigilTrinketLifeMagicEffect.ScarabShield):
-            case (Skill.WarMagic, (int)SigilTrinketWarMagicEffect.ScarabShield):
+            case (Skill.LifeMagic, SigilTrinketLifeWarMagicEffect.Shielding):
+            case (Skill.WarMagic, SigilTrinketLifeWarMagicEffect.Shielding):
                 return IsValidForShield(sigilTrinket);
 
-            case (Skill.LifeMagic, (int)SigilTrinketLifeMagicEffect.ScarabManaReduction):
-            case (Skill.WarMagic, (int)SigilTrinketWarMagicEffect.ScarabManaReduction):
+            case (Skill.LifeMagic, SigilTrinketLifeWarMagicEffect.Reduction):
+            case (Skill.WarMagic, SigilTrinketLifeWarMagicEffect.Reduction):
                 return IsValidForReduction(sigilTrinket);
 
-            case (Skill.WarMagic, (int)SigilTrinketWarMagicEffect.ScarabDuplicate):
+            case (Skill.WarMagic, SigilTrinketWarMagicEffect.Duplicate):
                 return IsValidForDuplicate(sigilTrinket);
 
-            case (Skill.WarMagic, (int)SigilTrinketWarMagicEffect.ScarabDetonate):
+            case (Skill.WarMagic, SigilTrinketWarMagicEffect.Detonate):
                 return IsValidForDetonate(sigilTrinket);
 
-            case (Skill.WarMagic, (int)SigilTrinketWarMagicEffect.ScarabCrit):
+            case (Skill.WarMagic, SigilTrinketWarMagicEffect.Crushing):
                 return IsValidForCrushing(sigilTrinket);
 
-            case (Skill.TwoHandedCombat, (int)SigilTrinketTwohandedCombatEffect.Might):
-            case (Skill.Shield, (int)SigilTrinketShieldEffect.Might):
+            case (Skill.TwoHandedCombat, SigilTrinketShieldTwohandedCombatEffect.Might):
+            case (Skill.Shield, SigilTrinketShieldTwohandedCombatEffect.Might):
                 return IsValidForMight(sigilTrinket);
 
-            case (Skill.TwoHandedCombat, (int)SigilTrinketTwohandedCombatEffect.Aggression):
-            case (Skill.Shield, (int)SigilTrinketShieldEffect.Aggression):
+            case (Skill.TwoHandedCombat, SigilTrinketShieldTwohandedCombatEffect.Aggression):
+            case (Skill.Shield, SigilTrinketShieldTwohandedCombatEffect.Aggression):
                 return IsValidForAggression(sigilTrinket);
 
-            case (Skill.DualWield, (int)SigilTrinketDualWieldEffect.Assailment):
+            case (Skill.DualWield, SigilTrinketDualWieldMissileEffect.Assailment):
+            case (Skill.Bow, SigilTrinketDualWieldMissileEffect.Assailment):
                 return IsValidForAssailment(sigilTrinket);
 
-            case (Skill.Thievery, (int)SigilTrinketThieveryEffect.Treachery):
+            case (Skill.DualWield, SigilTrinketDualWieldMissileEffect.SwiftKiller):
+            case (Skill.Bow, SigilTrinketDualWieldMissileEffect.SwiftKiller):
+                return IsValidForSwiftKiller(sigilTrinket);
+
+            case (Skill.Thievery, SigilTrinketThieveryEffect.Treachery):
                 return IsValidForTreachery(sigilTrinket);
 
-            case (Skill.PhysicalDefense, (int)SigilTrinketPhysicalDefenseEffect.Evasion):
+            case (Skill.PhysicalDefense, SigilTrinketPhysicalDefenseEffect.Evasion):
                 return IsValidForEvasion(sigilTrinket);
 
-            case (Skill.MagicDefense, (int)SigilTrinketMagicDefenseEffect.Absorption):
+            case (Skill.MagicDefense, SigilTrinketMagicDefenseEffect.Absorption):
                 return IsValidForAbsorption(sigilTrinket);
 
-            case (Skill.AssessPerson, (int)SigilTrinketPerceptionEffect.Exposure):
+            case (Skill.AssessPerson, SigilTrinketPerceptionEffect.Exposure):
                 return IsValidForExposure(sigilTrinket);
 
-            case (Skill.Deception, (int)SigilTrinketDeceptionEffect.Avoidance):
+            case (Skill.Deception, SigilTrinketDeceptionEffect.Avoidance):
                 return IsValidForAvoidance(sigilTrinket);
         }
 
-        return true;
+        return false;
     }
+
+    private Enum GetEffectIdEnum(SigilTrinket sigilTrinket)
+    {
+        if (sigilTrinket.SigilTrinketEffectId is null)
+        {
+            return null;
+        }
+
+        var allowedSkills = GetAllowedSkills(sigilTrinket).ToList();
+        var multiSkill = allowedSkills.Count > 1;
+
+        switch ((multiSkill, allowedSkills[0]))
+        {
+            case (false, Skill.LifeMagic):
+                return (SigilTrinketLifeMagicEffect)sigilTrinket.SigilTrinketEffectId;
+            case (false, Skill.WarMagic):
+                return (SigilTrinketWarMagicEffect)sigilTrinket.SigilTrinketEffectId;
+            case (true, Skill.LifeMagic):
+            case (true, Skill.WarMagic):
+                return (SigilTrinketLifeWarMagicEffect)sigilTrinket.SigilTrinketEffectId;
+            case (false, Skill.Shield):
+                return (SigilTrinketShieldEffect)sigilTrinket.SigilTrinketEffectId;
+            case (false, Skill.TwoHandedCombat):
+                return (SigilTrinketTwohandedCombatEffect)sigilTrinket.SigilTrinketEffectId;
+            case (true, Skill.TwoHandedCombat):
+            case (true, Skill.Shield):
+                return (SigilTrinketShieldTwohandedCombatEffect)sigilTrinket.SigilTrinketEffectId;
+            case (false, Skill.DualWield):
+                return (SigilTrinketDualWieldEffect)sigilTrinket.SigilTrinketEffectId;
+            case (false, Skill.Bow):
+                return (SigilTrinketMissileEffect)sigilTrinket.SigilTrinketEffectId;
+            case (true, Skill.DualWield):
+            case (true, Skill.Bow):
+                return (SigilTrinketDualWieldMissileEffect)sigilTrinket.SigilTrinketEffectId;
+            case (false, Skill.Thievery):
+                return (SigilTrinketThieveryEffect)sigilTrinket.SigilTrinketEffectId;
+            case (false, Skill.PhysicalDefense):
+                return (SigilTrinketPhysicalDefenseEffect)sigilTrinket.SigilTrinketEffectId;
+            case (false, Skill.MagicDefense):
+                return (SigilTrinketMagicDefenseEffect)sigilTrinket.SigilTrinketEffectId;
+            default: return null;
+        }
+    }
+
     private bool IsValidForCastVuln(SigilTrinket sigilTrinket)
     {
-        var validSkill = sigilTrinket.WieldSkillType == (int)Skill.LifeMagic;
-        var validEffectId = sigilTrinket.SigilTrinketEffectId == (int)SigilTrinketLifeMagicEffect.ScarabCastVuln;
+        var validSkill = GetAllowedSkills(sigilTrinket).Contains(Skill.LifeMagic);
+        var validEffectId = sigilTrinket.SigilTrinketEffectId == (int)SigilTrinketLifeMagicEffect.CastVuln;
         var validSpellCategory = SigilTrinket.LifeHarmfulTriggerSpells.Contains(TriggerSpell.Category);
-        var validSpellLevel = sigilTrinket.SigilTrinketMaxTier >= TriggerSpell.Level;
 
-        return validSkill && validEffectId && validSpellCategory && validSpellLevel && !OnCrit;
+        return validSkill && validEffectId && validSpellCategory && !OnCrit;
     }
 
     private bool IsValidForCastProt(SigilTrinket sigilTrinket)
     {
-        var validSkill = sigilTrinket.WieldSkillType == (int)Skill.LifeMagic;
-        var validEffectId = sigilTrinket.SigilTrinketEffectId == (int)SigilTrinketLifeMagicEffect.ScarabCastProt;
+        var validSkill = GetAllowedSkills(sigilTrinket).Contains(Skill.LifeMagic);
+        var validEffectId = sigilTrinket.SigilTrinketEffectId == (int)SigilTrinketLifeMagicEffect.CastProt;
         var validSpellCategory = SigilTrinket.LifeBeneficialTriggerSpells.Contains(TriggerSpell.Category);
-        var validSpellLevel = sigilTrinket.SigilTrinketMaxTier >= TriggerSpell.Level;
 
-        return validSkill && validEffectId && validSpellCategory && validSpellLevel && !OnCrit;
+        return validSkill && validEffectId && validSpellCategory && !OnCrit;
     }
 
     private bool IsValidForCastItemBuff(SigilTrinket sigilTrinket)
     {
-        var validSkill = sigilTrinket.WieldSkillType == (int)Skill.LifeMagic;
-        var validEffectId = sigilTrinket.SigilTrinketEffectId == (int)SigilTrinketLifeMagicEffect.ScarabCastItemBuff;
+        var validSkill = GetAllowedSkills(sigilTrinket).Contains(Skill.LifeMagic);
+        var validEffectId = sigilTrinket.SigilTrinketEffectId == (int)SigilTrinketLifeMagicEffect.CastItemBuff;
         var validSpellCategory = SigilTrinket.LifeBeneficialTriggerSpells.Contains(TriggerSpell.Category);
-        var validSpellLevel = sigilTrinket.SigilTrinketMaxTier >= TriggerSpell.Level;
 
-        return validSkill && validEffectId && validSpellCategory && validSpellLevel && !OnCrit;
+        return validSkill && validEffectId && validSpellCategory && !OnCrit;
     }
 
     private bool IsValidForCastVitalRate(SigilTrinket sigilTrinket)
     {
-        var validSkill = sigilTrinket.WieldSkillType == (int)Skill.LifeMagic;
-        var validEffectId = sigilTrinket.SigilTrinketEffectId == (int)SigilTrinketLifeMagicEffect.ScarabCastVitalRate;
+        var validSkill = GetAllowedSkills(sigilTrinket).Contains(Skill.LifeMagic);
+        var validEffectId = sigilTrinket.SigilTrinketEffectId == (int)SigilTrinketLifeMagicEffect.CastVitalRate;
         var validSpellCategory = SigilTrinket.LifeBeneficialTriggerSpells.Contains(TriggerSpell.Category) || SigilTrinket.LifeHarmfulTriggerSpells.Contains(TriggerSpell.Category);
-        var validSpellLevel = sigilTrinket.SigilTrinketMaxTier >= TriggerSpell.Level;
 
-        return validSkill && validEffectId && validSpellCategory && validSpellLevel && !OnCrit;
+        return validSkill && validEffectId && validSpellCategory && !OnCrit;
     }
 
     private bool IsValidForIntensity(SigilTrinket sigilTrinket)
     {
-        var validSkillEffectLife = sigilTrinket.WieldSkillType == (int)Skill.LifeMagic && sigilTrinket.SigilTrinketEffectId == (int)SigilTrinketLifeMagicEffect.ScarabIntensity;
-        var validSkillEffectWar = sigilTrinket.WieldSkillType == (int)Skill.WarMagic && sigilTrinket.SigilTrinketEffectId == (int)SigilTrinketWarMagicEffect.ScarabIntensity;
-        var validSkillEffect = validSkillEffectLife || validSkillEffectWar;
-        var validSpellLevel = sigilTrinket.SigilTrinketMaxTier >= TriggerSpell.Level;
+        var validSkillLifeWar = GetAllowedSkills(sigilTrinket).Contains(Skill.LifeMagic) && GetAllowedSkills(sigilTrinket).Contains(Skill.WarMagic);
 
-        return validSkillEffect && validSpellLevel && !OnCrit;
+        var validEffectId = sigilTrinket.SigilTrinketEffectId == (int)SigilTrinketLifeWarMagicEffect.Intensity;
+
+        return validSkillLifeWar && validEffectId && !OnCrit;
     }
 
     private bool IsValidForShield(SigilTrinket sigilTrinket)
     {
-        var validSkillEffectLife = sigilTrinket.WieldSkillType == (int)Skill.LifeMagic && sigilTrinket.SigilTrinketEffectId == (int)SigilTrinketLifeMagicEffect.ScarabShield;
-        var validSkillEffectWar = sigilTrinket.WieldSkillType == (int)Skill.WarMagic && sigilTrinket.SigilTrinketEffectId == (int)SigilTrinketWarMagicEffect.ScarabShield;
-        var validSkillEffect = validSkillEffectLife || validSkillEffectWar;
-        var validSpellLevel = sigilTrinket.SigilTrinketMaxTier >= TriggerSpell.Level;
+        var validSkillLifeWar = GetAllowedSkills(sigilTrinket).Contains(Skill.LifeMagic) && GetAllowedSkills(sigilTrinket).Contains(Skill.WarMagic);
 
-        return validSkillEffect && validSpellLevel && !OnCrit;
+        var validEffectId = sigilTrinket.SigilTrinketEffectId == (int)SigilTrinketLifeWarMagicEffect.Shielding;
+
+        return validSkillLifeWar && validEffectId && !OnCrit;
     }
 
     private bool IsValidForReduction(SigilTrinket sigilTrinket)
     {
-        var validSkillEffectLife = sigilTrinket.WieldSkillType == (int)Skill.LifeMagic && sigilTrinket.SigilTrinketEffectId == (int)SigilTrinketLifeMagicEffect.ScarabManaReduction;
-        var validSkillEffectWar = sigilTrinket.WieldSkillType == (int)Skill.WarMagic && sigilTrinket.SigilTrinketEffectId == (int)SigilTrinketWarMagicEffect.ScarabManaReduction;
-        var validSkillEffect = validSkillEffectLife || validSkillEffectWar;
-        var validSpellLevel = sigilTrinket.SigilTrinketMaxTier >= TriggerSpell.Level;
+        var validSkillLifeWar = GetAllowedSkills(sigilTrinket).Contains(Skill.LifeMagic) && GetAllowedSkills(sigilTrinket).Contains(Skill.WarMagic);
 
-        return validSkillEffect && validSpellLevel && !OnCrit;
+        var validEffectId = sigilTrinket.SigilTrinketEffectId == (int)SigilTrinketLifeWarMagicEffect.Reduction;
+
+        return validSkillLifeWar && validEffectId && !OnCrit;
     }
 
     private bool IsValidForDuplicate(SigilTrinket sigilTrinket)
     {
-        var validSkill = sigilTrinket.WieldSkillType == (int)Skill.WarMagic;
-        var validEffectId = sigilTrinket.SigilTrinketEffectId == (int)SigilTrinketWarMagicEffect.ScarabDuplicate;
+        var validSkill = GetAllowedSkills(sigilTrinket).Contains(Skill.WarMagic);
+        var validEffectId = sigilTrinket.SigilTrinketEffectId == (int)SigilTrinketWarMagicEffect.Duplicate;
         var validSpellCategory = SigilTrinket.WarProjectileTriggerCategories.Contains(TriggerSpell.Category);
-        var validSpellLevel = sigilTrinket.SigilTrinketMaxTier >= TriggerSpell.Level;
 
-        return validSkill && validEffectId && validSpellCategory && validSpellLevel && !OnCrit;
+        return validSkill && validEffectId && validSpellCategory && !OnCrit;
     }
 
     private bool IsValidForDetonate(SigilTrinket sigilTrinket)
     {
-        var validSkill = sigilTrinket.WieldSkillType == (int)Skill.WarMagic;
-        var validEffectId = sigilTrinket.SigilTrinketEffectId == (int)SigilTrinketWarMagicEffect.ScarabDetonate;
+        var validSkill = GetAllowedSkills(sigilTrinket).Contains(Skill.WarMagic);
+        var validEffectId = sigilTrinket.SigilTrinketEffectId == (int)SigilTrinketWarMagicEffect.Detonate;
         var validSpellCategory = SigilTrinket.WarProjectileTriggerCategories.Contains(TriggerSpell.Category);
-        var validSpellLevel = sigilTrinket.SigilTrinketMaxTier >= TriggerSpell.Level;
 
-        return Target != null && validSkill && validEffectId && validSpellCategory && validSpellLevel && !OnCrit;
+        return Target != null && validSkill && validEffectId && validSpellCategory && !OnCrit;
     }
 
     private bool IsValidForCrushing(SigilTrinket sigilTrinket)
     {
-        var validSkill = sigilTrinket.WieldSkillType == (int)Skill.WarMagic;
-        var validEffectId = sigilTrinket.SigilTrinketEffectId == (int)SigilTrinketWarMagicEffect.ScarabCrit;
+        var validSkill = GetAllowedSkills(sigilTrinket).Contains(Skill.WarMagic);
+        var validEffectId = sigilTrinket.SigilTrinketEffectId == (int)SigilTrinketWarMagicEffect.Crushing;
         var validSpellCategory = SigilTrinket.WarProjectileTriggerCategories.Contains(TriggerSpell.Category);
-        var validSpellLevel = sigilTrinket.SigilTrinketMaxTier >= TriggerSpell.Level;
 
-        return validSkill && validEffectId && validSpellCategory && validSpellLevel && !OnCrit;
+        return validSkill && validEffectId && validSpellCategory && OnCrit;
     }
 
     private bool IsValidForMight(SigilTrinket sigilTrinket)
@@ -692,29 +880,15 @@ public class SigilTrinketEvent
             return false;
         }
 
-        var validSkillEffectTwohand = sigilTrinket.WieldSkillType == (int)Skill.TwoHandedCombat && sigilTrinket.SigilTrinketEffectId == (int)SigilTrinketTwohandedCombatEffect.Might;
-        var validSkillEffectShield = sigilTrinket.WieldSkillType == (int)Skill.Shield && sigilTrinket.SigilTrinketEffectId == (int)SigilTrinketShieldEffect.Might;
-
-        var sigilTrinketMaxtier = sigilTrinket.SigilTrinketMaxTier ?? 1;
-        var maxWield = LootGenerationFactory.GetWieldDifficultyPerTier(sigilTrinketMaxtier + 1);
-
-        var validWieldReqTwohand = false;
-        if (DamageEvent.Weapon is {IsTwoHanded: true})
-        {
-            var weaponWieldReq = DamageEvent.Weapon.WieldDifficulty ?? 1;
-            validWieldReqTwohand = weaponWieldReq <= maxWield;
-        }
-
-        var validWieldReqShield = false;
-        if (DamageEvent.Offhand is { IsShield: true })
-        {
-            var shieldWieldReq = DamageEvent.Offhand.WieldDifficulty ?? 1;
-            validWieldReqShield = shieldWieldReq <= maxWield;
-        }
-
+        var validSkillShieldTwohand = GetAllowedSkills(sigilTrinket).Contains(Skill.Shield) && GetAllowedSkills(sigilTrinket).Contains(Skill.TwoHandedCombat);
+        var validEffectId = sigilTrinket.SigilTrinketEffectId == (int)SigilTrinketShieldTwohandedCombatEffect.Might;
         var isPowerAttack = Player.GetPowerAccuracyBar() > 0.5f;
 
-        return isPowerAttack && ((validSkillEffectTwohand && validWieldReqTwohand) || (validSkillEffectShield && validWieldReqShield));
+        // Ensure the skill/weapon type matches an attack type
+        var twohandAttackApplicable = DamageEvent.Weapon is { IsTwoHanded: true };
+        var shieldAttackApplicable = DamageEvent.Offhand is { IsShield: true };
+
+        return isPowerAttack && validSkillShieldTwohand && validEffectId && (twohandAttackApplicable || shieldAttackApplicable);
     }
 
     private bool IsValidForAggression(SigilTrinket sigilTrinket)
@@ -724,29 +898,15 @@ public class SigilTrinketEvent
             return false;
         }
 
-        var validSkillEffectTwohand = sigilTrinket.WieldSkillType == (int)Skill.TwoHandedCombat && sigilTrinket.SigilTrinketEffectId == (int)SigilTrinketTwohandedCombatEffect.Aggression;
-        var validSkillEffectShield = sigilTrinket.WieldSkillType == (int)Skill.Shield && sigilTrinket.SigilTrinketEffectId == (int)SigilTrinketShieldEffect.Aggression;
-
-        var sigilTrinketMaxtier = sigilTrinket.SigilTrinketMaxTier ?? 1;
-        var maxWield = LootGenerationFactory.GetWieldDifficultyPerTier(sigilTrinketMaxtier + 1);
-
-        var validWieldReqTwohand = false;
-        if (DamageEvent.Weapon is {IsTwoHanded: true})
-        {
-            var weaponWieldReq = DamageEvent.Weapon.WieldDifficulty ?? 1;
-            validWieldReqTwohand = weaponWieldReq <= maxWield;
-        }
-
-        var validWieldReqShield = false;
-        if (DamageEvent.Offhand is { IsShield: true })
-        {
-            var shieldWieldReq = DamageEvent.Offhand.WieldDifficulty ?? 1;
-            validWieldReqShield = shieldWieldReq <= maxWield;
-        }
-
+        var validSkillShieldTwohand = GetAllowedSkills(sigilTrinket).Contains(Skill.Shield) && GetAllowedSkills(sigilTrinket).Contains(Skill.TwoHandedCombat);
+        var validEffectId = sigilTrinket.SigilTrinketEffectId == (int)SigilTrinketShieldTwohandedCombatEffect.Aggression;
         var isPowerAttack = Player.GetPowerAccuracyBar() > 0.5f;
 
-        return isPowerAttack && ((validSkillEffectTwohand && validWieldReqTwohand) || (validSkillEffectShield && validWieldReqShield));
+        // Ensure the skill/weapon type matches an attack type
+        var twohandAttackApplicable = DamageEvent.Weapon is { IsTwoHanded: true };
+        var shieldAttackApplicable = DamageEvent.Offhand is { IsShield: true };
+
+        return isPowerAttack && validSkillShieldTwohand && validEffectId && (twohandAttackApplicable || shieldAttackApplicable);
     }
 
     private bool IsValidForAssailment(SigilTrinket sigilTrinket)
@@ -756,22 +916,40 @@ public class SigilTrinketEvent
             return false;
         }
 
-        var validSkill = sigilTrinket.WieldSkillType == (int)Skill.DualWield;
-        var validEffectId = sigilTrinket.SigilTrinketEffectId == (int)SigilTrinketDualWieldEffect.Assailment;
+        var validSkillDualWieldMissile = GetAllowedSkills(sigilTrinket).Contains(Skill.DualWield) && GetAllowedSkills(sigilTrinket).Contains(Skill.Bow);
+        var validEffectId = sigilTrinket.SigilTrinketEffectId == (int)SigilTrinketDualWieldMissileEffect.Assailment;
 
-        var sigilTrinketMaxtier = sigilTrinket.SigilTrinketMaxTier ?? 1;
-        var maxWield = LootGenerationFactory.GetWieldDifficultyPerTier(sigilTrinketMaxtier + 1);
-
-        var validWieldReq = false;
-        if (DamageEvent.Weapon is not null)
+        if (DamageEvent.Weapon is null)
         {
-            var weaponWieldReq = DamageEvent.Weapon.WieldDifficulty ?? 1;
-            validWieldReq = weaponWieldReq <= maxWield;
+            return false;
         }
 
         var isDualWieldAttack = Player is { IsDualWieldAttack: true };
+        var isMissileAttack = DamageEvent.Weapon.IsAmmoLauncher; 
 
-        return validSkill && validEffectId && validWieldReq && isDualWieldAttack && OnCrit;
+        return validSkillDualWieldMissile && validEffectId && (isDualWieldAttack || isMissileAttack) && OnCrit;
+    }
+
+    private bool IsValidForSwiftKiller(SigilTrinket sigilTrinket)
+    {
+        if (Player.GetEquippedWeapon() == null)
+        {
+            return false;
+        }
+
+        var validSkillDualWieldMissile = GetAllowedSkills(sigilTrinket).Contains(Skill.DualWield) && GetAllowedSkills(sigilTrinket).Contains(Skill.Bow);
+        var validEffectId = sigilTrinket.SigilTrinketEffectId == (int)SigilTrinketDualWieldMissileEffect.SwiftKiller;
+        var isPowerAttack = Player.GetPowerAccuracyBar() > 0.5f;
+
+        if (DamageEvent.Weapon is null)
+        {
+            return false;
+        }
+
+        var isDualWieldAttack = Player is { IsDualWieldAttack: true };
+        var isMissileAttack = DamageEvent.Weapon.IsAmmoLauncher;
+
+        return validSkillDualWieldMissile && validEffectId && isPowerAttack && (isDualWieldAttack || isMissileAttack);
     }
 
     private bool IsValidForTreachery(SigilTrinket sigilTrinket)
@@ -781,17 +959,12 @@ public class SigilTrinketEvent
             return false;
         }
 
-        var validSkill = sigilTrinket.WieldSkillType == (int)Skill.Thievery;
+        var validSkill = GetAllowedSkills(sigilTrinket).Contains(Skill.Thievery);
         var validEffectId = sigilTrinket.SigilTrinketEffectId == (int)SigilTrinketThieveryEffect.Treachery;
 
-        var sigilTrinketMaxtier = sigilTrinket.SigilTrinketMaxTier ?? 1;
-        var maxWield = LootGenerationFactory.GetWieldDifficultyPerTier(sigilTrinketMaxtier + 1);
-
-        var validWieldReq = false;
-        if (DamageEvent.Weapon is not null)
+        if (DamageEvent.Weapon is null)
         {
-            var weaponWieldReq = DamageEvent.Weapon.WieldDifficulty ?? 1;
-            validWieldReq = weaponWieldReq <= maxWield;
+            return false;
         }
 
         var isSneakAttack = false;
@@ -801,7 +974,7 @@ public class SigilTrinketEvent
             isSneakAttack = Math.Abs(angle) > 90.0f;
         }
 
-        return validSkill && validEffectId && validWieldReq && isSneakAttack && OnCrit;
+        return validSkill && validEffectId && isSneakAttack && OnCrit;
     }
 
     private bool IsValidForEvasion(SigilTrinket sigilTrinket)
@@ -811,22 +984,17 @@ public class SigilTrinketEvent
             return false;
         }
 
-        var validSkill = sigilTrinket.WieldSkillType == (int)Skill.PhysicalDefense;
+        var validSkill = GetAllowedSkills(sigilTrinket).Contains(Skill.PhysicalDefense);
         var validEffectId = sigilTrinket.SigilTrinketEffectId == (int)SigilTrinketPhysicalDefenseEffect.Evasion;
 
-        var sigilTrinketMaxtier = sigilTrinket.SigilTrinketMaxTier ?? 1;
-        var maxWield = LootGenerationFactory.GetWieldDifficultyPerTier(sigilTrinketMaxtier + 1);
-
-        var validWieldReq = false;
-        if (DamageEvent.DefenderWeapon is not null)
+        if (DamageEvent.DefenderWeapon is null)
         {
-            var weaponWieldReq = DamageEvent.DefenderWeapon.WieldDifficulty ?? 1;
-            validWieldReq = weaponWieldReq <= maxWield;
+            return false;
         }
 
         var isGlancingBlow = DamageEvent.PartialEvasion == PartialEvasion.Some;
 
-        return validSkill && validEffectId && validWieldReq && isGlancingBlow;
+        return validSkill && validEffectId && isGlancingBlow;
     }
 
     private bool IsValidForAbsorption(SigilTrinket sigilTrinket)
@@ -836,22 +1004,17 @@ public class SigilTrinketEvent
             return false;
         }
 
-        var validSkill = sigilTrinket.WieldSkillType == (int)Skill.MagicDefense;
+        var validSkill = GetAllowedSkills(sigilTrinket).Contains(Skill.MagicDefense);
         var validEffectId = sigilTrinket.SigilTrinketEffectId == (int)SigilTrinketMagicDefenseEffect.Absorption;
 
-        var sigilTrinketMaxtier = sigilTrinket.SigilTrinketMaxTier ?? 1;
-        var maxWield = LootGenerationFactory.GetWieldDifficultyPerTier(sigilTrinketMaxtier + 1);
-
-        var validWieldReq = false;
-        if (Player.GetEquippedWeapon() is not null)
+        if (Player.GetEquippedWeapon() is null)
         {
-            var weaponWieldReq = Player.GetEquippedWeapon().WieldDifficulty ?? 1;
-            validWieldReq = weaponWieldReq <= maxWield;
+            return false;
         }
 
         var isHealthDamageSpell = TriggerSpell.VitalDamageType is not DamageType.Stamina and not DamageType.Mana;
 
-        return validSkill && validEffectId && validWieldReq && isHealthDamageSpell;
+        return validSkill && validEffectId && isHealthDamageSpell;
     }
 
     private bool IsValidForExposure(SigilTrinket sigilTrinket)
@@ -861,20 +1024,15 @@ public class SigilTrinketEvent
             return false;
         }
 
-        var validSkill = sigilTrinket.WieldSkillType == (int)Skill.AssessPerson;
+        var validSkill = GetAllowedSkills(sigilTrinket).Contains(Skill.AssessPerson);
         var validEffectId = sigilTrinket.SigilTrinketEffectId == (int)SigilTrinketPerceptionEffect.Exposure;
 
-        var sigilTrinketMaxtier = sigilTrinket.SigilTrinketMaxTier ?? 1;
-        var maxWield = LootGenerationFactory.GetWieldDifficultyPerTier(sigilTrinketMaxtier + 1);
-
-        var validWieldReq = false;
-        if (DamageEvent.Weapon is not null)
+        if (DamageEvent.Weapon is null)
         {
-            var weaponWieldReq = DamageEvent.Weapon.WieldDifficulty ?? 1;
-            validWieldReq = weaponWieldReq <= maxWield;
+            return false;
         }
 
-        return validSkill && validEffectId && validWieldReq;
+        return validSkill && validEffectId;
     }
 
     private bool IsValidForAvoidance(SigilTrinket sigilTrinket)
@@ -884,22 +1042,17 @@ public class SigilTrinketEvent
             return false;
         }
 
-        var validSkill = sigilTrinket.WieldSkillType == (int)Skill.Deception;
+        var validSkill = GetAllowedSkills(sigilTrinket).Contains(Skill.Deception);
         var validEffectId = sigilTrinket.SigilTrinketEffectId == (int)SigilTrinketDeceptionEffect.Avoidance;
 
-        var sigilTrinketMaxtier = sigilTrinket.SigilTrinketMaxTier ?? 1;
-        var maxWield = LootGenerationFactory.GetWieldDifficultyPerTier(sigilTrinketMaxtier + 1);
-
-        var validWieldReq = false;
-        if (DamageEvent.Weapon is not null)
+        if (DamageEvent.Weapon is null)
         {
-            var weaponWieldReq = DamageEvent.Weapon.WieldDifficulty ?? 1;
-            validWieldReq = weaponWieldReq <= maxWield;
+            return false;
         }
 
         var isPowerAttack = Player.GetPowerAccuracyBar() > 0.5f;
 
-        return validSkill && validEffectId && validWieldReq && isPowerAttack;
+        return validSkill && validEffectId && isPowerAttack;
     }
 
     //  --- COOLDOWN CHECKS ---
@@ -933,6 +1086,54 @@ public class SigilTrinketEvent
         }
 
         return true;
+    }
+
+    // Helper: return allowed specialized skills or fallback to single WieldSkillType if configured.
+    private IEnumerable<Skill> GetAllowedSkills(SigilTrinket sigilTrinket)
+    {
+        if (sigilTrinket.AllowedSpecializedSkills != null && sigilTrinket.AllowedSpecializedSkills.Count > 0)
+        {
+            // Expand any combined/flagged Skill entries into individual atomic skills.
+            var rawList = sigilTrinket.AllowedSpecializedSkills;
+            var result = new List<Skill>(rawList.Count);
+
+            // Collect atomic Skill values (exclude zero if present)
+            var atomicSkills = Enum.GetValues(typeof(Skill)).Cast<Skill>().Where(s => Convert.ToInt32(s) != 0).ToList();
+
+            foreach (var stored in rawList)
+            {
+                // If the stored value is a single defined Skill enum member, add it directly.
+                if (Enum.IsDefined(typeof(Skill), stored))
+                {
+                    if (!result.Contains(stored))
+                    {
+                        result.Add(stored);
+                    }
+
+                    continue;
+                }
+
+                // Otherwise treat it as a bitmask/combined value and extract matching atomic flags.
+                var storedInt = Convert.ToInt32(stored);
+                foreach (var atom in atomicSkills)
+                {
+                    var atomInt = Convert.ToInt32(atom);
+                    if ((storedInt & atomInt) == atomInt && !result.Contains(atom))
+                    {
+                        result.Add(atom);
+                    }
+                }
+            }
+
+            return result;
+        }
+
+        if (sigilTrinket.WieldSkillType.HasValue && sigilTrinket.WieldSkillType.Value != 0)
+        {
+            return new List<Skill> { (Skill)sigilTrinket.WieldSkillType.Value };
+        }
+
+        return Enumerable.Empty<Skill>();
     }
 }
 

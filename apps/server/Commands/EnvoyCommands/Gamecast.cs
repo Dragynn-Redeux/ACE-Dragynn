@@ -29,9 +29,9 @@ public class Gamecast
         //session.Player.HandleActionWorldBroadcast($"Broadcast from {session.Player.Name}> {string.Join(" ", parameters)}", ChatMessageType.WorldBroadcast);
 
         var msg =
-            $"Broadcast from {(session != null ? session.Player.Name : "System")}> {string.Join(" ", parameters)}";
-        var sysMessage = new GameMessageSystemChat(msg, ChatMessageType.WorldBroadcast);
-        PlayerManager.BroadcastToAll(sysMessage);
+            $"Broadcast from <{(session != null ? session.Player.Name : "System")}>: {string.Join(" ", parameters)}";
+        var sysMessage = new GameMessageSystemChat(msg, ChatMessageType.System);
+        PlayerManager.BroadcastToAll(sysMessage, msg, "System");
         PlayerManager.LogBroadcastChat(Channel.AllBroadcast, session?.Player, msg);
     }
 }

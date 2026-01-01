@@ -43,7 +43,7 @@ public class GameCastLocal
         var msg =
             $"Broadcast from {(session != null ? session.Player.Name : "System")}> {string.Join(" ", parameters)}";
         var sysMessage = new GameMessageSystemChat(msg, ChatMessageType.WorldBroadcast);
-        PlayerManager.BroadcastToAll(sysMessage);
+        PlayerManager.BroadcastToAll(sysMessage, msg, "System");
         PlayerManager.LogBroadcastChat(Channel.AllBroadcast, session?.Player, msg);
     }
 }

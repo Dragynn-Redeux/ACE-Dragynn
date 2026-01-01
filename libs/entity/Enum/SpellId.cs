@@ -6441,6 +6441,35 @@ public enum SpellId : uint
     DungeonInspired,
     RatingPhysicalDefense,
     RatingMagicDefense,
+    Shrouded,
+    VoidRestorationPenalty,
+    SigilTrinketShield1,
+    SigilTrinketShield2,
+    SigilTrinketShield3,
+    SigilTrinketShield4,
+    SigilTrinketShield5,
+    SigilTrinketShield6,
+    SigilTrinketShield7,
+    SigilTrinketCriticalChanceBoost2,
+    SigilTrinketCriticalChanceBoost3,
+    SigilTrinketCriticalChanceBoost4,
+    SigilTrinketCriticalChanceBoost5,
+    SigilTrinketCriticalChanceBoost6,
+    SigilTrinketCriticalChanceBoost7,
+    SigilTrinketCriticalDamageBoost2,
+    SigilTrinketCriticalDamageBoost3,
+    SigilTrinketCriticalDamageBoost4,
+    SigilTrinketCriticalDamageBoost5,
+    SigilTrinketCriticalDamageBoost6,
+    SigilTrinketCriticalDamageBoost7,
+    SigilTrinketDamageBoost2,
+    SigilTrinketDamageBoost3,
+    SigilTrinketDamageBoost4,
+    SigilTrinketDamageBoost5,
+    SigilTrinketDamageBoost6,
+    SigilTrinketDamageBoost7,
+    NewcomersFortitude,
+    NewcomersPersistence,
 
     NumSpells = 8192,
 
@@ -6503,7 +6532,7 @@ public enum SpellId : uint
     Fury = 0x8000 | 10065, // 20 second cooldown
     Phalanx = 0x8000 | 10066, // 20 second cooldown
     Multishot = 0x8000 | 10067, // 20 second cooldown
-    Steadyshot = 0x8000 | 10068, // 20 second cooldown
+    SteadyStrike = 0x8000 | 10068, // 20 second cooldown
     Backstab = 0x8000 | 10069, // 20 second cooldown
     Reflect = 0x8000 | 1070, // 20 second cooldown
     Aegis = 0x8000 | 1071, // 20 second cooldown

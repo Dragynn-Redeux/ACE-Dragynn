@@ -276,6 +276,12 @@ partial class Creature
     /// </summary>
     public void Movement()
     {
+        if (PhysicsObj is null)
+        {
+            _log.Error("PhysicsObj is null for: {Monster}", Name);
+            return;
+        }
+
         //if (!IsRanged)
         UpdatePosition();
 
@@ -595,7 +601,7 @@ partial class Creature
 
         if (WeenieClassId is 1020001)
         {
-            _log.Error("Preventing MoveToHome() for {WCID}", WeenieClassId);
+            _log.Warning("Preventing MoveToHome() for {WCID}", WeenieClassId);
             return;
         }
 

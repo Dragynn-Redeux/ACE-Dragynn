@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using ACE.Entity.Enum;
 using ACE.Server.Commands.Handlers;
 using ACE.Server.Network;
@@ -23,24 +23,26 @@ public class PlayEffect
     {
         try
         {
-            var scale = 1f;
-            var effectEvent = new GameMessageScript(session.Player.Guid, ACE.Entity.Enum.PlayScript.Invalid);
-
-            if (parameters.Length > 1)
+            if (parameters == null || parameters.Length == 0 || string.IsNullOrEmpty(parameters[0]))
             {
-                if (parameters[1] != "")
-                {
-                    scale = float.Parse(parameters[1]);
-                }
+                var emptyMsg = new GameMessageSystemChat("Usage: /effect <EffectNameOrValue> (scale)", ChatMessageType.Broadcast);
+                session.Network.EnqueueSend(emptyMsg);
+                return;
             }
 
-            var message = $"Unable to find a effect called {parameters[0]} to play.";
-
-            if (Enum.TryParse(parameters[0], true, out ACE.Entity.Enum.PlayScript effect))
+            var scale = 1f;
+            if (parameters.Length > 1 && !string.IsNullOrEmpty(parameters[1]))
             {
-                if (Enum.IsDefined(typeof(PlayScript), effect))
+                float.TryParse(parameters[1], out scale);
+            }
+
+            var message = $"Unable to find an effect called {parameters[0]} to play.";
+
+            if (Enum.TryParse<ACE.Entity.Enum.PlayScript>(parameters[0], true, out var effect))
+            {
+                if (Enum.IsDefined(typeof(ACE.Entity.Enum.PlayScript), effect))
                 {
-                    message = $"Playing effect {Enum.GetName(typeof(PlayScript), effect)}";
+                    message = $"Playing effect {Enum.GetName(typeof(ACE.Entity.Enum.PlayScript), effect)}";
                     session.Player.ApplyVisualEffects(effect);
                 }
             }

@@ -277,7 +277,7 @@ public class QuestManager
             return;
         }
 
-        if (quest.NumTimesCompleted > 3)
+        if (quest.NumTimesCompleted > 5)
         {
             return;
         }
@@ -288,25 +288,43 @@ public class QuestManager
         {
             "AlArqas" => "Al-Arqas",
             "AlJalima" => "Al-Jalima",
+            "AyanBaqur" => "Ayan Baqur",
             "HebianTo" => "Hebian-To",
+            "FortTethana" => "Fort Tethana",
+            "PlateauVillage" => "Plateau Village",
+            "Qalabar" => "Qalaba'r",
             "TouTou" => "Tou-Tou",
+            "WaiJhou" => "Wai Jhou",
             _ => townName
         };
 
         var level = quest.NumTimesCompleted switch
         {
             1 => "slight",
-            2 => "moderate",
-            3 => "significant",
+            2 => "minor",
+            3 => "moderate",
+            4 => "major",
+            5 => "significant",
             _ => ""
         };
 
         player.Session.Network.EnqueueSend(
             new GameMessageSystemChat(
                 $"Tempered by the portal energies of {townName}, a {level} resilience has taken shape within you.",
-                ChatMessageType.Broadcast
+                ChatMessageType.System
             )
         );
+
+    if (quest.NumTimesCompleted == 5)
+    {
+        player.Session.Network.EnqueueSend(
+            new GameMessageSystemChat(
+                $"As your body steadies under the portal energy of {townName}, a final swirl rises and breaks around you.",
+                ChatMessageType.System
+            )
+        );
+            player.PlayParticleEffect(PlayScript.PortalStorm, player.Guid);
+        }
     }
 
     private readonly List<string> QuestProgressQuestNames =
@@ -316,6 +334,7 @@ public class QuestManager
         "QuestArwic",
         "QuestBaishi",
         "QuestCragstone",
+        "QuestDereth",
         "QuestDryreach",
         "QuestEastham",
         "QuestGlendenWood",
@@ -1096,5 +1115,40 @@ public class QuestManager
         "Hardened Defense",
         "StamReduction"
 
+    ];
+
+    public static int GetCapstonesCompleted(Player player)
+    {
+        var capstonesCompleted = 0;
+        var questManager = player.QuestManager;
+
+        foreach (var capstoneCompletionQuest in CapstoneCompletionQuests)
+        {
+            if (questManager.HasQuest(capstoneCompletionQuest))
+            {
+                capstonesCompleted++;
+            }
+        }
+
+        return capstonesCompleted;
+    }
+
+    public static List<string> CapstoneCompletionQuests =
+    [
+        "EmpyreanGarrisonCompleted",
+        "FolthidCellarCompleted",
+        "GlendenWoodDungeonCompleted",
+        "GredalineConsulateCompleted",
+        "GreenMireGraveCompleted",
+        "GrievousVaultCompleted",
+        "HallsOfTheHelmCompleted",
+        "LugianMinesCompleted",
+        "MageAcademyCompleted",
+        "ManseOfPanderlouCompleted",
+        "MinesOfColierCompleted",
+        "MinesOfDespairCompleted",
+        "MountainFortressCompleted",
+        "SandShallowCompleted",
+        "SmugglersHideawayCompleted"
     ];
 }

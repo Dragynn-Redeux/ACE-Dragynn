@@ -252,6 +252,12 @@ public class Storage : Container
         _bankUser = null;
 
         var landblock = CurrentLandblock;
+
+        if (landblock is null)
+        {
+            _log.Information("[BANKING] Storage.Close({Player}) - landblock is null", player.Name);
+        }
+
         landblock?.ReloadObject(this);
     }
 

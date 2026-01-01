@@ -484,6 +484,11 @@ partial class Creature
             {
                 TryAddToInventory(item);
             }
+
+            if (UseArchetypeSystem is true)
+            {
+                MutateWeaponForArchetype(item, Damage ?? 1);
+            }
         }
     }
 }

@@ -24,22 +24,27 @@ public enum CombatFocusType
     Spellsword
 }
 
+public enum CombatFocusPrestigeVersion
+{
+    Newcomer,
+}
+
 public class CombatFocus : WorldObject
 {
     private List<SpellId> CurrentSpells = new List<SpellId>();
 
-    public int? CombatFocusType
+    public int? CombatFocusTypeId
     {
-        get => GetProperty(PropertyInt.CombatFocusType);
+        get => GetProperty(PropertyInt.CombatFocusTypeId);
         set
         {
             if (!value.HasValue)
             {
-                RemoveProperty(PropertyInt.CombatFocusType);
+                RemoveProperty(PropertyInt.CombatFocusTypeId);
             }
             else
             {
-                SetProperty(PropertyInt.CombatFocusType, value.Value);
+                SetProperty(PropertyInt.CombatFocusTypeId, value.Value);
             }
         }
     }
@@ -140,6 +145,38 @@ public class CombatFocus : WorldObject
         }
     }
 
+    public int? CombatFocusSkill3SpellRemoved
+    {
+        get => GetProperty(PropertyInt.CombatFocusSkill3SpellRemoved);
+        set
+        {
+            if (!value.HasValue)
+            {
+                RemoveProperty(PropertyInt.CombatFocusSkill3SpellRemoved);
+            }
+            else
+            {
+                SetProperty(PropertyInt.CombatFocusSkill3SpellRemoved, value.Value);
+            }
+        }
+    }
+
+    public int? CombatFocusSkill3SpellAdded
+    {
+        get => GetProperty(PropertyInt.CombatFocusSkill3SpellAdded);
+        set
+        {
+            if (!value.HasValue)
+            {
+                RemoveProperty(PropertyInt.CombatFocusSkill3SpellAdded);
+            }
+            else
+            {
+                SetProperty(PropertyInt.CombatFocusSkill3SpellAdded, value.Value);
+            }
+        }
+    }
+
     public int? CombatFocusNumSkillsRemoved
     {
         get => GetProperty(PropertyInt.CombatFocusNumSkillsRemoved);
@@ -172,6 +209,22 @@ public class CombatFocus : WorldObject
         }
     }
 
+    public int? CombatFocusPrestigeVersionId
+    {
+        get => GetProperty(PropertyInt.CombatFocusPrestigeVersionId);
+        set
+        {
+            if (!value.HasValue)
+            {
+                RemoveProperty(PropertyInt.CombatFocusPrestigeVersionId);
+            }
+            else
+            {
+                SetProperty(PropertyInt.CombatFocusPrestigeVersionId, value.Value);
+            }
+        }
+    }
+
     /// <summary>
     /// A new biota be created taking all of its values from weenie.
     /// </summary>
@@ -194,6 +247,12 @@ public class CombatFocus : WorldObject
     {
         InitializeSpellList();
     }
+
+    private static readonly List<SpellId> NewcomerSpells = new List<SpellId>()
+    {
+        SpellId.NewcomersFortitude,
+        SpellId.NewcomersPersistence
+    };
 
     private static readonly List<SpellId> WarriorSpells = new List<SpellId>()
     {
@@ -273,66 +332,135 @@ public class CombatFocus : WorldObject
 
     public void InitializeSpellList()
     {
-        var spellList = new List<SpellId>();
-        switch (CombatFocusType)
+        if (CombatFocusTypeId is null)
         {
-            case 1:
+            _log.Error("CombatFocus.InitializeSpellList() - Combat Focus ({Name}) is missing CombatFocusTypeId.", Name);
+            return;
+        }
+
+        CurrentSpells.Clear();
+
+        CombatFocusNumSkillsAdded = 0;
+        CombatFocusNumSkillsRemoved = 0;
+
+        var spellList = new List<SpellId>();
+        switch ((CombatFocusType)CombatFocusTypeId)
+        {
+            case CombatFocusType.Warrior:
                 spellList = WarriorSpells;
                 break;
-            case 2:
+            case CombatFocusType.Blademaster:
                 spellList = BlademasterSpells;
                 break;
-            case 3:
+            case CombatFocusType.Archer:
                 spellList = ArcherSpells;
                 break;
-            case 4:
+            case CombatFocusType.Vagabond:
                 spellList = VagabondSpells;
                 break;
-            case 5:
+            case CombatFocusType.Sorcerer:
                 spellList = SorcererSpells;
                 break;
-            case 6:
+            case CombatFocusType.Spellsword:
                 spellList = SpellswordSpells;
                 break;
         }
 
-        foreach (var spellId in spellList)
+        if ((CombatFocusPrestigeVersionId ?? 0) == (int)CombatFocusPrestigeVersion.Newcomer)
         {
-            CurrentSpells.Add(spellId);
+            spellList.AddRange(NewcomerSpells);
         }
 
-        if (CombatFocusAttributeSpellAdded != null)
+        var spellListCopy = new List<SpellId>(spellList);
+
+        static bool IsValidSpellInt(int value)
         {
-            CurrentSpells.Add((SpellId)CombatFocusAttributeSpellAdded);
+            return Enum.IsDefined(typeof(SpellId), (uint)value);
         }
 
-        if (CombatFocusAttributeSpellRemoved != null)
+        void AddIfNotPresent(int? value)
         {
-            CurrentSpells.Remove((SpellId)CombatFocusAttributeSpellRemoved);
+            if (value is int v && IsValidSpellInt(v))
+            {
+                var s = (SpellId)v;
+                if (!spellListCopy.Contains(s))
+                {
+                    spellListCopy.Add(s);
+                }
+            }
         }
 
+        void RemoveHeritageOrSpell(int? value)
+        {
+            if (value is int v && IsValidSpellInt(v))
+            {
+                // heritage group: remove all three heritage skill spells
+                var heritageIds = new[]
+                {
+                    SpellId.FinesseWeaponsMasterySelf1,
+                    SpellId.StaffMasterySelf1,
+                    SpellId.UnarmedCombatMasterySelf1
+                };
+
+                if (v == (int)heritageIds[0] || v == (int)heritageIds[1] || v == (int)heritageIds[2])
+                {
+                    foreach (var h in heritageIds)
+                    {
+                        spellListCopy.Remove(h);
+                    }
+                }
+                else
+                {
+                    spellListCopy.Remove((SpellId)v);
+                }
+            }
+        }
+
+        // Attribute overrides
+        AddIfNotPresent(CombatFocusAttributeSpellAdded);
+        RemoveHeritageOrSpell(CombatFocusAttributeSpellRemoved);
+
+        // Skill 1
         if (CombatFocusSkillSpellAdded != null)
         {
-            CurrentSpells.Add((SpellId)CombatFocusSkillSpellAdded);
+            AddIfNotPresent(CombatFocusSkillSpellAdded);
+            CombatFocusNumSkillsAdded++;
         }
 
         if (CombatFocusSkillSpellRemoved != null)
         {
-            CurrentSpells.Remove((SpellId)CombatFocusSkillSpellRemoved);
+            RemoveHeritageOrSpell(CombatFocusSkillSpellRemoved);
+            CombatFocusNumSkillsRemoved++;
         }
 
+        // Skill 2
         if (CombatFocusSkill2SpellAdded != null)
         {
-            CurrentSpells.Add((SpellId)CombatFocusSkill2SpellAdded);
+            AddIfNotPresent(CombatFocusSkill2SpellAdded);
+            CombatFocusNumSkillsAdded++;
         }
 
         if (CombatFocusSkill2SpellRemoved != null)
         {
-            CurrentSpells.Remove((SpellId)CombatFocusSkill2SpellRemoved);
+            RemoveHeritageOrSpell(CombatFocusSkill2SpellRemoved);
+            CombatFocusNumSkillsRemoved++;
         }
 
-        CombatFocusNumSkillsAdded = 0;
-        CombatFocusNumSkillsRemoved = 0;
+        // Skill 3
+        if (CombatFocusSkill3SpellAdded != null)
+        {
+            AddIfNotPresent(CombatFocusSkill3SpellAdded);
+            CombatFocusNumSkillsAdded++;
+        }
+
+        if (CombatFocusSkill3SpellRemoved != null)
+        {
+            RemoveHeritageOrSpell(CombatFocusSkill3SpellRemoved);
+            CombatFocusNumSkillsRemoved++;
+        }
+
+        // Apply to field
+        CurrentSpells.AddRange(spellListCopy);
 
         UpdateDescriptionText();
     }
@@ -349,7 +477,7 @@ public class CombatFocus : WorldObject
             return;
         }
 
-        var combatFocusType = CombatFocusType;
+        var combatFocusType = CombatFocusTypeId;
         if (combatFocusType == null || combatFocusType < 1)
         {
             return;
@@ -362,13 +490,13 @@ public class CombatFocus : WorldObject
 
         ActivateSpells(player, CurrentSpells);
 
-        var particalEffect = GetFocusParticleEffect();
-        player.PlayParticleEffect(particalEffect, player.Guid);
+        var particleEffect = GetFocusParticleEffect();
+        player.PlayParticleEffect(particleEffect, player.Guid);
 
         TriggerCooldownsOfUsableAbilities(player, (CombatFocusType)combatFocusType);
     }
 
-    private void TriggerCooldownsOfUsableAbilities(Player player, CombatFocusType combatFocusType)
+    private static void TriggerCooldownsOfUsableAbilities(Player player, CombatFocusType combatFocusType)
     {
         var phalanx = player.GetInventoryItemsOfWCID(1051123);
         var provoke = player.GetInventoryItemsOfWCID(1051118);
@@ -379,7 +507,7 @@ public class CombatFocus : WorldObject
         var relentless = player.GetInventoryItemsOfWCID(1051127);
 
         var multishot = player.GetInventoryItemsOfWCID(1051131);
-        var steadyShot = player.GetInventoryItemsOfWCID(1051130);
+        var steadyStrike = player.GetInventoryItemsOfWCID(1051130);
         var evasiveStance = player.GetInventoryItemsOfWCID(1051114);
 
         var vanish = player.GetInventoryItemsOfWCID(1051112);
@@ -397,37 +525,37 @@ public class CombatFocus : WorldObject
         // class-locked abilities
         switch (combatFocusType)
         {
-            case WorldObjects.CombatFocusType.Warrior:
+            case CombatFocusType.Warrior:
                 if (phalanx.Count > 0)
                 {
                     player.EnchantmentManager.StartCooldown(phalanx[0]);
                 }
                 break;
-            case WorldObjects.CombatFocusType.Blademaster:
+            case CombatFocusType.Blademaster:
                 if (weaponMaster.Count > 0)
                 {
                     player.EnchantmentManager.StartCooldown(weaponMaster[0]);
                 }
                 break;
-            case WorldObjects.CombatFocusType.Archer:
+            case CombatFocusType.Archer:
                 if (multishot.Count > 0)
                 {
                     player.EnchantmentManager.StartCooldown(multishot[0]);
                 }
                 break;
-            case WorldObjects.CombatFocusType.Vagabond:
+            case CombatFocusType.Vagabond:
                 if (vanish.Count > 0)
                 {
                     player.EnchantmentManager.StartCooldown(vanish[0]);
                 }
                 break;
-            case WorldObjects.CombatFocusType.Sorcerer:
+            case CombatFocusType.Sorcerer:
                 if (overload.Count > 0)
                 {
                     player.EnchantmentManager.StartCooldown(overload[0]);
                 }
                 break;
-            case WorldObjects.CombatFocusType.Spellsword:
+            case CombatFocusType.Spellsword:
                 if (enchantedBlade.Count > 0)
                 {
                     player.EnchantmentManager.StartCooldown(enchantedBlade[0]);
@@ -436,7 +564,7 @@ public class CombatFocus : WorldObject
         }
 
         // class-shared abilities
-        if (combatFocusType is WorldObjects.CombatFocusType.Warrior or WorldObjects.CombatFocusType.Blademaster or WorldObjects.CombatFocusType.Spellsword)
+        if (combatFocusType is CombatFocusType.Warrior or CombatFocusType.Blademaster or CombatFocusType.Spellsword)
         {
             if (provoke.Count > 0)
             {
@@ -448,7 +576,7 @@ public class CombatFocus : WorldObject
             }
         }
 
-        if (combatFocusType is WorldObjects.CombatFocusType.Blademaster or WorldObjects.CombatFocusType.Archer or WorldObjects.CombatFocusType.Warrior)
+        if (combatFocusType is CombatFocusType.Blademaster or CombatFocusType.Archer or CombatFocusType.Warrior)
         {
             if (fury.Count > 0)
             {
@@ -460,11 +588,11 @@ public class CombatFocus : WorldObject
             }
         }
 
-        if (combatFocusType is WorldObjects.CombatFocusType.Archer or WorldObjects.CombatFocusType.Blademaster or WorldObjects.CombatFocusType.Vagabond)
+        if (combatFocusType is CombatFocusType.Archer or CombatFocusType.Blademaster or CombatFocusType.Vagabond)
         {
-            if (steadyShot.Count > 0)
+            if (steadyStrike.Count > 0)
             {
-                player.EnchantmentManager.StartCooldown(steadyShot[0]);
+                player.EnchantmentManager.StartCooldown(steadyStrike[0]);
             }
             if (evasiveStance.Count > 0)
             {
@@ -472,7 +600,7 @@ public class CombatFocus : WorldObject
             }
         }
 
-        if (combatFocusType is WorldObjects.CombatFocusType.Vagabond or WorldObjects.CombatFocusType.Archer or WorldObjects.CombatFocusType.Sorcerer)
+        if (combatFocusType is CombatFocusType.Vagabond or CombatFocusType.Archer or CombatFocusType.Sorcerer)
         {
             if (backstab.Count > 0)
             {
@@ -484,7 +612,7 @@ public class CombatFocus : WorldObject
             }
         }
 
-        if (combatFocusType is WorldObjects.CombatFocusType.Sorcerer or WorldObjects.CombatFocusType.Vagabond or WorldObjects.CombatFocusType.Spellsword)
+        if (combatFocusType is CombatFocusType.Sorcerer or CombatFocusType.Vagabond or CombatFocusType.Spellsword)
         {
             if (battery.Count > 0)
             {
@@ -496,7 +624,7 @@ public class CombatFocus : WorldObject
             }
         }
 
-        if (combatFocusType is WorldObjects.CombatFocusType.Spellsword or WorldObjects.CombatFocusType.Warrior or WorldObjects.CombatFocusType.Sorcerer)
+        if (combatFocusType is CombatFocusType.Spellsword or CombatFocusType.Warrior or CombatFocusType.Sorcerer)
         {
             if (reflect.Count > 0)
             {
@@ -516,14 +644,18 @@ public class CombatFocus : WorldObject
             return;
         }
 
-        var combatFocusType = CombatFocusType;
+        var combatFocusType = CombatFocusTypeId;
         if (combatFocusType == null || combatFocusType < 1)
         {
             return;
         }
 
         DeactivateSpells(player, CurrentSpells, onLevelUp, startingLevel);
-        DisableActiveAbilities(player);
+
+        if (!onLevelUp)
+        {
+            DisableActiveAbilities(player);
+        }
     }
 
     private void ActivateSpells(Player player, List<SpellId> spellIds)
@@ -532,12 +664,19 @@ public class CombatFocus : WorldObject
 
         foreach (var spellId in spellIds)
         {
-            var leveledSpell = SpellLevelProgression.GetSpellAtLevel(spellId, spellLevel);
-            ActivateSpell(player, new Spell(leveledSpell));
+            var leveledSpell = SpellLevelProgression.GetSpellAtLevel(spellId, spellLevel, true, true);
+            if (leveledSpell == SpellId.Undef)
+            {
+                ActivateSpell(player, new Spell(spellId));
+            }
+            else
+            {
+                ActivateSpell(player, new Spell(leveledSpell));
+            }
         }
     }
 
-    private void ActivateSpell(Player player, Spell spell)
+    private static void ActivateSpell(Player player, Spell spell)
     {
         var addResult = player.EnchantmentManager.Add(spell, null, null, true);
         //Console.WriteLine($"ActivateSpell: {spell.Name} Beneficial? {spell.IsBeneficial}");
@@ -558,16 +697,30 @@ public class CombatFocus : WorldObject
 
             foreach (var spellId in spellIds)
             {
-                var leveledSpell = SpellLevelProgression.GetSpellAtLevel(spellId, startingSpellLevel);
-                DeactivateSpell(player, new Spell(leveledSpell));
+                var leveledSpell = SpellLevelProgression.GetSpellAtLevel(spellId, spellLevel, true, true);
+                if (leveledSpell == SpellId.Undef)
+                {
+                    DeactivateSpell(player, new Spell(spellId));
+                }
+                else
+                {
+                    DeactivateSpell(player, new Spell(leveledSpell));
+                }
             }
         }
         else
         {
             foreach (var spellId in spellIds)
             {
-                var leveledSpell = SpellLevelProgression.GetSpellAtLevel(spellId, spellLevel);
-                DeactivateSpell(player, new Spell(leveledSpell));
+                var leveledSpell = SpellLevelProgression.GetSpellAtLevel(spellId, spellLevel, true, true);
+                if (leveledSpell == SpellId.Undef)
+                {
+                    DeactivateSpell(player, new Spell(spellId));
+                }
+                else
+                {
+                    DeactivateSpell(player, new Spell(leveledSpell));
+                }
             }
         }
     }
@@ -611,7 +764,7 @@ public class CombatFocus : WorldObject
             player.AdrenalineMeter = 0.0f;
 
             player.Session.Network.EnqueueSend(
-                new GameMessageSystemChat($"You calm down and your release adrenaline without effect.", ChatMessageType.Craft)
+                new GameMessageSystemChat($"You calm down and release your adrenaline without effect.", ChatMessageType.Craft)
             );
         }
 
@@ -735,21 +888,35 @@ public class CombatFocus : WorldObject
                     CombatFocusSkillSpellRemoved = (int)spellId;
                     CombatFocusNumSkillsRemoved++;
                 }
-                else
+                else if (CombatFocusSkill2SpellRemoved == null)
                 {
                     CombatFocusSkill2SpellRemoved = (int)spellId;
                     CombatFocusNumSkillsRemoved++;
                 }
-            }
-            else if (CombatFocusNumSkillsAdded < 1)
-            {
-                CombatFocusSkillSpellAdded = null;
-                CombatFocusNumSkillsAdded--;
+                else if (CombatFocusSkill3SpellRemoved == null)
+                {
+                    CombatFocusSkill3SpellRemoved = (int)spellId;
+                    CombatFocusNumSkillsRemoved++;
+                }
             }
             else
             {
-                CombatFocusSkill2SpellAdded = null;
-                CombatFocusNumSkillsAdded--;
+                // Remove the specific added spell that matches
+                if (CombatFocusSkillSpellAdded == (int)spellId)
+                {
+                    CombatFocusSkillSpellAdded = null;
+                    CombatFocusNumSkillsAdded--;
+                }
+                else if (CombatFocusSkill2SpellAdded == (int)spellId)
+                {
+                    CombatFocusSkill2SpellAdded = null;
+                    CombatFocusNumSkillsAdded--;
+                }
+                else if (CombatFocusSkill3SpellAdded == (int)spellId)
+                {
+                    CombatFocusSkill3SpellAdded = null;
+                    CombatFocusNumSkillsAdded--;
+                }
             }
         }
 
@@ -780,26 +947,40 @@ public class CombatFocus : WorldObject
         {
             if (IsBaseSpell(spellId))
             {
-                if (CombatFocusSkill2SpellRemoved != null)
-                {
-                    CombatFocusSkill2SpellRemoved = null;
-                    CombatFocusNumSkillsRemoved--;
-                }
-                else
+                if (CombatFocusSkillSpellRemoved != null)
                 {
                     CombatFocusSkillSpellRemoved = null;
                     CombatFocusNumSkillsRemoved--;
                 }
-            }
-            else if (CombatFocusNumSkillsAdded < 1)
-            {
-                CombatFocusSkillSpellAdded = (int)spellId;
-                CombatFocusNumSkillsAdded++;
+                else if (CombatFocusSkill2SpellRemoved != null)
+                {
+                    CombatFocusSkill2SpellRemoved = null;
+                    CombatFocusNumSkillsRemoved--;
+                }
+                else if (CombatFocusSkill3SpellRemoved != null)
+                {
+                    CombatFocusSkill3SpellRemoved = null;
+                    CombatFocusNumSkillsRemoved--;
+                }
             }
             else
             {
-                CombatFocusSkill2SpellAdded = (int)spellId;
-                CombatFocusNumSkillsAdded++;
+                // Fill the first available slot, checking in order
+                if (CombatFocusSkillSpellAdded == null)
+                {
+                    CombatFocusSkillSpellAdded = (int)spellId;
+                    CombatFocusNumSkillsAdded++;
+                }
+                else if (CombatFocusSkill2SpellAdded == null)
+                {
+                    CombatFocusSkill2SpellAdded = (int)spellId;
+                    CombatFocusNumSkillsAdded++;
+                }
+                else if (CombatFocusSkill3SpellAdded == null)
+                {
+                    CombatFocusSkill3SpellAdded = (int)spellId;
+                    CombatFocusNumSkillsAdded++;
+                }
             }
         }
 
@@ -836,7 +1017,7 @@ public class CombatFocus : WorldObject
 
                 attributeSpellsText += spellName;
             }
-            else
+            else if (spellId is not (SpellId.NewcomersFortitude or SpellId.NewcomersPersistence))
             {
                 if (firstSkill)
                 {
@@ -855,25 +1036,30 @@ public class CombatFocus : WorldObject
         description += "Attributes: " + attributeSpellsText + ".\n\n";
         description += "Skills: " + skillSpellsText + ".\n\n";
 
-        var advancedDescription = GetCombatAbilityDescription();
-
         var alteredDescription = "";
         if (CombatFocusAttributeSpellAdded != null)
         {
-            alteredDescription = "This combat focus' attribute spell has been altered.";
+            alteredDescription = "This combat focus' attribute spell has been altered.\n\n";
         }
 
         if (CombatFocusSkillSpellAdded != null)
         {
-            alteredDescription = "This combat focus' skill spell has been altered.";
+            alteredDescription = "This combat focus' skill spell has been altered.\n\n";
         }
 
         if (CombatFocusAttributeSpellAdded != null && CombatFocusSkillSpellAdded != null)
         {
-            alteredDescription = "This combat focus' attribute and skill spells have been altered.";
+            alteredDescription = "This combat focus' attribute and skill spells have been altered.\n\n";
         }
 
-        LongDesc = advancedDescription + description + alteredDescription;
+        var prestigeDescription = "";
+        if ((CombatFocusPrestigeVersionId ?? 0) == (int)CombatFocusPrestigeVersion.Newcomer)
+        {
+            prestigeDescription =
+                "This combat focus also grants +50 Health and +100 Stamina.\n\n";
+        }
+
+        LongDesc = description + alteredDescription + prestigeDescription;
     }
 
     private static bool IsAttribute(SpellId spellId)
@@ -898,7 +1084,7 @@ public class CombatFocus : WorldObject
 
     public bool IsBaseSpell(SpellId spellId)
     {
-        switch (CombatFocusType)
+        switch (CombatFocusTypeId)
         {
             case 1:
                 return WarriorSpells.Contains(spellId);
@@ -915,85 +1101,6 @@ public class CombatFocus : WorldObject
         }
 
         return false;
-    }
-
-    private string GetCombatAbilityDescription()
-    {
-        var description = "";
-
-        var combatAbilityId = CombatAbilityId;
-
-        if (combatAbilityId != null)
-        {
-            switch ((CombatAbility)combatAbilityId)
-            {
-                case CombatAbility.Phalanx:
-                    description +=
-                        "With this focus equipped, your shield will reduce damage from all sides, and your enemies cannot make sneak attacks against you.\n\n"
-                        + "Activated Combat Ability: For the next 10 seconds, gain 50% chance to block attacks from all directions.\n\n";
-                    break;
-                case CombatAbility.Provoke:
-                    description +=
-                        "With this focus equipped, increase the threat you generate with your attacks by 20%. All glancing blows against are always major.\n\n"
-                        + "Activated Combat Ability: For the next 10 seconds, increase your damage by 20% and your threat generated by 50%.\n\n";
-                    break;
-                case CombatAbility.Riposte:
-                    description +=
-                        "With this focus equipped, to gain a 20% chance to block attacks while using a two-handed weapon or dual-wielding.\n\n"
-                        + "Activated Combat Ability: For the next 10 seconds, whenever you parry an attack, you strike back at your enemy.\n\n";
-                    break;
-                case CombatAbility.Fury:
-                    description +=
-                        "With this focus equipped, attacks you make in melee range build Fury. As Fury increases, your damage receives a bonus, up to a maximum of 25%. "
-                        + "However, the Stamina cost of your attacks is increased as well, up to an additional 100%. Beyond 50 Fury, you have a chance to injure yourself on attack.\n\n"
-                        + "Activated Combat Ability: The first attack you make within the next ten seconds will gain double the bonus and exhaust all your Fury.\n\n";
-                    break;
-                case CombatAbility.Backstab:
-                    description +=
-                        "With this focus equipped, your chance to deal a critical hit is increased by 20% while performing sneak attacks. Normal hits deal 20% less damage.\n\n"
-                        + "Activated Combat Ability: For the next 10 seconds, your attacks from behind cannot be evaded\n\n";
-                    break;
-                case CombatAbility.SteadyShot:
-                    description +=
-                        "With this focus equipped, the accuracy of your missile weapon attacks is increased by 20%.\n\n"
-                        + "Activated Combat Ability: For the next 10 seconds, your arrows cannot be dodged and deal an additional 25% damage.\n\n";
-                    break;
-                case CombatAbility.Smokescreen:
-                    description +=
-                        "With this focus equipped, gain 10% increased chance to evade attacks, and make enemies less likely to attack you. Other targets for the enemy must be available.\n\n"
-                        + "Activated Combat Ability: For the next 10 seconds, increase your chance to evade by an additional 30%.\n\n";
-                    break;
-                case CombatAbility.Multishot:
-                    description +=
-                        "With this focus equipped, to shoot an extra arrow, quarrel or dart at another monster near your main target, if there are any. Your damage is reduced by 75%.\n\n"
-                        + "Activated Combat Ability: For the next 10 seconds, each time you attack you will fire at an additional enemy near your primary target.\n\n";
-                    break;
-                case CombatAbility.Overload:
-                    description +=
-                        "With this focus equipped, your spells build Overload. As Overload increases, so does your spell effectiveness up to a maximum of 25%. "
-                        + "However, your mana costs also increase by up to 100%. Beyond 50% Overpower, you have an increasing chance to harm yourself on spellcast.\n\n"
-                        + "Activated Combat Ability: The first spell you cast within the next 10 seconds will gain a double effectiveness bonus and discharge all of your Overload.\n\n";
-                    break;
-                case CombatAbility.Battery:
-                    description +=
-                        "With this focus equipped, your mana costs are reduced by 20%, the reduction increasing as your mana pool is depleted. However, below 75% mana, your spell effectiveness also begins to decrease to as little as 25% at 0 mana.\n\n"
-                        + "Activated Combat Ability: For the next 10 seconds, your spells cost 0 mana and suffer no effectiveness penalty.\n\n";
-                    break;
-                case CombatAbility.Reflect:
-                    description +=
-                        "While equipped, you will reflect fully resisted spells back at the caster. Additionally, gain 20% increased Magic Defense while attempting to resist a spell.\n\n"
-                        + "Activated Combat Ability: For the next 10 seconds, your chance to resist spells is increased by an additional 30%.\n\nWhile equipped, gain a boost towards the following attributes and skills:\n\n";
-                    break;
-                case CombatAbility.EnchantedWeapon:
-                    description +=
-                        "With this focus equipped, you have a 100% chance to trigger Cast-on-strike spells while attacking at full power/accuracy. "
-                        + "The effective spellcraft of equipped weapons is increased by 10%. All weapon attacks also consume mana.\n\n"
-                        + "Activated Combat Ability: For the next 10 seconds, your weapon proc spell effectiveness is increased by 25%, as is the Mana cost.\n\n";
-                    break;
-            }
-        }
-
-        return description;
     }
 
     private static string GetSpellName(SpellId spellId)
@@ -1091,7 +1198,7 @@ public class CombatFocus : WorldObject
 
     private PlayScript GetFocusParticleEffect()
     {
-        switch (CombatFocusType)
+        switch (CombatFocusTypeId)
         {
             default:
             case 1:

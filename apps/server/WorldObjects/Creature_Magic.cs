@@ -50,10 +50,24 @@ partial class Creature
         }
         else if ((spell.Flags & SpellFlags.FellowshipSpell) != 0)
         {
-            var numFellows = 1;
-            if (this is Player player && player.Fellowship != null)
+            var numFellows = 0;
+            if (this is Player { Fellowship: not null } player)
             {
-                numFellows = player.Fellowship.FellowshipMembers.Count;
+                var magicSkill = GetCreatureSkill(spell.School).Current;
+                var maxRange = Math.Min(spell.BaseRangeConstant + magicSkill * spell.BaseRangeMod, Player.MaxRadarRange_Outdoors);
+
+                foreach (var fellowshipMember in player.Fellowship.GetFellowshipMembers().Values)
+                {
+                    if (fellowshipMember == this)
+                    {
+                        continue;
+                    }
+
+                    if (GetDistance(fellowshipMember) < maxRange)
+                    {
+                        numFellows++;
+                    }
+                }
             }
 
             baseCost += spell.ManaMod * (uint)numFellows;
@@ -89,7 +103,7 @@ partial class Creature
             var ripostePenaltyMod = playerCaster.RiposteIsActive ? 0.25f : 0.0f;
             var furyPenaltyMod = playerCaster.FuryEnrageIsActive ? 0.25f : 0.0f;
             var multiShotPenaltyMod = playerCaster.MultiShotIsActive ? 0.25f : 0.0f;
-            var steadyShotPenaltyMod = playerCaster.SteadyShotIsActive ? 0.25f : 0.0f;
+            var steadyStrikePenaltyMod = playerCaster.SteadyStrikeIsActive ? 0.25f : 0.0f;
             var smokescreenPenaltyMod = playerCaster.SmokescreenIsActive ? 0.25f : 0.0f;
             var backstabPenaltyMod = playerCaster.BackstabIsActive ? 0.25f : 0.0f;
 
@@ -98,7 +112,7 @@ partial class Creature
                                 + ripostePenaltyMod
                                 + furyPenaltyMod
                                 + multiShotPenaltyMod
-                                + steadyShotPenaltyMod
+                                + steadyStrikePenaltyMod
                                 + smokescreenPenaltyMod
                                 + backstabPenaltyMod;
         }

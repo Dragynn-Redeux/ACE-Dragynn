@@ -13,6 +13,7 @@ using ACE.Server.Commands.Handlers;
 using ACE.Server.Discord;
 using ACE.Server.Managers;
 using ACE.Server.Mods;
+using ACE.Server.Network;
 using ACE.Server.Network.Managers;
 using Microsoft.Extensions.Configuration;
 using Serilog;
@@ -338,6 +339,9 @@ partial class Program
         _log.Information("Registering ModManager commands...");
         ModManager.RegisterCommands();
         ModManager.ListMods();
+
+        DiscordChatBridge.Initialize(configuration);
+        await DiscordChatBridge.Start();
 
         var discordConfig = configuration.GetSection("Discord");
         if (discordConfig.GetValue<bool>("Enabled"))

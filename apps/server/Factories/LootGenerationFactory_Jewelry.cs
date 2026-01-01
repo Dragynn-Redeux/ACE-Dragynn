@@ -114,12 +114,15 @@ public static partial class LootGenerationFactory
 
         var tier = td.Tier;
         var jewelryType = wo.ValidLocations;
-        var qualityMod = td.LootQualityMod != 0.0f ? td.LootQualityMod : 0.0f;
 
         // Roll Ward
-        var minWard = GetMaxWardOfTier(tier);
-        wo.WardLevel = (int)(minWard * GetDiminishingRoll(td) + minWard);
-        var maxWardRollPercentile = (float)wo.WardLevel / (GetMaxWardOfTier(8));
+        var necklaceMulti = jewelryType is EquipMask.NeckWear ? 2 : 1;
+        var baseWardOfTier = GetBaseWardOfTier(tier) * necklaceMulti;
+        var maxWardOfTier = GetBaseWardOfTier(Math.Clamp(tier + 1, 1, 9)) * necklaceMulti;
+        var range = maxWardOfTier - baseWardOfTier;
+
+        wo.WardLevel = (int)Math.Max(1, (baseWardOfTier + range * GetDiminishingRoll(td)));
+        var maxWardRollPercentile = (float)wo.WardLevel / ((GetBaseWardOfTier(9)) * necklaceMulti);
 
         // Necklaces
         if (jewelryType == EquipMask.NeckWear)
@@ -149,8 +152,6 @@ public static partial class LootGenerationFactory
         // Rings
         else if (jewelryType == EquipMask.FingerWear)
         {
-            wo.WardLevel /= 2;
-
             var minRating = (float)(tier - 1) / 2;
             var rollPercentile = GetDiminishingRoll(td);
             var ratingRoll = minRating * rollPercentile;
@@ -176,8 +177,6 @@ public static partial class LootGenerationFactory
         // Bracelets
         else if (jewelryType == EquipMask.WristWear)
         {
-            wo.WardLevel /= 2;
-
             var minRating = (float)(tier - 1) / 2;
             var rollPercentile = GetDiminishingRoll(td);
             var ratingRoll = minRating * rollPercentile;

@@ -704,6 +704,12 @@ partial class Player
         //if (power < 50 || power >= 300) return true;
 
         var magicSkill = scroll.Spell.GetMagicSkill();
+
+        if (magicSkill is Skill.VoidMagic)
+        {
+            magicSkill = Skill.LifeMagic;
+        }
+
         var playerSkill = GetCreatureSkill(magicSkill);
 
         var minSkill = power - magicSkillCheckMargin;

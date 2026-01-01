@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Linq;
 using ACE.Common;
 using ACE.Entity;
@@ -77,7 +77,7 @@ public class BezelTool : WorldObject
 
     public static void UseObjectOnTarget(Player player, WorldObject source, WorldObject target, bool confirmed = false)
     {
-        var targetWorkmanship = Math.Clamp((target.ItemWorkmanship ?? 1) - 1, 1, 10);
+        var targetWorkmanship = target.ItemWorkmanship ?? 1;
         var fragmentsRequired = targetWorkmanship * targetWorkmanship;
 
         if (player.IsBusy)
@@ -272,7 +272,7 @@ public class BezelTool : WorldObject
         if (!confirmed)
         {
             var bezelFragmentsString = fragmentsRequired > 1 ? "Bezel Fragments" : "Bezel Fragment";
-            var confirmationMessage = $"You have a {Math.Round(chance * 100)}% of adding 1 jewel socket to {target.NameWithMaterial}. {fragmentsRequired} {bezelFragmentsString} will be consumed.\n\n";
+            var confirmationMessage = $"You have a {Math.Round(chance * 100)}% chance of adding 1 jewel socket to {target.NameWithMaterial}. {fragmentsRequired} {bezelFragmentsString} will be consumed.\n\n";
 
             if (!player.ConfirmationManager.EnqueueSend(new Confirmation_CraftInteration(player.Guid, source.Guid, target.Guid), confirmationMessage))
             {

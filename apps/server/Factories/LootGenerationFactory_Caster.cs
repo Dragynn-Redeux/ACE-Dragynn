@@ -60,114 +60,49 @@ public static partial class LootGenerationFactory
         TreasureRoll roll = null
     )
     {
-        if (wieldDifficulty != null)
-        {
-            // previous method
-
-            var wieldRequirement = WieldRequirement.RawSkill;
-            var wieldSkillType = Skill.None;
-
-            double elementalDamageMod = 0;
-
-            if (wieldDifficulty == 0)
-            {
-                if (profile.Tier > 6)
-                {
-                    wieldRequirement = WieldRequirement.Level;
-                    wieldSkillType = Skill.Axe; // Set by examples from PCAP data
-
-                    wieldDifficulty = profile.Tier switch
-                    {
-                        7 => 150, // In this instance, used for indicating player level, rather than skill level
-                        _ => 180, // In this instance, used for indicating player level, rather than skill level
-                    };
-                }
-            }
-            else
-            {
-                elementalDamageMod = RollElementalDamageMod(wieldDifficulty.Value, profile);
-
-                if (wo.W_DamageType == DamageType.Nether)
-                {
-                    wieldSkillType = Skill.VoidMagic;
-                }
-                else
-                {
-                    wieldSkillType = Skill.WarMagic;
-                }
-            }
-
-            // ManaConversionMod
-            var manaConversionMod = RollManaConversionMod(profile.Tier);
-            if (manaConversionMod > 0.0f)
-            {
-                wo.ManaConversionMod = manaConversionMod;
-            }
-
-            // ElementalDamageMod
-            if (elementalDamageMod > 1.0f)
-            {
-                wo.ElementalDamageMod = elementalDamageMod;
-            }
-
-            // WieldRequirements
-            if (wieldDifficulty > 0 || wieldRequirement == WieldRequirement.Level)
-            {
-                wo.WieldRequirements = wieldRequirement;
-                wo.WieldSkillType = (int)wieldSkillType;
-                wo.WieldDifficulty = wieldDifficulty;
-            }
-            else
-            {
-                wo.WieldRequirements = WieldRequirement.Invalid;
-                wo.WieldSkillType = null;
-                wo.WieldDifficulty = null;
-            }
-
-            // WeaponDefense
-            wo.WeaponPhysicalDefense = RollWeaponDefense(wieldDifficulty.Value, profile);
-        }
-
         wo.Tier = GetTierValue(profile);
 
-        // Add element/material to low tier orb/wand/scepter/staff
-        if (
-            wo.WeenieClassId == 2366
-            || wo.WeenieClassId == 2547
-            || wo.WeenieClassId == 2548
-            || wo.WeenieClassId == 2472
-        )
+        // Life/War
+        if (ThreadSafeRandom.Next(0, 1) == 0)
         {
-            RollCasterElement(profile, wo);
+            wo.WieldSkillType2 = (int)Skill.LifeMagic;
+            wo.WeaponSkill = Skill.LifeMagic;
+            wo.W_DamageType = DamageType.Nether;
+            wo.UiEffects = UiEffects.Nether;
+            SetLifeText(wo);
+        }
+        else
+        {
+            wo.WieldSkillType2 = (int)Skill.WarMagic;
+            wo.WeaponSkill = Skill.WarMagic;
+
+            // Add element/material to low tier orb/wand/scepter/staff
+            if (
+                wo.WeenieClassId == 2366
+                || wo.WeenieClassId == 2547
+                || wo.WeenieClassId == 2548
+                || wo.WeenieClassId == 2472
+            )
+            {
+                RollCasterElement(profile, wo);
+            }
         }
 
+        // Material
         var materialType = GetMaterialType(wo, profile.Tier);
         if (materialType > 0)
         {
             wo.MaterialType = materialType;
         }
 
-        // item color
+        // Item color
         if (wo.WeenieClassId == 2548)
         {
             MutateScepterColor(wo);
         }
-        //else if (wo.WeenieClassId >= 1050100)
-        //    MutateOrbColor();
         else
         {
             MutateColor(wo);
-        }
-
-        if (ThreadSafeRandom.Next(0, 1) == 0)
-        {
-            wo.WieldSkillType2 = (int)Skill.LifeMagic;
-            wo.WeaponSkill = Skill.LifeMagic;
-        }
-        else
-        {
-            wo.WieldSkillType2 = (int)Skill.WarMagic;
-            wo.WeaponSkill = Skill.WarMagic;
         }
 
         // Wield Reqs
@@ -240,6 +175,38 @@ public static partial class LootGenerationFactory
         wo.BaseManaConversionMod = (wo.ManaConversionMod == null ? 0 : wo.ManaConversionMod);
         wo.BaseWeaponWarMagicMod = (wo.WeaponWarMagicMod == null ? 0 : wo.WeaponWarMagicMod);
         wo.BaseWeaponLifeMagicMod = (wo.WeaponLifeMagicMod == null ? 0 : wo.WeaponLifeMagicMod);
+    }
+
+    private static void SetLifeText(WorldObject wo)
+    {
+        if (wo.Name.Contains("Slashing"))
+        {
+            wo.Name = wo.Name.Replace("Slashing", "Life");
+        }
+        else if (wo.Name.Contains("Blunt"))
+        {
+            wo.Name = wo.Name.Replace("Blunt", "Life");
+        }
+        else if (wo.Name.Contains("Piercing"))
+        {
+            wo.Name = wo.Name.Replace("Piercing", "Life");
+        }
+        else if (wo.Name.Contains("Acid"))
+        {
+            wo.Name = wo.Name.Replace("Acid", "Life");
+        }
+        else if (wo.Name.Contains("Fire"))
+        {
+            wo.Name = wo.Name.Replace("Fire", "Life");
+        }
+        else if (wo.Name.Contains("Frost"))
+        {
+            wo.Name = wo.Name.Replace("Frost", "Life");
+        }
+        else if (wo.Name.Contains("Electric"))
+        {
+            wo.Name = wo.Name.Replace("Electric", "Life");
+        }
     }
 
     private static void MutateCaster_SpellDID(WorldObject wo, TreasureDeath profile)
@@ -480,15 +447,15 @@ public static partial class LootGenerationFactory
 
     /// <summary>
     /// Rolls Bonus Ward Cleaving for Orbs
-    /// 0% to 20% (up to 10% based on tier)
+    /// 10% to 20% 
     /// </summary>
     private static void RollBonusWardCleaving(TreasureDeath treasureDeath, WorldObject wo, out float percentile)
     {
-        float[] minMod = { 0.0f, 0.01f, 0.02f, 0.03f, 0.04f, 0.05f, 0.075f, 0.1f };
+        //float[] minMod = { 0.10f, 0.11f, 0.12f, 0.13f, 0.14f, 0.15f, 0.175f, 0.2f };
 
-        var tier = Math.Clamp(treasureDeath.Tier - 1, 0, minMod.Length);
+        //var tier = Math.Clamp(treasureDeath.Tier - 1, 0, minMod.Length);
         var wardCleavingMod = 0.1f * GetDiminishingRoll(treasureDeath);
-        wardCleavingMod += minMod[tier];
+        wardCleavingMod += 0.1f;
 
         const float maxMod = 0.2f;
         percentile = wardCleavingMod / maxMod;
@@ -500,15 +467,15 @@ public static partial class LootGenerationFactory
 
     /// <summary>
     /// Rolls Bonus Armor Cleaving for Spears
-    /// 0% to 20% (up to 10% based on tier)
+    /// 10% to 20%
     /// </summary>
     private static void RollBonusArmorCleaving(TreasureDeath treasureDeath, WorldObject wo, out float percentile)
     {
-        float[] minMod = { 0.0f, 0.01f, 0.02f, 0.03f, 0.04f, 0.05f, 0.075f, 0.1f };
+        //float[] minMod = { 0.10f, 0.11f, 0.12f, 0.13f, 0.14f, 0.15f, 0.175f, 0.2f };
 
-        var tier = Math.Clamp(treasureDeath.Tier - 1, 0, minMod.Length);
+        //var tier = Math.Clamp(treasureDeath.Tier - 1, 0, minMod.Length);
         var armorCleavingMod = 0.1f * GetDiminishingRoll(treasureDeath);
-        armorCleavingMod += minMod[tier];
+        armorCleavingMod += 0.1f;
 
         const float maxMod = 0.2f;
         percentile = armorCleavingMod / maxMod;
@@ -833,42 +800,42 @@ public static partial class LootGenerationFactory
         switch (wo.W_DamageType)
         {
             case DamageType.Undef:
-                wo.IconId = 0x0600200F;
+                wo.IconId = 0x06008950;
                 wo.PaletteTemplate = 0;
                 wo.UiEffects = UiEffects.BoostHealth;
                 break;
             case DamageType.Slash:
-                wo.IconId = 0x06002011;
+                wo.IconId = 0x06008951;
                 wo.PaletteTemplate = 4;
                 wo.UiEffects = (UiEffects)0x0400;
                 break;
             case DamageType.Pierce:
-                wo.IconId = 0x06002012;
+                wo.IconId = 0x06008952;
                 wo.PaletteTemplate = 21;
                 wo.UiEffects = (UiEffects)0x0800;
                 break;
             case DamageType.Bludgeon:
-                wo.IconId = 0x06002013;
+                wo.IconId = 0x06008953;
                 wo.PaletteTemplate = 61;
                 wo.UiEffects = (UiEffects)0x0200;
                 break;
             case DamageType.Acid:
-                wo.IconId = 0x06002014;
+                wo.IconId = 0x06008954;
                 wo.PaletteTemplate = 8;
                 wo.UiEffects = (UiEffects)0x0100;
                 break;
             case DamageType.Fire:
-                wo.IconId = 0x06002015;
+                wo.IconId = 0x06008955;
                 wo.PaletteTemplate = 14;
                 wo.UiEffects = (UiEffects)0x0020;
                 break;
             case DamageType.Cold:
-                wo.IconId = 0x06002016;
+                wo.IconId = 0x06008956;
                 wo.PaletteTemplate = 2;
                 wo.UiEffects = (UiEffects)0x0080;
                 break;
             case DamageType.Electric:
-                wo.IconId = 0x06002017;
+                wo.IconId = 0x06008957;
                 wo.PaletteTemplate = 82;
                 wo.UiEffects = (UiEffects)0x0040;
                 break;
@@ -889,19 +856,17 @@ public static partial class LootGenerationFactory
             var minDamageMod = GetCasterMinDamageMod()[tier];
             var diminishedDamageModRoll = (maxDamageMod - minDamageMod) * GetDiminishingRoll(profile);
 
+            damageRoll = minDamageMod + diminishedDamageModRoll;
+
             if (wo.WieldSkillType2 == (int)Skill.WarMagic)
             {
-                damageRoll = minDamageMod + diminishedDamageModRoll;
-
                 wo.ElementalDamageMod = damageRoll;
-                wo.WeaponRestorationSpellsMod = damageRoll / 2 + 0.5f;
+                wo.WeaponRestorationSpellsMod = (damageRoll - 1.0) * 0.25 + 1.0; // 25% of damage roll
             }
             else
             {
-                damageRoll = minDamageMod + diminishedDamageModRoll;
-
-                wo.WeaponRestorationSpellsMod = minDamageMod + diminishedDamageModRoll;
-                wo.ElementalDamageMod = damageRoll / 2 + 0.5f;
+                wo.ElementalDamageMod = (damageRoll - 1.0) * 0.5 + 1.0; // 50% of damage roll
+                wo.WeaponRestorationSpellsMod = wo.ElementalDamageMod; // 50% of damage roll
             }
 
             var maxPossibleDamage = GetCasterMaxDamageMod()[7];

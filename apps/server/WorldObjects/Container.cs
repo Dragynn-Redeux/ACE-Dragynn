@@ -739,6 +739,19 @@ public partial class Container : WorldObject
             }
         }
 
+        // Account Bound - Allow character-bound items to transfer to other characters on the same account when picked up
+        if (this is Player playerContainer && worldObject is {AllowedWielder: not null})
+        {
+            var accountId = playerContainer.Account.AccountId;
+            var allowedWielderPlayer = PlayerManager.GetOfflinePlayer(worldObject.AllowedWielder.Value);
+
+            if (allowedWielderPlayer is not null && allowedWielderPlayer.Account.AccountId == accountId)
+            {
+                worldObject.AllowedWielder = this.Guid.Full;
+                worldObject.CraftsmanName = this.Name;
+            }
+        }
+
         OnAddItem();
 
         if (this is Player containerPlayer)

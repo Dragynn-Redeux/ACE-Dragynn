@@ -30,7 +30,7 @@ public class Town
 
     private static readonly Dictionary<string, Vector2> TownPositions = new ()
     {
-        {"Al-Arqas", new Vector2(-31.2f, 13.7f) },
+        {"Al-Arqas", new Vector2(13.7f, -31.2f) },
         {"Al-Jalima", new Vector2(4.8f, 7.4f) },
         {"Arwic", new Vector2(56.8f, 33.6f) },
         {"Baishi", new Vector2(62.9f, -49.3f) },
