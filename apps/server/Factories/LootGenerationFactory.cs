@@ -979,12 +979,12 @@ public static partial class LootGenerationFactory
                 if (magicSkill == Skill.WarMagic)
                 {
                     wo.SetProperty(PropertyFloat.ElementalDamageMod, final);
-                    wo.SetProperty(PropertyFloat.WeaponRestorationSpellsMod, 1 + (final - 1) / 2);
+                    wo.SetProperty(PropertyFloat.WeaponRestorationSpellsMod, 1 + (final - 1) / 4);
                 }
                 else
                 {
-                    wo.SetProperty(PropertyFloat.WeaponRestorationSpellsMod, final);
                     wo.SetProperty(PropertyFloat.ElementalDamageMod, 1 + (final - 1) / 2);
+                    wo.SetProperty(PropertyFloat.WeaponRestorationSpellsMod, 1 + (final - 1) / 2);
                 }
             }
             else if (wo is { WeaponRestorationSpellsMod: not null, ElementalDamageMod: null})
@@ -1430,6 +1430,11 @@ public static partial class LootGenerationFactory
                 var final = baseStat + bonus;
 
                 wo.SetProperty(PropertyFloat.ArmorWarMagicMod, final);
+            }
+
+            if (wo.ItemType is ItemType.Armor)
+            {
+                NormalizeProtectionLevels(wo);
             }
         }
     }

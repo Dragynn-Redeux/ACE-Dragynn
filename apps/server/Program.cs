@@ -1,11 +1,9 @@
 using System;
 using System.Globalization;
 using System.IO;
-using System.Linq;
 using System.Reflection;
 using System.Runtime;
 using System.Runtime.InteropServices;
-using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 using ACE.Common;
@@ -15,10 +13,10 @@ using ACE.Server.Commands.Handlers;
 using ACE.Server.Discord;
 using ACE.Server.Managers;
 using ACE.Server.Mods;
+using ACE.Server.Network;
 using ACE.Server.Network.Managers;
 using Microsoft.Extensions.Configuration;
 using Serilog;
-
 
 namespace ACE.Server;
 
@@ -262,189 +260,137 @@ partial class Program
 
         _log.Information("Starting PropertyManager...");
         PropertyManager.Initialize();
-        // ...
 
-                try
+        _log.Information("Initializing GuidManager...");
+        GuidManager.Initialize();
+
+        if (ConfigManager.Config.Server.ServerPerformanceMonitorAutoStart)
         {
-            var exeDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location)!;
-            var json   = Path.Combine(exeDir, "recipe_to_emote_wcid_whitelist.json");
-            var txt    = Path.Combine(exeDir, "recipe_to_emote_wcid_whitelist.txt");
-
-            string? valueFromFile = null;
-
-            if (File.Exists(json))
-            {
-                using var doc = JsonDocument.Parse(File.ReadAllText(json));
-                if (doc.RootElement.TryGetProperty("recipe_tool_use_emote_whitelist", out var arr) &&
-                    arr.ValueKind == JsonValueKind.Array)
-                {
-                    var ids = arr.EnumerateArray()
-                                .Where(e => e.ValueKind == JsonValueKind.Number)
-                                .Select(e => e.GetInt32())
-                                .Where(v => v > 0)
-                                .Distinct();
-
-                    var s = string.Join(",", ids);
-                    if (!string.IsNullOrWhiteSpace(s))
-                    {
-                        valueFromFile = s;
-                    }
-                }
-            }
-
-            if (valueFromFile == null && File.Exists(txt))
-            {
-                var ids = File.ReadAllText(txt)
-                            .Split(new[] { ',', ';', '\n', '\r', '\t', ' ' }, StringSplitOptions.RemoveEmptyEntries)
-                            .Select(s => int.TryParse(s, out var v) ? v : -1)
-                            .Where(v => v > 0)
-                            .Distinct();
-
-                var s = string.Join(",", ids);
-                if (!string.IsNullOrWhiteSpace(s))
-                {
-                    valueFromFile = s;
-                }
-            }
-
-            if (!string.IsNullOrWhiteSpace(valueFromFile))
-            {
-                PropertyManager.ModifyString("recipe_tool_use_emote_whitelist", valueFromFile);
-                PropertyManager.ResyncVariables(); // persist now
-                Serilog.Log.Information("tool-use-emote whitelist loaded: {Value}", valueFromFile);
-            }
-        }
-        catch (Exception ex)
-        {
-            Serilog.Log.Warning(ex, "Failed to load tool-use-emote whitelist file.");
-        }
-   _log.Information("Initializing GuidManager...");
-   GuidManager.Initialize();
-
-   if (ConfigManager.Config.Server.ServerPerformanceMonitorAutoStart)
-   {
-       _log.Information("Server Performance Monitor auto starting...");
-       ServerPerformanceMonitor.Start();
-   }
-
-   if (ConfigManager.Config.Server.WorldDatabasePrecaching)
-   {
-       _log.Information("Precaching Weenies...");
-       DatabaseManager.World.CacheAllWeenies();
-       _log.Information("Precaching Cookbooks...");
-       DatabaseManager.World.CacheAllCookbooks();
-       _log.Information("Precaching Events...");
-       DatabaseManager.World.GetAllEvents();
-       _log.Information("Precaching House Portals...");
-       DatabaseManager.World.CacheAllHousePortals();
-       _log.Information("Precaching Points Of Interest...");
-       DatabaseManager.World.CacheAllPointsOfInterest();
-       _log.Information("Precaching Spells...");
-       DatabaseManager.World.CacheAllSpells();
-       _log.Information("Precaching Treasures - Death...");
-       DatabaseManager.World.CacheAllTreasuresDeath();
-       _log.Information("Precaching Treasures - Material Base...");
-       DatabaseManager.World.CacheAllTreasureMaterialBase();
-       _log.Information("Precaching Treasures - Material Groups...");
-       DatabaseManager.World.CacheAllTreasureMaterialGroups();
-       _log.Information("Precaching Treasures - Material Colors...");
-       DatabaseManager.World.CacheAllTreasureMaterialColor();
-       _log.Information("Precaching Treasures - Wielded...");
-       DatabaseManager.World.CacheAllTreasureWielded();
-   }
-   else
-   {
-       _log.Information("Precaching World Database Disabled...");
-   }
-
-   _log.Information("Initializing PlayerManager...");
-   PlayerManager.Initialize();
-
-   _log.Information("Initializing HouseManager...");
-   HouseManager.Initialize();
-
-   _log.Information("Initializing InboundMessageManager...");
-   InboundMessageManager.Initialize();
-
-   _log.Information("Initializing SocketManager...");
-   SocketManager.Initialize();
-
-   _log.Information("Initializing WorldManager...");
-   WorldManager.Initialize();
-
-   _log.Information("Initializing EventManager...");
-   EventManager.Initialize();
-
-   // Free up memory before the server goes online. This can free up 6 GB+ on larger servers.
-   _log.Information("Forcing .net garbage collection...");
-   for (var i = 0; i < 10; i++)
-   {
-       // https://learn.microsoft.com/en-us/dotnet/standard/garbage-collection/fundamentals
-       // https://learn.microsoft.com/en-us/dotnet/api/system.runtime.gcsettings.largeobjectheapcompactionmode
-       GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
-
-       GC.Collect();
-   }
-
-   // This should be last
-   _log.Information("Initializing CommandManager...");
-   CommandManager.Initialize();
-
-   _log.Information("Initializing ModManager...");
-   ModManager.Initialize();
-   //Register mod commands
-   _log.Information("Registering ModManager commands...");
-   ModManager.RegisterCommands();
-   ModManager.ListMods();
-
-   var discordConfig = configuration.GetSection("Discord");
-   if (discordConfig.GetValue<bool>("Enabled"))
-   {
-       var discordBot = new DiscordBot();
-       await discordBot.Initialize(discordConfig);
-   }
-
-   if (!PropertyManager.GetBool("world_closed", false).Item)
-   {
-       WorldManager.Open(null);
-   }
-}
-
-private static void CurrentDomain_UnhandledException(object sender, UnhandledExceptionEventArgs e)
-{
-    _log.Error(e.ExceptionObject as Exception, "An unhandled exception occurred.");
-    Thread.Sleep(1000);
-}
-
-private static void OnProcessExit(object sender, EventArgs e)
-{
-    if (!IsRunningInContainer)
-    {
-        if (!ServerManager.ShutdownInitiated)
-        {
-            _log.Warning("Unsafe server shutdown detected! Data loss is possible!");
+            _log.Information("Server Performance Monitor auto starting...");
+            ServerPerformanceMonitor.Start();
         }
 
-        PropertyManager.StopUpdating();
-        DatabaseManager.Stop();
-
-        // Do system specific cleanup here
-        try
+        if (ConfigManager.Config.Server.WorldDatabasePrecaching)
         {
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-            {
-                MM_EndPeriod(1);
-            }
+            _log.Information("Precaching Weenies...");
+            DatabaseManager.World.CacheAllWeenies();
+            _log.Information("Precaching Cookbooks...");
+            DatabaseManager.World.CacheAllCookbooks();
+            _log.Information("Precaching Events...");
+            DatabaseManager.World.GetAllEvents();
+            _log.Information("Precaching House Portals...");
+            DatabaseManager.World.CacheAllHousePortals();
+            _log.Information("Precaching Points Of Interest...");
+            DatabaseManager.World.CacheAllPointsOfInterest();
+            _log.Information("Precaching Spells...");
+            DatabaseManager.World.CacheAllSpells();
+            _log.Information("Precaching Treasures - Death...");
+            DatabaseManager.World.CacheAllTreasuresDeath();
+            _log.Information("Precaching Treasures - Material Base...");
+            DatabaseManager.World.CacheAllTreasureMaterialBase();
+            _log.Information("Precaching Treasures - Material Groups...");
+            DatabaseManager.World.CacheAllTreasureMaterialGroups();
+            _log.Information("Precaching Treasures - Material Colors...");
+            DatabaseManager.World.CacheAllTreasureMaterialColor();
+            _log.Information("Precaching Treasures - Wielded...");
+            DatabaseManager.World.CacheAllTreasureWielded();
         }
-        catch (Exception ex)
+        else
         {
-            _log.Error(ex.ToString());
+            _log.Information("Precaching World Database Disabled...");
+        }
+
+        _log.Information("Initializing PlayerManager...");
+        PlayerManager.Initialize();
+
+        _log.Information("Initializing HouseManager...");
+        HouseManager.Initialize();
+
+        _log.Information("Initializing InboundMessageManager...");
+        InboundMessageManager.Initialize();
+
+        _log.Information("Initializing SocketManager...");
+        SocketManager.Initialize();
+
+        _log.Information("Initializing WorldManager...");
+        WorldManager.Initialize();
+
+        _log.Information("Initializing EventManager...");
+        EventManager.Initialize();
+
+        // Free up memory before the server goes online. This can free up 6 GB+ on larger servers.
+        _log.Information("Forcing .net garbage collection...");
+        for (var i = 0; i < 10; i++)
+        {
+            // https://learn.microsoft.com/en-us/dotnet/standard/garbage-collection/fundamentals
+            // https://learn.microsoft.com/en-us/dotnet/api/system.runtime.gcsettings.largeobjectheapcompactionmode
+            GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
+
+            GC.Collect();
+        }
+
+        // This should be last
+        _log.Information("Initializing CommandManager...");
+        CommandManager.Initialize();
+
+        _log.Information("Initializing ModManager...");
+        ModManager.Initialize();
+        //Register mod commands
+        _log.Information("Registering ModManager commands...");
+        ModManager.RegisterCommands();
+        ModManager.ListMods();
+
+        DiscordChatBridge.Initialize(configuration);
+        await DiscordChatBridge.Start();
+
+        var discordConfig = configuration.GetSection("Discord");
+        if (discordConfig.GetValue<bool>("Enabled"))
+        {
+            var discordBot = new DiscordBot();
+            await discordBot.Initialize(discordConfig);
+        }
+
+        if (!PropertyManager.GetBool("world_closed", false).Item)
+        {
+            WorldManager.Open(null);
         }
     }
-    else
+
+    private static void CurrentDomain_UnhandledException(object sender, UnhandledExceptionEventArgs e)
     {
-        ServerManager.DoShutdownNow();
-        DatabaseManager.Stop();
+        _log.Error(e.ExceptionObject as Exception, "An unhandled exception occurred.");
+        Thread.Sleep(1000);
     }
-}
+
+    private static void OnProcessExit(object sender, EventArgs e)
+    {
+        if (!IsRunningInContainer)
+        {
+            if (!ServerManager.ShutdownInitiated)
+            {
+                _log.Warning("Unsafe server shutdown detected! Data loss is possible!");
+            }
+
+            PropertyManager.StopUpdating();
+            DatabaseManager.Stop();
+
+            // Do system specific cleanup here
+            try
+            {
+                if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                {
+                    MM_EndPeriod(1);
+                }
+            }
+            catch (Exception ex)
+            {
+                _log.Error(ex.ToString());
+            }
+        }
+        else
+        {
+            ServerManager.DoShutdownNow();
+            DatabaseManager.Stop();
+        }
+    }
 }

@@ -601,17 +601,17 @@ partial class WorldObject
                 switch (spell.School)
                 {
                     case MagicSchool.LifeMagic:
-                        player?.CheckForSigilTrinketOnCastEffects(targetCreature, spell, true, Skill.LifeMagic, (int)SigilTrinketLifeMagicEffect.ScarabIntensity, null, false, _isSigilTrinketSpell);
-                        player?.CheckForSigilTrinketOnCastEffects(targetCreature, spell, true, Skill.LifeMagic, (int)SigilTrinketLifeMagicEffect.ScarabShield, null, false, _isSigilTrinketSpell);
-                        player?.CheckForSigilTrinketOnCastEffects(targetCreature, spell, true, Skill.LifeMagic, (int)SigilTrinketLifeMagicEffect.ScarabCastProt, null, false, _isSigilTrinketSpell);
-                        player?.CheckForSigilTrinketOnCastEffects(targetCreature, spell, true, Skill.LifeMagic, (int)SigilTrinketLifeMagicEffect.ScarabCastVuln, null, false, _isSigilTrinketSpell);
-                        player?.CheckForSigilTrinketOnCastEffects(targetCreature, spell, true, Skill.LifeMagic, (int)SigilTrinketLifeMagicEffect.ScarabCastItemBuff, null, false, _isSigilTrinketSpell);
-                        player?.CheckForSigilTrinketOnCastEffects(targetCreature, spell, true, Skill.LifeMagic, (int)SigilTrinketLifeMagicEffect.ScarabCastVitalRate, null, false, _isSigilTrinketSpell);
+                        player?.CheckForSigilTrinketOnCastEffects(targetCreature, spell, true, Skill.LifeMagic, SigilTrinketLifeWarMagicEffect.Intensity, null, false, _isSigilTrinketSpell);
+                        player?.CheckForSigilTrinketOnCastEffects(targetCreature, spell, true, Skill.LifeMagic, SigilTrinketLifeWarMagicEffect.Shielding, null, false, _isSigilTrinketSpell);
+                        player?.CheckForSigilTrinketOnCastEffects(targetCreature, spell, true, Skill.LifeMagic, SigilTrinketLifeMagicEffect.CastProt, null, false, _isSigilTrinketSpell);
+                        player?.CheckForSigilTrinketOnCastEffects(targetCreature, spell, true, Skill.LifeMagic, SigilTrinketLifeMagicEffect.CastVuln, null, false, _isSigilTrinketSpell);
+                        player?.CheckForSigilTrinketOnCastEffects(targetCreature, spell, true, Skill.LifeMagic, SigilTrinketLifeMagicEffect.CastItemBuff, null, false, _isSigilTrinketSpell);
+                        player?.CheckForSigilTrinketOnCastEffects(targetCreature, spell, true, Skill.LifeMagic, SigilTrinketLifeMagicEffect.CastVitalRate, null, false, _isSigilTrinketSpell);
                         break;
                     case MagicSchool.WarMagic:
-                        player?.CheckForSigilTrinketOnCastEffects(targetCreature, spell, true, Skill.WarMagic, (int)SigilTrinketWarMagicEffect.ScarabIntensity, null, false, _isSigilTrinketSpell);
-                        player?.CheckForSigilTrinketOnCastEffects(targetCreature, spell, true, Skill.WarMagic, (int)SigilTrinketWarMagicEffect.ScarabShield, null, false, _isSigilTrinketSpell);
-                        player?.CheckForSigilTrinketOnCastEffects(targetCreature, spell, true, Skill.WarMagic, (int)SigilTrinketWarMagicEffect.ScarabDuplicate, null, false, _isSigilTrinketSpell);
+                        player?.CheckForSigilTrinketOnCastEffects(targetCreature, spell, true, Skill.WarMagic, SigilTrinketLifeWarMagicEffect.Intensity, null, false, _isSigilTrinketSpell);
+                        player?.CheckForSigilTrinketOnCastEffects(targetCreature, spell, true, Skill.WarMagic, SigilTrinketLifeWarMagicEffect.Shielding, null, false, _isSigilTrinketSpell);
+                        player?.CheckForSigilTrinketOnCastEffects(targetCreature, spell, true, Skill.WarMagic, SigilTrinketWarMagicEffect.Duplicate, null, false, _isSigilTrinketSpell);
                         break;
                 }
             }
@@ -627,6 +627,15 @@ partial class WorldObject
                     GenerateSupportSpellThreat(spell, targetCreature);
                 }
 
+                var playerCaster = this as Player;
+
+                if (playerCaster is { OverloadStanceIsActive: true } or { BatteryStanceIsActive: true } &&
+                    spell.School is MagicSchool.VoidMagic &&
+                    targetCreature != playerCaster)
+                {
+                    playerCaster.IncreaseChargedMeter(spell, fromProc);
+                }
+                
                 // TODO: replace with some kind of 'rootOwner unless equip' concept?
                 if (itemCaster != null && (equip || itemCaster is Gem || itemCaster is Food))
                 {
@@ -652,7 +661,7 @@ partial class WorldObject
                     GenerateSupportSpellThreat(spell, targetCreature);
                 }
 
-                HandleCastSpell_Transfer(spell, targetCreature, showMsg, weapon);
+                HandleCastSpell_Transfer(spell, targetCreature, showMsg, weapon, fromProc);
                 break;
 
             case SpellType.Projectile:
@@ -763,8 +772,9 @@ partial class WorldObject
     )
     {
         // weird itemCaster -> caster collapsing going on here -- fixme
-
+        
         var player = this as Player;
+        var targetCreature = target as Creature;
 
         var aetheriaProc = false;
         var cloakProc = false;
@@ -807,7 +817,7 @@ partial class WorldObject
 
             if (addResult.Enchantment.StatModValue < 0 && targetPlayerWard > 0)
             {
-                //Console.WriteLine($"StatModValue Before: {addResult.Enchantment.StatModType} {addResult.Enchantment.StatModValue}\n" +
+                //Console.WriteLine($"StatModValue Before: {addResult.Enchantment.StatModType} {addResult.Enchantment.StatModValue} {addResult.Enchantment.Duration}\n" +
                 //    $" -Target Ward Level: {targetPlayer.GetWardLevel()}");
 
                 var ignoreWardMod = 1.0f;
@@ -824,11 +834,13 @@ partial class WorldObject
                     ignoreWardMod *= 1.0f - Jewel.GetJewelEffectMod(player, PropertyInt.GearWardPen, "WardPen");
                 }
 
-                var wardMod = GetWardMod(caster as Creature, targetPlayer, ignoreWardMod) / 10;
+                var wardMod = GetWardMod(caster as Creature, targetPlayer, ignoreWardMod);
 
-                addResult.Enchantment.StatModValue *= wardMod;
+                wardMod += (1 - wardMod) * 0.5f;
+
+                //addResult.Enchantment.StatModValue *= wardMod;
                 addResult.Enchantment.Duration *= wardMod;
-                //Console.WriteLine($"StatModValue After: {addResult.Enchantment.StatModType} {addResult.Enchantment.StatModValue}");
+                //Console.WriteLine($"StatModValue After: {addResult.Enchantment.StatModType} {addResult.Enchantment.StatModValue} {addResult.Enchantment.Duration}");
             }
         }
 
@@ -865,18 +877,29 @@ partial class WorldObject
 
             if (casterCheck || target == this || caster != target)
             {
+                var chargedPercent = Math.Round(player.ManaChargeMeter * 100);
+                var chargedMsg = player is { OverloadStanceIsActive: true } or { BatteryStanceIsActive: true } ? $"{chargedPercent}% Charged! " : "";
+
+                chargedMsg = player switch
+                {
+                    { OverloadDischargeIsActive: true } => "Overload Discharge! ",
+                    { BatteryDischargeIsActive: true } => "Battery Discharge! ",
+                    _ => chargedMsg
+                };
+
                 var casterName = casterCheck ? "You" : caster.Name;
                 var targetName = target.Name;
                 if (target == this)
                 {
                     targetName = casterCheck ? "yourself" : "you";
+                    chargedMsg = "";
                 }
 
                 if (showMsg)
                 {
                     player.SendChatMessage(
                         player,
-                        $"{casterName} cast {spell.Name} on {targetName}{suffix}",
+                        $"{chargedMsg}{casterName} cast {spell.Name} on {targetName}{suffix}",
                         ChatMessageType.Magic
                     );
                 }
@@ -1086,7 +1109,7 @@ partial class WorldObject
             tryBoost = Convert.ToInt32(tryBoost * (1.0f + Jewel.GetJewelBlueFury(player)));
             tryBoost = Convert.ToInt32(tryBoost * (1.0f + Jewel.GetJewelEffectMod(player, PropertyInt.GearSelfHarm)));
 
-            var attributeMod = creature.GetAttributeMod(weapon, true, targetCreature);
+            var attributeMod = creature?.GetAttributeMod(weapon, true) ?? 1.0f;
             tryBoost = Convert.ToInt32(tryBoost * attributeMod);
 
             // reductions
@@ -1112,7 +1135,7 @@ partial class WorldObject
         tryBoost = (int)(tryBoost * scalar);
 
         SigilTrinketSpellDamageReduction = 1.0f;
-        targetPlayer?.CheckForSigilTrinketOnSpellHitReceivedEffects(this, spell, tryBoost, Skill.MagicDefense, (int)SigilTrinketMagicDefenseEffect.Absorption);
+        targetPlayer?.CheckForSigilTrinketOnSpellHitReceivedEffects(this, spell, tryBoost, Skill.MagicDefense, SigilTrinketMagicDefenseEffect.Absorption);
         tryBoost = Convert.ToInt32(tryBoost * SigilTrinketSpellDamageReduction);
 
         switch (spell.VitalDamageType)
@@ -1136,7 +1159,7 @@ partial class WorldObject
 
                     if (player is { OverloadStanceIsActive: true } or {BatteryStanceIsActive: true} && boost > 0)
                     {
-                        player.IncreaseChargedMeter(spell);
+                        player.IncreaseChargedMeter(spell, fromProc);
                     }
                 }
                 else if (creature is { IsMonster: false } && targetCreature.IsMonster)
@@ -1146,7 +1169,7 @@ partial class WorldObject
 
                     if (player is { OverloadStanceIsActive: true } or {BatteryStanceIsActive: true} && boost < 0)
                     {
-                        player.IncreaseChargedMeter(spell);
+                        player.IncreaseChargedMeter(spell, fromProc);
                     }
                 }
                 break;
@@ -1516,7 +1539,7 @@ partial class WorldObject
     /// Handles casting SpellType.Transfer spells
     /// usually for Life Magic, ie. Stamina to Mana, Drain
     /// </summary>
-    private void HandleCastSpell_Transfer(Spell spell, Creature targetCreature, bool showMsg = true, WorldObject weapon = null)
+    private void HandleCastSpell_Transfer(Spell spell, Creature targetCreature, bool showMsg = true, WorldObject weapon = null, bool fromProc = false)
     {
         var player = this as Player;
         var creature = this as Creature;
@@ -1679,6 +1702,20 @@ partial class WorldObject
 
                         transferSource.DamageHistory.Add(this, DamageType.Health, srcVitalChange);
                         break;
+                }
+
+                // Determine if this drain/infuse should increase the charge meter. Self-transfer does not increase charge.
+                var shouldIncreaseCharge =
+                    destVitalChange > 0 &&
+                    (
+                        transferSource is not Player || 
+                        (transferSource is Player && destination != transferSource)
+                    );
+
+                if (shouldIncreaseCharge &&
+                    player is { OverloadStanceIsActive: true } or { BatteryStanceIsActive: true })
+                {
+                    player.IncreaseChargedMeter(spell, fromProc);
                 }
             }
 
@@ -1919,7 +1956,7 @@ partial class WorldObject
 
             if (caster is Player playerCaster and ({ OverloadStanceIsActive: true } or {BatteryStanceIsActive: true}))
             {
-                playerCaster.IncreaseChargedMeter(spell);
+                playerCaster.IncreaseChargedMeter(spell, fromProc);
             }
         }
 
@@ -3369,19 +3406,12 @@ partial class WorldObject
     /// </summary>
     /// <param name="spell">A spell with a DotDuration</param>
     public float CalculateDotEnchantment_StatModValue(
-        Spell spell,
-        WorldObject target,
-        WorldObject weapon,
-        float statModVal
-    )
+    Spell spell,
+    WorldObject target,
+    WorldObject weapon,
+    float statModVal
+)
     {
-        // here are all the dots with current content:
-
-        // - 3 void dots (2 projectiles, 1 direct enchantment)
-        // - surge of affliction (target loses health over time)
-        // - surge of regeneration (caster gains health over time)
-        // - dirty fighting bleed
-
         if (spell.DotDuration == 0)
         {
             return statModVal;
@@ -3393,34 +3423,27 @@ partial class WorldObject
 
         if (spell.Category == SpellCategory.AetheriaProcHealthOverTimeRaising)
         {
-            // no healing boost rating modifier found in retail pcaps on apply,
-            // could there have been one on tick?
-            //if (creatureTarget != null)
-            //enchantment_statModVal *= creatureTarget.GetHealingRatingMod();
-
             return enchantment_statModVal;
         }
 
         if (spell.Category == SpellCategory.AetheriaProcDamageOverTimeRaising)
         {
-            // no mods found in retail pcaps
             return enchantment_statModVal;
         }
 
         var player = this as Player;
         var creatureSource = this as Creature;
 
+        var equippedWeapon = player.GetEquippedWeapon() ?? player.GetEquippedWand();
+
         var damageRatingMod = 1.0f;
 
         if (creatureSource != null)
         {
-            // damage rating mod
             var damageRating = creatureSource.GetDamageRating();
 
             if (player != null)
             {
-                // TODO: merge this with damage rating
-                var equippedWeapon = player.GetEquippedWeapon() ?? player.GetEquippedWand();
                 if (player.GetHeritageBonus(equippedWeapon))
                 {
                     damageRating += 5;
@@ -3436,7 +3459,6 @@ partial class WorldObject
 
         if (spell.Category is SpellCategory.DFBleedDamage)
         {
-            // retail pcaps have modifiers in the range of 1.1x - 1.7x
             return enchantment_statModVal * damageRatingMod;
         }
 
@@ -3456,43 +3478,33 @@ partial class WorldObject
             return enchantment_statModVal;
         }
 
-        // factors:
-        // - damage rating
-        // - heritage bonus (universal masteries at end of retail, TODO: merge this with damage rating)
-        // - caster damage type bonus (pvm, half for pvp)
-        // - skill in magic school vs. spell difficulty (for projectiles)
-
-        // thanks to Xenocide for figuring this part out!
+        if (spell.Category is SpellCategory.HealKitRegen or SpellCategory.StaminaKitRegen or SpellCategory.ManaKitRegen)
+        {
+            return enchantment_statModVal;
+        }
 
         var elementalDamageMod = 1.0f;
-        var skillMod = 1.0f;
+        var attributeDamageMod = 1.0f;
 
         if (creatureSource != null)
         {
-            // elemental damage mod
             elementalDamageMod = GetCasterElementalDamageModifier(
-                weapon,
+                equippedWeapon,
                 creatureSource,
                 creatureTarget,
                 spell.DamageType
             );
 
-            // skillMod only applied to projectiles -- no destructive curse
-            if (player != null && spell.NumProjectiles > 0)
-            {
-                // from SpellProjectile, slightly modified
-                // convert this to common function
-                var magicSkill = player.GetCreatureSkill(spell.School).Current;
-
-                if (magicSkill > spell.Power)
-                {
-                    var percentageBonus = (magicSkill - spell.Power) / 1000.0f;
-
-                    skillMod = 1.0f + percentageBonus;
-                }
-            }
+            attributeDamageMod = creatureSource.GetAttributeMod(creatureSource.GetEquippedWeapon(), true);
         }
-        enchantment_statModVal *= skillMod * elementalDamageMod * damageRatingMod;
+
+        enchantment_statModVal *= elementalDamageMod * attributeDamageMod * damageRatingMod;
+
+        //Console.WriteLine($"\nCalculateDotEnchantment_StatModValue()\n" +
+        //    $" -elementalDamageMod: {elementalDamageMod}\n" +
+        //    $" -attributeDamageMod: {attributeDamageMod}\n" +
+        //    $" -damageRatingMod: {damageRatingMod}\n" +
+        //    $" -statModVal: {enchantment_statModVal}");
 
         return enchantment_statModVal;
     }
@@ -3794,7 +3806,7 @@ partial class WorldObject
         return Math.Clamp(mod, 0.5f, 2.0f);
     }
 
-    private float GetWardMod(Creature caster, Creature target, float ignoreWardMod)
+    public float GetWardMod(Creature caster, Creature target, float ignoreWardMod)
     {
         var wardLevel = target.GetWardLevel();
 

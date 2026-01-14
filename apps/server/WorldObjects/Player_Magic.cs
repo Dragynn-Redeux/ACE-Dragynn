@@ -1099,8 +1099,8 @@ partial class Player
         if (!sigilTrinketSpell)
         {
             var manaModifier = spell.School == MagicSchool.LifeMagic
-                ? GetSigilTrinketManaReductionMod(spell, Skill.LifeMagic, (int)SigilTrinketLifeMagicEffect.ScarabManaReduction)
-                : GetSigilTrinketManaReductionMod(spell, Skill.WarMagic, (int)SigilTrinketWarMagicEffect.ScarabManaReduction);
+                ? GetSigilTrinketManaReductionMod(spell, Skill.LifeMagic, SigilTrinketLifeWarMagicEffect.Reduction)
+                : GetSigilTrinketManaReductionMod(spell, Skill.WarMagic, SigilTrinketLifeWarMagicEffect.Reduction);
 
             var before = manaUsed;
             manaUsed = (uint)(manaUsed * manaModifier);
@@ -1497,9 +1497,10 @@ partial class Player
         LastSuccessCast_School = spell.School;
         LastSuccessCast_Time = Time.GetUnixTime();
 
-        if (spell.School == MagicSchool.VoidMagic)
+        if (spell.School == MagicSchool.VoidMagic && spell.Id != (uint)SpellId.VoidRestorationPenalty)
         {
             LastVoidSpellCastTime = Time.GetUnixTime();
+            CreatePlayerSpell(this, new Spell((int)SpellId.VoidRestorationPenalty), false);
         }
 
         var caster = GetEquippedWand();

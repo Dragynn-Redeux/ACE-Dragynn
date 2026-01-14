@@ -1,21 +1,26 @@
+using System;
 using System.Collections.Generic;
+using Serilog;
 using ACE.Entity.Enum;
 using ACE.Server.Commands.Handlers;
 using ACE.Server.Managers;
 using ACE.Server.Network;
+using ACE.Server.Network.GameMessages.Messages;
 using ACE.Server.WorldObjects.Entity;
 
 namespace ACE.Server.Commands.AdminCommands;
 
 public class CharacterInfo
 {
+    private static readonly ILogger _log = Log.ForContext(typeof(CharacterInfo));
+
     /// <summary>
     /// Debug command to print out all info about a character
     /// </summary>
     [CommandHandler(
         "characterinfo",
         AccessLevel.Admin,
-        CommandHandlerFlag.RequiresWorld,
+        CommandHandlerFlag.None,
         0,
         "Displays information about a character."
     )]
@@ -23,63 +28,124 @@ public class CharacterInfo
     {
         var player = PlayerManager.GetOnlinePlayer(parameters[0]);
 
-        if (player == null)
+        if (parameters == null || parameters.Length == 0)
         {
-            CommandHandlerHelper.WriteOutputInfo(session, "No player found with that name.", ChatMessageType.System);
+            if (session != null)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat("Usage: @characterinfo <playerName>", ChatMessageType.System));
+            }
+            else
+            {
+                CommandHandlerHelper.WriteOutputInfo(null, "Usage: characterinfo <playerName>", ChatMessageType.System);
+            }
             return;
         }
 
-        var message = "";
-
-        message += $"Character information for: {player.Name}";
-
-        message += "\n\nÄttributes:";
-        message += $"\n -Strength = {player.Strength.Base} ({player.Strength.StartingValue})";
-        message += $"\n -Endurance = {player.Endurance.Base} ({player.Endurance.StartingValue})";
-        message += $"\n -Coordination = {player.Coordination.Base} ({player.Coordination.StartingValue})";
-        message += $"\n -Quickness = {player.Quickness.Base} ({player.Quickness.StartingValue})";
-        message += $"\n -Focus = {player.Focus.Base} ({player.Focus.StartingValue})";
-        message += $"\n -Self = {player.Self.Base} ({player.Self.StartingValue})";
-        message += $"\n -Health = {player.Health.Base} ({player.Health.StartingValue})";
-        message += $"\n -Stamina = {player.Stamina.Base} ({player.Stamina.StartingValue})";
-        message += $"\n -Mana = {player.Mana.Base} ({player.Mana.StartingValue})";
-
-        var specializedSkills = new Dictionary<Skill, CreatureSkill>();
-        var trainedSkills = new Dictionary<Skill, CreatureSkill>();
-
-        foreach (var skill in player.Skills)
+        try
         {
-            if (skill.Value.AdvancementClass is SkillAdvancementClass.Specialized)
+            // Support multi-word character names by joining parameters.
+            var playerName = string.Join(" ", parameters).Trim();
+
+            player = PlayerManager.GetOnlinePlayer(playerName);
+
+            if (player == null)
             {
-                specializedSkills.Add(skill.Key, skill.Value);
+                if (session != null)
+                {
+                    session.Network.EnqueueSend(new GameMessageSystemChat("No player found with that name.", ChatMessageType.System));
+                }
+                else
+                {
+                    CommandHandlerHelper.WriteOutputInfo(null, "No player found with that name.", ChatMessageType.System);
+                }
+                return;
             }
 
-            if (skill.Value.AdvancementClass is SkillAdvancementClass.Trained)
+            var message = string.Empty;
+
+            message += $"Character information for: {player.Name}";
+
+
+            message += $"\n\nAttributes: ({player.Strength.StartingValue}/{player.Endurance.StartingValue}/{player.Coordination.StartingValue}/{player.Quickness.StartingValue}/{player.Focus.StartingValue}/{player.Self.StartingValue})";
+            message += $"\n -Strength = {player.Strength.Current} ({player.Strength.Base})";
+            message += $"\n -Endurance = {player.Endurance.Current} ({player.Endurance.Base})";
+            message += $"\n -Coordination = {player.Coordination.Current} ({player.Coordination.Base})";
+            message += $"\n -Quickness = {player.Quickness.Current} ({player.Quickness.Base})";
+            message += $"\n -Focus = {player.Focus.Current} ({player.Focus.Base})";
+            message += $"\n -Self = {player.Self.Current} ({player.Self.Base})";
+            message += $"\n\n -Health = {player.Health.Current} ({player.Health.Base})";
+            message += $"\n -Stamina = {player.Stamina.Current} ({player.Stamina.Base})";
+            message += $"\n -Mana = {player.Mana.Current} ({player.Mana.Base})";
+
+            var specializedSkills = new Dictionary<Skill, CreatureSkill>();
+            var trainedSkills = new Dictionary<Skill, CreatureSkill>();
+
+            foreach (var skill in player.Skills)
             {
-                trainedSkills.Add(skill.Key, skill.Value);
+                if (!SkillHelper.ValidSkills.Contains(skill.Key))
+                {
+                    continue;
+                }    
+
+                if (skill.Value.AdvancementClass is SkillAdvancementClass.Specialized)
+                {
+                    specializedSkills.Add(skill.Key, skill.Value);
+                }
+
+                if (skill.Value.AdvancementClass is SkillAdvancementClass.Trained)
+                {
+                    trainedSkills.Add(skill.Key, skill.Value);
+                }
+            }
+
+            if (specializedSkills.Count > 0)
+            {
+                message += "\n\nSpecialized:";
+
+                foreach (var skill in specializedSkills)
+                {
+                    message += $"\n -{skill.Key} = {skill.Value.Current} ({skill.Value.Base})";
+                }
+            }
+
+            if (trainedSkills.Count > 0)
+            {
+                message += "\n\nTrained:";
+
+                foreach (var skill in trainedSkills)
+                {
+                    message += $"\n -{skill.Key} = {skill.Value.Current} ({skill.Value.Base})";
+                }
+            }
+
+            // Send message regardless of session state. CommandHandlerHelper.WriteOutputInfo
+            // only sends to session when State == WorldConnected which can silently drop responses.
+            if (session != null)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat(message, ChatMessageType.System));
+            }
+            else
+            {
+                CommandHandlerHelper.WriteOutputInfo(null, message, ChatMessageType.System);
+            }
+
+            _log.Information(
+                "CharacterInfo message delivered to clientId {ClientId} for player {PlayerName}",
+                session?.Network?.ClientId ?? -1,
+                playerName
+            );
+        }
+        catch (Exception ex)
+        {
+            _log.Error(ex, "Unhandled error in HandleCharacterInfo");
+            if (session != null)
+            {
+                session.Network.EnqueueSend(new GameMessageSystemChat($"Error showing character info: {ex.Message}", ChatMessageType.System));
+            }
+            else
+            {
+                CommandHandlerHelper.WriteOutputInfo(null, $"Error showing character info: {ex.Message}", ChatMessageType.System);
             }
         }
-
-        if (specializedSkills.Count > 0)
-        {
-            message += "\n\nSpecialized:";
-
-            foreach (var skill in specializedSkills)
-            {
-                message += $"\n -{skill.Key} = {skill.Value.Base}";
-            }
-        }
-
-        if (trainedSkills.Count > 0)
-        {
-            message += "\n\nTrained:";
-
-            foreach (var skill in trainedSkills)
-            {
-                message += $"\n -{skill.Key} = {skill.Value.Base}";
-            }
-        }
-
-        CommandHandlerHelper.WriteOutputInfo(session, message, ChatMessageType.System);
     }
 }

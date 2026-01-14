@@ -7701,6 +7701,50 @@ public static class SpellLevelProgression
         SpellId.ManaGiverLegendary,
     };
 
+    public static readonly List<SpellId> SigilShield = new List<SpellId>()
+    {
+        SpellId.SigilTrinketShield1,
+        SpellId.SigilTrinketShield2,
+        SpellId.SigilTrinketShield3,
+        SpellId.SigilTrinketShield4,
+        SpellId.SigilTrinketShield5,
+        SpellId.SigilTrinketShield6,
+        SpellId.SigilTrinketShield7
+    };
+
+    public static readonly List<SpellId> SigilDamage = new List<SpellId>()
+    {
+        SpellId.SigilTrinketDamageBoost,
+        SpellId.SigilTrinketDamageBoost2,
+        SpellId.SigilTrinketDamageBoost3,
+        SpellId.SigilTrinketDamageBoost4,
+        SpellId.SigilTrinketDamageBoost5,
+        SpellId.SigilTrinketDamageBoost6,
+        SpellId.SigilTrinketDamageBoost7
+    };
+
+    public static readonly List<SpellId> SigilCritChance = new List<SpellId>()
+    {
+        SpellId.SigilTrinketCriticalChanceBoost,
+        SpellId.SigilTrinketCriticalChanceBoost2,
+        SpellId.SigilTrinketCriticalChanceBoost3,
+        SpellId.SigilTrinketCriticalChanceBoost4,
+        SpellId.SigilTrinketCriticalChanceBoost5,
+        SpellId.SigilTrinketCriticalChanceBoost6,
+        SpellId.SigilTrinketCriticalChanceBoost7
+    };
+
+    public static readonly List<SpellId> SigilCritDamage = new List<SpellId>()
+    {
+        SpellId.SigilTrinketCriticalDamageBoost,
+        SpellId.SigilTrinketCriticalDamageBoost2,
+        SpellId.SigilTrinketCriticalDamageBoost3,
+        SpellId.SigilTrinketCriticalDamageBoost4,
+        SpellId.SigilTrinketCriticalDamageBoost5,
+        SpellId.SigilTrinketCriticalDamageBoost6,
+        SpellId.SigilTrinketCriticalDamageBoost7
+    };
+
     static SpellLevelProgression()
     {
         // takes ~5ms
@@ -8455,6 +8499,10 @@ public static class SpellLevelProgression
         AddSpells(LifeGiver);
         AddSpells(StaminaGiver);
         AddSpells(ManaGiver);
+        AddSpells(SigilShield);
+        AddSpells(SigilDamage);
+        AddSpells(SigilCritChance);
+        AddSpells(SigilCritDamage);
     }
 
     private static void AddSpells(List<SpellId> spells)

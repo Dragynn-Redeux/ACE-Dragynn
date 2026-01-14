@@ -426,7 +426,7 @@ public class SpellProjectile : WorldObject
 
         if (player is { OverloadStanceIsActive: true } or {BatteryStanceIsActive: true})
         {
-            player.IncreaseChargedMeter(Spell);
+            player.IncreaseChargedMeter(Spell, FromProc);
         }
 
         if (targetPlayer != null && damage != null)
@@ -434,7 +434,7 @@ public class SpellProjectile : WorldObject
             SigilTrinketSpellDamageReduction = 1.0f;
 
             targetPlayer.CheckForSigilTrinketOnSpellHitReceivedEffects(this, Spell, (int)damage, Skill.MagicDefense,
-                (int)SigilTrinketMagicDefenseEffect.Absorption);
+                SigilTrinketMagicDefenseEffect.Absorption);
 
             if (!damage.HasValue || damage < 0 || damage > uint.MaxValue)
             {
@@ -485,7 +485,7 @@ public class SpellProjectile : WorldObject
             // EMPOWERED SCARAB - Detonation Check for Cast-On-Strike
             if (player != null && FromProc)
             {
-                player.CheckForSigilTrinketOnCastEffects(target, Spell, true, Skill.WarMagic, (int)SigilTrinketWarMagicEffect.ScarabDetonate, creatureTarget);
+                player.CheckForSigilTrinketOnCastEffects(target, Spell, true, Skill.WarMagic, SigilTrinketWarMagicEffect.Detonate, creatureTarget);
             }
 
             if (sourceCreature != null && ProjectileTarget != null && !FromProc)
@@ -515,7 +515,7 @@ public class SpellProjectile : WorldObject
                     // EMPOWERED SCARAB - Detonate
                     if (player != null)
                     {
-                        player.CheckForSigilTrinketOnCastEffects(target, Spell, false, Skill.WarMagic, (int)SigilTrinketWarMagicEffect.ScarabDetonate, creatureTarget);
+                        player.CheckForSigilTrinketOnCastEffects(target, Spell, false, Skill.WarMagic, SigilTrinketWarMagicEffect.Detonate, creatureTarget);
                     }
                 }
                 else
@@ -683,7 +683,7 @@ public class SpellProjectile : WorldObject
             // EMPOWERED SCARAB - Crushing
             if (criticalHit && sourcePlayer != null && Spell.School == MagicSchool.WarMagic)
             {
-                sourcePlayer.CheckForSigilTrinketOnCastEffects(target, Spell, false, Skill.WarMagic, (int)SigilTrinketWarMagicEffect.ScarabCrit, null, true);
+                sourcePlayer.CheckForSigilTrinketOnCastEffects(target, Spell, false, Skill.WarMagic, SigilTrinketWarMagicEffect.Crushing, null, true);
             }
         }
 
@@ -739,7 +739,7 @@ public class SpellProjectile : WorldObject
 
         if (sourceCreature is not null)
         {
-            attributeMod = sourceCreature.GetAttributeMod(weapon, true, target);
+            attributeMod = sourceCreature.GetAttributeMod(weapon, true);
         }
 
         var specDefenseMod = CheckForMagicDefenseSpecDefenseMod(targetPlayer, sourceCreature);
@@ -797,14 +797,18 @@ public class SpellProjectile : WorldObject
                     1.0f + Jewel.GetJewelEffectMod(sourcePlayer, PropertyInt.GearBludgeon, "Bludgeon");
 
                 criticalDamageMod = (1.0f + weaponCritDamageMod) * jewelBludgeCritDamageMod;
+
+                baseDamage = Spell.MaxDamage;
+
+                // monster spell crits are based on median damage instead of max
+                if (sourceCreature is not Player)
+                {
+                    baseDamage = Spell.MedianDamage;
+                }
             }
-
-            baseDamage = ThreadSafeRandom.Next(Spell.MinDamage, Spell.MaxDamage);
-
-            // monster spell crits are based on median damage instead of max
-            if (criticalHit && sourceCreature is not Player)
+            else
             {
-                baseDamage = Spell.MedianDamage;
+                baseDamage = ThreadSafeRandom.Next(Spell.MinDamage, Spell.MaxDamage);
             }
         }
 
@@ -890,34 +894,37 @@ public class SpellProjectile : WorldObject
                 finalDamage *= monsterSpellDamageMultiplier;
             }
 
-            // if (sourcePlayer is not null)
-            // {
-            //     Console.WriteLine($"\n{sourceCreature.Name} casted {Spell.Name} on {target.Name} for {Math.Round(finalDamage, 0)}.\n" +
-            //         $" -baseDamage: {baseDamage}\n" +
-            //         $" -critMultiplier: {criticalDamageMod}\n" +
-            //         $" -attributeMod: {attributeMod}\n" +
-            //         $" -elementalDamageMod: {elementalDamageMod}\n" +
-            //         $" -slayerMod: {slayerMod}\n" +
-            //         $" -overload: {overloadDamageMod}\n" +
-            //         $" -batteryMod: {batteryDamageMod}\n" +
-            //         $" -jewelElementalist: {jewelElementalist}\n" +
-            //         $" -jewelElemental: {jewelElemental}\n" +
-            //         $" -jewelSelfHarm: {jewelSelfHarm}\n" +
-            //         $" -jewelRedFury: {jewelRedFury}\n" +
-            //         $" -jewelBlueFury: {jewelBlueFury}\n" +
-            //         $" -strikethrough: {strikethroughMod}\n" +
-            //         $" -archetypeSpellDamageMod: {archetypeSpellDamageMod}\n" +
-            //         $" -levelscaling: {levelScalingMod}\n" +
-            //         $" -damageMultiplier: {damageMultiplier}\n" +
-            //         $" -spellcraftMod: {spellcraftMod}\n" +
-            //         $" -absorbMod: {absorbMod}\n" +
-            //         $" -wardMod: {wardMod}\n" +
-            //         $" -resistanceMod: {resistanceMod}\n" +
-            //         $" -resistedMod: {resistedMod}\n" +
-            //         $" -specDefMod: {specDefenseMod}\n" +
-            //         $" -ratingDamageTypeWard: {ratingDamageTypeWard}\n" +
-            //         $" -FinalBeforeRatings: {finalDamage}");
-            // }
+        //if (sourcePlayer is not null)
+        //{
+        //    Console.WriteLine($"\n{sourceCreature.Name} casted {Spell.Name} on {target.Name} for {Math.Round(finalDamage, 0)}.\n" +
+        //        $" -baseDamage: {baseDamage}\n" +
+        //        $" -critMultiplier: {criticalDamageMod}\n" +
+        //        $" -attributeMod: {attributeMod}\n" +
+        //        $" -elementalDamageMod: {elementalDamageMod}\n" +
+        //        $" -slayerMod: {slayerMod}\n" +
+        //        $" -overload: {overloadDamageMod}\n" +
+        //        $" -batteryMod: {batteryDamageMod}\n" +
+        //        $" -jewelElementalist: {jewelElementalist}\n" +
+        //        $" -jewelElemental: {jewelElemental}\n" +
+        //        $" -jewelSelfHarm: {jewelSelfHarm}\n" +
+        //        $" -jewelRedFury: {jewelRedFury}\n" +
+        //        $" -jewelBlueFury: {jewelBlueFury}\n" +
+        //        $" -strikethrough: {strikethroughMod}\n" +
+        //        $" -archetypeSpellDamageMod: {archetypeSpellDamageMod}\n" +
+        //        $" -levelscaling: {levelScalingMod}\n" +
+        //        $" -damageMultiplier: {damageMultiplier}\n" +
+        //        $" -spellcraftMod: {spellcraftMod}\n" +
+        //        $" -landblockScalingMod: {landblockScalingMod}\n" +
+        //        $" -damageBeforeMitigation: {damageBeforeMitigation}\n" +
+        //        $" -absorbMod: {absorbMod}\n" +
+        //        $" -wardMod: {wardMod}\n" +
+        //        $" -resistanceMod: {resistanceMod}\n" +
+        //        $" -resistedMod: {resistedMod}\n" +
+        //        $" -specDefMod: {specDefenseMod}\n" +
+        //        $" -ratingDamageTypeWard: {ratingDamageTypeWard}\n" +
+        //        $" -playerSpellDamageMultiplier: {(float)PropertyManager.GetDouble("player_spell_damage_multiplier").Item}\n" +
+        //        $" -FinalBeforeRatings: {finalDamage}");
+        //}
 
 
         // show debug info
@@ -1446,7 +1453,8 @@ public class SpellProjectile : WorldObject
 
             percent = damage / target.Health.MaxValue;
 
-            //Console.WriteLine($"Damage rating: " + Creature.ModToRating(damageRatingMod));
+            //Console.WriteLine($"DamageRating mod: {damageRatingMod}\n" +
+            //    $"DamageResistRating mod: {damageResistRatingMod}");
 
             equippedCloak = target.EquippedCloak;
 

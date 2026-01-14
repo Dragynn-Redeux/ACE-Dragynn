@@ -412,12 +412,12 @@ public class UpgradeKit : Stackable
         if (magicSkill == Skill.WarMagic)
         {
             target.SetProperty(PropertyFloat.ElementalDamageMod, final);
-            target.SetProperty(PropertyFloat.WeaponRestorationSpellsMod, 1 + (final - 1) / 2);
+            target.SetProperty(PropertyFloat.WeaponRestorationSpellsMod, 1 + (final - 1) / 4);
         }
         else
         {
-            target.SetProperty(PropertyFloat.WeaponRestorationSpellsMod, final);
             target.SetProperty(PropertyFloat.ElementalDamageMod, 1 + (final - 1) / 2);
+            target.SetProperty(PropertyFloat.WeaponRestorationSpellsMod, 1 + (final - 1) / 2);
         }
     }
 

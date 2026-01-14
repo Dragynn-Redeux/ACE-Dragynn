@@ -3020,6 +3020,33 @@ partial class Player
             return WeenieError.YouDoNotOwnThatItem; // Unsure of the exact message
         }
 
+        // if item is a SigilTrinket and specifies AllowedSpecializedSkills, enforce that requirement
+        if (item is SigilTrinket st)
+        {
+            var allowed = st.AllowedSpecializedSkills;
+            if (allowed != null && allowed.Count > 0)
+            {
+                // require specialized (or higher) in at least one listed skill
+                var hasRequiredSpecialization = false;
+                foreach (var skill in allowed)
+                {
+                    var cs = GetCreatureSkill(skill, false);
+                    if (cs != null && cs.AdvancementClass >= SkillAdvancementClass.Specialized)
+                    {
+                        hasRequiredSpecialization = true;
+                        break;
+                    }
+                }
+
+                // If the player doesn't meet the sigil's AllowedSpecializedSkills, fail immediately.
+                if (!hasRequiredSpecialization)
+                {
+                    return WeenieError.SkillTooLow;
+                }
+            }
+        }
+
+        // Legacy AND-style wield requirements.
         var result = CheckWieldRequirement(item.WieldRequirements, item.WieldSkillType, item.WieldDifficulty);
         if (result != WeenieError.None)
         {
@@ -3073,6 +3100,12 @@ partial class Player
 
                 // verify skill level - base
                 skill = GetCreatureSkill(ConvertToMoASkill((Skill)skillOrAttribute), false);
+
+                if (skill is null)
+                {
+                    break;
+                }
+
                 if (skill.Base < difficulty)
                 {
                     return WeenieError.SkillTooLow;
@@ -5209,7 +5242,7 @@ partial class Player
             }
             else if (emoteResult.Category == EmoteCategory.Refuse)
             {
-                if (target is Creature creatureTarget && item.TrophyQuality is not null)
+                if (target is Creature creatureTarget && (item.TrophyQuality is not null || item.WeenieType is WeenieType.SigilTrinket))
                 {
                     creatureTarget.RefusalItem = (item, item.Guid.Full);
                 }

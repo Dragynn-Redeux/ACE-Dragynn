@@ -526,7 +526,7 @@ public static class LevelScaling
             return false;
         }
 
-        if (!player.EnchantmentManager.HasSpell((uint)SpellId.CurseWeakness1))
+        if (!player.EnchantmentManager.HasSpell((uint)SpellId.Shrouded))
         {
             return false;
         }

@@ -505,7 +505,7 @@ partial class WorldObject
         DamageType damageType
     )
     {
-        if (wielder == null || !(weapon is Caster))
+        if (wielder == null || !(weapon is Caster) || weapon.W_DamageType != damageType)
         {
             return 1.0f;
         }
@@ -1072,7 +1072,7 @@ partial class WorldObject
         var creatureMod = IgnoreWard ?? 0.0f;
         var weaponMod = weapon.IgnoreWard ?? 0.0f;
 
-        var finalMod = 1.0f - (float)Math.Max(creatureMod, weaponMod);
+        var finalMod = (float)Math.Max(creatureMod, weaponMod);
         //Console.WriteLine($"FinalMod = {finalMod}");
 
         return finalMod;
@@ -1392,9 +1392,9 @@ partial class WorldObject
 
                 var scarabReduction = spell.School == MagicSchool.LifeMagic
                     ? playerAttacker.GetSigilTrinketManaReductionMod(spell, Skill.LifeMagic,
-                        (int)SigilTrinketLifeMagicEffect.ScarabManaReduction)
+                        SigilTrinketLifeWarMagicEffect.Reduction)
                     : playerAttacker.GetSigilTrinketManaReductionMod(spell, Skill.WarMagic,
-                        (int)SigilTrinketWarMagicEffect.ScarabManaReduction);
+                        SigilTrinketLifeWarMagicEffect.Reduction);
 
                 if (playerAttacker.Mana.Current < (uint)(baseCost * scarabReduction))
                 {
