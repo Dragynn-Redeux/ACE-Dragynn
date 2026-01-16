@@ -20,6 +20,38 @@ partial class Player
     public bool IsStealthed = false;
     public bool IsAttackFromStealth = false;
 
+    // Track consecutive failed stealth checks per creature for stamina cost scaling
+    private Dictionary<ObjectGuid, ConsecutiveFailureTracker> StealthFailureTrackers = new Dictionary<ObjectGuid, ConsecutiveFailureTracker>();
+    private const double FailureTrackerResetDelay = 30.0; // Reset after 30 seconds of no failures
+
+    private class ConsecutiveFailureTracker
+    {
+        public int FailureCount { get; set; }
+        public double LastFailureTime { get; set; }
+
+        public ConsecutiveFailureTracker(double initialTime)
+        {
+            FailureCount = 0;
+            LastFailureTime = initialTime;
+        }
+
+        public void IncrementFailure(double currentTime)
+        {
+            FailureCount++;
+            LastFailureTime = currentTime;
+        }
+
+        public void Reset()
+        {
+            FailureCount = 0;
+        }
+
+        public bool ShouldReset(double currentTime, double resetDelay)
+        {
+            return currentTime - LastFailureTime > resetDelay;
+        }
+    }
+
     public void BeginStealth()
     {
         if (IsStealthed)
@@ -194,11 +226,11 @@ partial class Player
 
         var angleMod = 2.0f - angle / 90.0f; // mod ranges from 0.0 (180 angle) to 2.0 (0 angle)
 
-        var difficulty = (uint)(GetCreatureSkill(Skill.Perception).Current * monsterDistanceBonus * angleMod);
+        var difficulty = (uint)(creature.GetModdedPerceptionSkill() * monsterDistanceBonus * angleMod);
 
         //Console.WriteLine($"\nCreature: {creature.Name} {creature.WeenieClassId} - distance: {distance}, distanceBonus: {monsterDistanceBonus}, angle: {angle}, angleBonus: {angleMod}");
 
-        return TestStealth(difficulty, failureMessage);
+        return TestStealth(difficulty, failureMessage, creature);
     }
 
     public bool TestStealth(Creature creature, string failureMessage)
@@ -216,17 +248,96 @@ partial class Player
         return TestStealth(creature, PhysicsObj.get_distance_sq_to_object(creature.PhysicsObj, true), failureMessage);
     }
 
-    public bool TestStealth(uint difficulty, string failureMessage)
+    public bool TestStealth(uint difficulty, string failureMessage, Creature creature = null)
     {
-        if (TestStealthInternal(difficulty) != StealthTestResult.Success)
+        var thieverySkill = GetCreatureSkill(Skill.Thievery);
+        var isSpecialized = thieverySkill.AdvancementClass == SkillAdvancementClass.Specialized;
+
+        var result = TestStealthInternal(difficulty);
+
+        if (result != StealthTestResult.Success)
         {
+            if (creature != null && TryPreserveStealthWithStamina(creature, isSpecialized))
+            {
+                return true;
+            }
+
             EndStealth(failureMessage);
             return false;
         }
         else
         {
-            return true;
+            // Reset failure tracker on success
+            if (creature != null && StealthFailureTrackers.ContainsKey(creature.Guid))
+            {
+                StealthFailureTrackers[creature.Guid].Reset();
+            }
         }
+
+        return true;
+    }
+
+    private bool TryPreserveStealthWithStamina(Creature creature, bool isSpecialized)
+    {
+        var currentTime = Time.GetUnixTime();
+
+        // Check if player has more than 50% stamina
+        var staminaPercentage = Stamina.Current / (float)Stamina.MaxValue;
+        if (staminaPercentage <= 0.5f)
+        {
+            Session.Network.EnqueueSend(
+                new GameMessageSystemChat(
+                    "You are too exhausted to remain hidden! (Requires more than 50% stamina)",
+                    ChatMessageType.Broadcast
+                )
+            );
+            return false;
+        }
+
+        // Get or create failure tracker for this creature
+        if (!StealthFailureTrackers.TryGetValue(creature.Guid, out var tracker))
+        {
+            tracker = new ConsecutiveFailureTracker(currentTime);
+            StealthFailureTrackers[creature.Guid] = tracker;
+        }
+        else if (tracker.ShouldReset(currentTime, FailureTrackerResetDelay))
+        {
+            tracker.Reset();
+        }
+
+        // Calculate stamina cost: creature level * (1 + failureCount)
+        // This scales linearly: base cost, 2x base cost, 3x base cost, etc.
+        var creatureLevel = creature.Level ?? 1;
+        var divisor = isSpecialized ? 2 : 1;
+        var baseCost = Math.Max(1, creatureLevel / divisor);
+        var staminaCost = baseCost * (1 + tracker.FailureCount);
+
+        // Check if player has enough stamina for the cost
+        if (Stamina.Current < staminaCost)
+        {
+            Session.Network.EnqueueSend(
+                new GameMessageSystemChat(
+                    $"You don't have enough stamina to remain hidden! (Required: {staminaCost})",
+                    ChatMessageType.Broadcast
+                )
+            );
+            return false;
+        }
+
+        // Deduct stamina and track the failure
+        UpdateVitalDelta(Stamina, -staminaCost);
+        tracker.IncrementFailure(currentTime);
+
+        // Send feedback to player
+        var failureIndicator = tracker.FailureCount > 1 ? $" (x{tracker.FailureCount})" : "";
+        Session.Network.EnqueueSend(
+            new GameMessageSystemChat(
+                $"You strain to remain hidden, expending {staminaCost} stamina. ({creature.Name}){failureIndicator}",
+                ChatMessageType.Broadcast
+            )
+        );
+
+        return true;
     }
 
     private enum StealthTestResult

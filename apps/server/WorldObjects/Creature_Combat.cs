@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using ACE.Common;
 using ACE.Entity;
 using ACE.Entity.Enum;
@@ -2028,4 +2029,54 @@ partial class Creature
 
     // LEVEL SCALING
     public bool StruckByUnshrouded = false;
+
+    /// <summary>
+    /// Backstab from stealth applies a damage multiplier based on range:
+    /// x3 damage at range 5 and under, scaling down to x2 at range 30+
+    /// </summary>
+    public static float GetStealthBackstabDamageMultiplier(Player playerAttacker, Creature target)
+    {
+        if (playerAttacker is not { BackstabIsActive: true, IsAttackFromStealth: true })
+        {
+            return 1.0f;
+        }
+
+        if (target is null || !playerAttacker.IsBehindTargetCreature(target))
+        {
+            return 1.0f;
+        }
+
+        var distance = playerAttacker.GetDistance(target);
+        var multiplier = 1.0f;
+        var multiplierPercent = 0;
+
+        // Range 5 and under: x3 multiplier
+        if (distance <= 5.0f)
+        {
+            multiplier = 3.0f;
+            multiplierPercent = 300;
+        }
+        // Range 30 and over: x2 multiplier
+        else if (distance >= 30.0f)
+        {
+            multiplier = 2.0f;
+            multiplierPercent = 200;
+        }
+        // Linear interpolation between range 5 (x3) and range 30 (x2)
+        else
+        {
+            var rangeRatio = (distance - 5.0f) / 25.0f;
+            multiplier = 3.0f - rangeRatio;
+            multiplierPercent = (int)(multiplier * 100);
+        }
+
+        // Generate feedback message
+        var message = $"Backstab! {multiplierPercent}% damage from stealth at range {distance:F1}!";
+        playerAttacker.Session.Network.EnqueueSend(
+            new GameMessageSystemChat(message, ChatMessageType.Broadcast)
+        );
+
+        playerAttacker.IsAttackFromStealth = false;
+        return multiplier;
+    }
 }

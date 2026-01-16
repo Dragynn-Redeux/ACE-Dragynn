@@ -653,7 +653,9 @@ public class SpellProjectile : WorldObject
         var criticalChance = GetWeaponMagicCritFrequency(weapon, sourceCreature, attackSkill, target);
         criticalChance += CheckForWarSpecCriticalChanceBonus(sourcePlayer, weapon);
         criticalChance = CheckForRatingReprisalAutoCrit(target, sourcePlayer, criticalChance);
-        criticalChance = CheckForStealthBackstabAutoCrit(target, sourcePlayer, criticalChance);
+
+        // backstab damage multiplier
+        var backstabDamageMultiplier = Creature.GetStealthBackstabDamageMultiplier(sourcePlayer, target);
 
         if (ThreadSafeRandom.Next(0.0f, 1.0f) < criticalChance)
         {
@@ -852,38 +854,39 @@ public class SpellProjectile : WorldObject
                 archetypeSpellDamageMod = (float)(sourceCreature.ArchetypeSpellDamageMultiplier ?? 1.0);
             }
 
-            // ----- FINAL CALCULATION ------------
-            var damageBeforeMitigation =
-                baseDamage
-                * criticalDamageMod
-                * attributeMod
-                * elementalDamageMod
-                * slayerMod
-                * overloadDamageMod
-                * batteryDamageMod
-                * jewelElementalist
-                * jewelElemental
-                * jewelSelfHarm
-                * jewelRedFury
-                * jewelBlueFury
-                * strikethroughMod
-                * archetypeSpellDamageMod
-                * levelScalingMod
-                * damageMultiplier
-                * spellcraftMod
-                * landblockScalingMod;
+        // ----- FINAL CALCULATION ------------
+        var damageBeforeMitigation =
+            baseDamage
+            * criticalDamageMod
+            * attributeMod
+            * elementalDamageMod
+            * slayerMod
+            * overloadDamageMod
+            * batteryDamageMod
+            * jewelElementalist
+            * jewelElemental
+            * jewelSelfHarm
+            * jewelRedFury
+            * jewelBlueFury
+            * strikethroughMod
+            * archetypeSpellDamageMod
+            * levelScalingMod
+            * damageMultiplier
+            * spellcraftMod
+            * landblockScalingMod
+            * backstabDamageMultiplier;
 
-            finalDamage =
-                damageBeforeMitigation
-                * absorbMod
-                * wardMod
-                * resistanceMod
-                * resistedMod
-                * specDefenseMod
-                * ratingDamageTypeWard;
+        finalDamage =
+            damageBeforeMitigation
+            * absorbMod
+            * wardMod
+            * resistanceMod
+            * resistedMod
+            * specDefenseMod
+            * ratingDamageTypeWard;
 
-            // balance testing. TODO: update base spells damage and ward levels once ideal balance is found
-            if (sourcePlayer is not null)
+        // balance testing. TODO: update base spells damage and ward levels once ideal balance is found
+        if (sourcePlayer is not null)
             {
                 var playerSpellDamageMultiplier = (float)PropertyManager.GetDouble("player_spell_damage_multiplier").Item;
                 finalDamage *= playerSpellDamageMultiplier;
@@ -1199,25 +1202,6 @@ public class SpellProjectile : WorldObject
         sourcePlayer.QuestManager.Erase($"{target.Guid}/Reprisal");
 
         return 1.0f;
-    }
-
-    /// <summary>
-    /// Backstab: Auto-crit from stealth.
-    /// </summary>
-    private static float CheckForStealthBackstabAutoCrit(Creature target, Player sourcePlayer, float criticalChance)
-    {
-        if (target is null || criticalChance == 1.0f)
-        {
-            return criticalChance;
-        }
-
-        if (sourcePlayer is { IsAttackFromStealth: true, BackstabIsActive: true} && sourcePlayer.IsBehindTargetCreature(target))
-        {
-            sourcePlayer.IsAttackFromStealth = false;
-            return 1.0f;
-        }
-
-        return criticalChance;
     }
 
     private float GetAbsorbMod(Creature target, WorldObject source)

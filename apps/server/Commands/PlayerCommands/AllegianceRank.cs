@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Linq;
 using ACE.Entity.Enum;
 using ACE.Server.Commands.Handlers;
@@ -24,12 +24,22 @@ public class AllegianceRank
         var currentRankLeadership = player.GetCurrentRankLeadership();
         var nextRankLeadership = player.GetNextRankLeadership();
 
+        var nextFollowerRankText = nextRankFollowers > 0
+            ? $"Next rank at {nextRankFollowers} unique followers."
+            : "No more ranks from followers.";
+
+        var nextLeadershipRankText = nextRankLeadership > 0
+            ? $"Next bonus rank at {nextRankLeadership} leadership skill."
+            : "No more ranks from leadership.";
+
         CommandHandlerHelper.WriteOutputInfo(
             session,
             $"Allegiance Rank: {rank}\n" +
-            $" - Follower Rank: {followerRank}, for having at least {currentRankFollowers} unique followers. Next rank at {nextRankFollowers} unique followers. " +
+            $" - Follower Rank: {followerRank}, for having at least {currentRankFollowers} unique followers.\n" +
+            $"   - {nextFollowerRankText} " +
             $"(The 'unique follower' value of a character is determined by its level relative to the total amount of character levels on the same account)\n" +
-            $" - Leadership Bonus Rank: {leadershipRank}, for having at least {currentRankLeadership} leadership skill. Next bonus rank at {nextRankLeadership} leadership skill."
+            $" - Leadership Bonus Rank: {leadershipRank}, for having at least {currentRankLeadership} leadership skill.\n" +
+            $"   - {nextLeadershipRankText}"
         );
 
         player.FollowerRankContributions.Clear();

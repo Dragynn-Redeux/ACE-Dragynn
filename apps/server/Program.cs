@@ -261,6 +261,8 @@ partial class Program
         _log.Information("Starting PropertyManager...");
         PropertyManager.Initialize();
 
+        RecipeComponentUseEmote.Initialize();
+
         _log.Information("Initializing GuidManager...");
         GuidManager.Initialize();
 

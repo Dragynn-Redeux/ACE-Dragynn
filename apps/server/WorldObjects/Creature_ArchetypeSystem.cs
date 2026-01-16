@@ -20,7 +20,7 @@ partial class Creature
     private static readonly int[] enemyArmorWard = { 10, 20, 45, 68, 101, 152, 228, 342, 513 };
     private static readonly int[] enemyAttack = { 10, 60, 100, 150, 175, 200, 250, 350, 500 };
     private static readonly int[] enemyDefense = { 10, 60, 100, 150, 175, 200, 250, 350, 500 };
-    private static readonly int[] enemyAssessDeception = { 10, 40, 80, 120, 160, 200, 250, 300, 400 };
+    private static readonly int[] enemyAssessDeception = { 10, 60, 100, 150, 175, 200, 250, 350, 500 };
     private static readonly int[] enemyRun = { 10, 100, 150, 200, 250, 300, 400, 500, 600 };
 
     private static readonly float[] enemyDamage = { 1.0f, 2.0f, 3.0f, 4.5f, 6.0f, 7.0f, 8.0f, 9.0f, 10.0f }; // percentage of player health to be taken per second after all stats (of player and enemy) are considered

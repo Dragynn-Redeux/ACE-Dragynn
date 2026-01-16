@@ -543,14 +543,15 @@ partial class Player
         {
             Session.Network.EnqueueSend(
                 new GameMessageSystemChat(
-                    $"You cannot use Vanish while stealth.",
+                    $"You cannot use Vanish while stealthed.",
                     ChatMessageType.Broadcast
                 )
             );
             return false;
         }
 
-        var thieverySkill = GetCreatureSkill(Skill.Thievery); // Thievery
+        var thieverySkill = GetCreatureSkill(Skill.Thievery);
+
         if (thieverySkill.AdvancementClass < SkillAdvancementClass.Trained)
         {
             Session.Network.EnqueueSend(
@@ -562,43 +563,117 @@ partial class Player
             return false;
         }
 
-        // the smoke is enough to fool monsters from far away?
-        var nearbyMonsters = GetNearbyMonsters(15);
+        var nearbyMonsters = GetNearbyMonsters(50);
+        var attackingMonsters = nearbyMonsters.Where(m => m.AttackTarget == this).ToList();
+        var smoke = WorldObjectFactory.CreateNewWorldObject(1051113);
 
-        var success = true;
-        foreach (var target in nearbyMonsters)
+        // Early exit if no monsters are attacking
+        if (attackingMonsters.Count == 0)
         {
-            // generous bonus to skill check to start
-            var skillCheck = SkillCheck.GetSkillChance(
-                GetModdedThieverySkill() + 100,
-                target.GetCreatureSkill(Skill.Perception).Current
-            );
+            if (smoke != null)
+            {
+                smoke.Location = Location;
+                smoke.EnterWorld();
+            }
 
-            if (ThreadSafeRandom.Next(0.0f, 1.0f) > skillCheck)
+            LastVanishActivated = Time.GetUnixTime();
+            BeginStealth();
+            return true;
+        }
+
+        // Calculate total stamina cost: average monster level + (1/10th of each monster level, rounded down)
+        var totalMonsterLevels = 0;
+        var tenthLevelSum = 0;
+
+        foreach (var target in attackingMonsters)
+        {
+            var monsterLevel = target.Level ?? 1;
+            totalMonsterLevels += monsterLevel;
+            tenthLevelSum += monsterLevel / 10; // Integer division automatically rounds down
+        }
+
+        var averageLevel = totalMonsterLevels / attackingMonsters.Count; // Integer division rounds down
+        var totalStaminaCost = averageLevel + tenthLevelSum;
+
+        if (Stamina.Current < totalStaminaCost)
+        {
+            Session.Network.EnqueueSend(
+                new GameMessageSystemChat(
+                    $"You do not have enough stamina to vanish from all attacking enemies. ({totalStaminaCost} stamina required)",
+                    ChatMessageType.Broadcast
+                )
+            );
+            return false;
+        }
+
+        var fooledMonsters = 0;
+
+        // Check each monster individually
+        foreach (var target in attackingMonsters)
+        {
+            var playerThieverySkill = GetModdedThieverySkill();
+            var monsterPerception = target.GetModdedPerceptionSkill();
+            var skillCheck = SkillCheck.GetSkillChance(playerThieverySkill, monsterPerception);
+            var roll = ThreadSafeRandom.Next(0.0f, 1.0f);
+
+            if (roll > skillCheck)
             {
                 Session.Network.EnqueueSend(
                     new GameMessageSystemChat(
-                        $"Some thief you are! {target.Name} was not fooled by your attempt to vanish, and prevents you from entering stealth.",
+                        $"{target.Name} was not fooled by your attempt to vanish!",
                         ChatMessageType.Broadcast
                     )
                 );
-                success = false;
-                break;
             }
-
-            var targetTier = target.Tier ?? 1;
-            var staminaCost = -2 * Math.Clamp(targetTier, 1, 7);
-            UpdateVitalDelta(Stamina, staminaCost);
+            else
+            {
+                fooledMonsters++;
+                target.AddVanishedPlayer(this);
+            }
         }
 
-        if (success)
+        // Apply stamina cost (you attempted the ability)
+        UpdateVitalDelta(Stamina, -totalStaminaCost);
+
+        // Always create smoke effect when at least one monster was rolled against
+        if (smoke != null)
         {
-            var smoke = WorldObjectFactory.CreateNewWorldObject(1051113);
             smoke.Location = Location;
             smoke.EnterWorld();
+        }
 
-            this.LastVanishActivated = Time.GetUnixTime();
-            this.BeginStealth();
+        // Only enter stealth if all monsters were fooled
+        if (fooledMonsters == attackingMonsters.Count)
+        {
+            LastVanishActivated = Time.GetUnixTime();
+            BeginStealth();
+
+            Session.Network.EnqueueSend(
+                new GameMessageSystemChat(
+                    $"You vanish into the smoke!",
+                    ChatMessageType.Broadcast
+                )
+            );
+        }
+        else if (fooledMonsters > 0)
+        {
+            LastVanishActivated = Time.GetUnixTime();
+
+            Session.Network.EnqueueSend(
+                new GameMessageSystemChat(
+                    $"You vanish into the smoke, though some enemies remain aware of your presence!",
+                    ChatMessageType.Broadcast
+                )
+            );
+        }
+        else
+        {
+            Session.Network.EnqueueSend(
+                new GameMessageSystemChat(
+                    $"Your vanish attempt fails completely - no enemies were fooled!",
+                    ChatMessageType.Broadcast
+                )
+            );
         }
 
         return true;

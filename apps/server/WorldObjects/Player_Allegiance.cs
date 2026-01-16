@@ -2204,7 +2204,7 @@ partial class Player
 
     public int GetFollowerRank()
     {
-        var leadershipRank = Math.Floor(GetCreatureSkill(Skill.Leadership).Base / 100.0);
+        var leadershipRank = GetLeadershipRank();
         var rankWithoutLeadership = Math.Max(((AllegianceRank ?? 0) - leadershipRank), 0);
 
         return (int)rankWithoutLeadership;
@@ -2216,44 +2216,42 @@ partial class Player
 
         return leadershipSkill switch
         {
-            > 200 => 3,
-            > 150 => 2,
-            > 100 => 1,
+            > 200 => 4,
+            > 150 => 3,
+            > 100 => 2,
+            > 50 => 1,
             _ => 0
         };
     }
 
     public int GetCurrentRankFollowers()
     {
-        var leadershipRank = Math.Floor(GetCreatureSkill(Skill.Leadership).Base / 100.0);
-        var rankWithoutLeadership = Math.Max(((AllegianceRank ?? 0) - leadershipRank), 0);
-
-        switch (rankWithoutLeadership)
-        {
-            case 7: return 50;
-            case 6: return 25;
-            case 5: return 15;
-            case 4: return 10;
-            case 3: return 6;
-            case 2: return 3;
-            case 1: return 1;
-            default: return 0;
-        }
-    }
-
-    public int GetNextRankFollowers()
-    {
-        var leadershipRank = Math.Floor(GetCreatureSkill(Skill.Leadership).Base / 100.0);
+        var leadershipRank = GetLeadershipRank();
         var rankWithoutLeadership = Math.Max(((AllegianceRank ?? 0) - leadershipRank), 0);
 
         switch (rankWithoutLeadership)
         {
             case 6: return 50;
             case 5: return 25;
-            case 4: return 15;
+            case 4: return 10;
+            case 3: return 5;
+            case 2: return 1;
+            default: return 0;
+        }
+    }
+
+    public int GetNextRankFollowers()
+    {
+        var leadershipRank = GetLeadershipRank();
+        var rankWithoutLeadership = Math.Max(((AllegianceRank ?? 0) - leadershipRank), 0);
+
+        switch (rankWithoutLeadership)
+        {
+            case 6: return 0;
+            case 5: return 50;
+            case 4: return 25;
             case 3: return 10;
-            case 2: return 6;
-            case 1: return 3;
+            case 2: return 5;
             default: return 1;
         }
     }
@@ -2264,9 +2262,10 @@ partial class Player
 
         switch (leadershipRank)
         {
-            case 3: return 200;
-            case 2: return 150;
-            case 1: return 100;
+            case 4: return 200;
+            case 3: return 150;
+            case 2: return 100;
+            case 1: return 50;
             default: return 0;
         }
     }
@@ -2277,9 +2276,11 @@ partial class Player
 
         switch (leadershipRank)
         {
-            case 2: return 200;
-            case 1: return 150;
-            default: return 100;
+            case 4: return 0;
+            case 3: return 200;
+            case 2: return 150;
+            case 1: return 100;
+            default: return 50;
         }
     }
 }

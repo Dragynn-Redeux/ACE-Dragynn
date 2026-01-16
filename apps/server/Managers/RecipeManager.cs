@@ -20,6 +20,7 @@ using ACE.Server.Network.GameMessages.Messages;
 using ACE.Server.WorldObjects;
 using Serilog;
 using Weenie = ACE.Entity.Models.Weenie;
+using ACE.Server.Mods;
 
 namespace ACE.Server.Managers;
 
@@ -482,6 +483,35 @@ public partial class RecipeManager
             if (success)
             {
                 player.ImbueSuccesses++;
+            }
+        }
+        if (success)
+        {
+            var isAllowed = RecipeComponentUseEmote.IsAllowed(source.WeenieClassId);
+
+            _log.Debug(
+                "[RIMS] recipeId={RecipeId} sourceWcid={SourceWcid} targetWcid={TargetWcid} allowed={Allowed}",
+                recipe.Id,
+                source.WeenieClassId,
+                target.WeenieClassId,
+                isAllowed
+            );
+
+            if (isAllowed)
+            {
+                try
+                {
+                    source.EmoteManager?.OnUse(player);
+                }
+                catch (Exception ex)
+                {
+                    _log.Warning(
+                        ex,
+                        "[RIMS] Emote OnUse failed. recipeId={RecipeId} sourceWcid={SourceWcid}",
+                        recipe.Id,
+                        source.WeenieClassId
+                    );
+                }
             }
         }
 

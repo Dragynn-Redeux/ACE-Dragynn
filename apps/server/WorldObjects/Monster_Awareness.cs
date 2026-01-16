@@ -672,7 +672,7 @@ partial class Creature
     /// <summary>
     /// Returns a list of attackable targets currently visible to this monster
     /// </summary>
-    private List<Creature> GetAttackTargets()
+    public List<Creature> GetAttackTargets()
     {
         var visibleTargets = new List<Creature>();
 
@@ -680,6 +680,12 @@ partial class Creature
         {
             // ensure attackable
             if (!creature.Attackable && creature.TargetingTactic == TargetingTactic.None || creature.Teleporting)
+            {
+                continue;
+            }
+
+            // check if player fooled this monster with vanish
+            if (creature is Player player && IsPlayerVanished(player))
             {
                 continue;
             }
@@ -692,7 +698,7 @@ partial class Creature
 
             var distSq = PhysicsObj.get_distance_sq_to_object(creature.PhysicsObj, true);
 
-            if (creature is Player player && player.TestStealth(this, distSq, $"{Name} sees you! You lose stealth."))
+            if (creature is Player targetPlayer && targetPlayer.TestStealth(this, distSq, $"{Name} sees you! You lose stealth."))
             {
                 continue;
             }
@@ -1108,5 +1114,109 @@ partial class Creature
         }
 
         return playerCombatAbility;
+    }
+
+    /// <summary>
+    /// Tracks players who have vanished from this monster's sight
+    /// Key: Player GUID, Value: Expiration time (unix timestamp)
+    /// </summary>
+    private Dictionary<uint, double> VanishedPlayers;
+
+    /// <summary>
+    /// Tracks player GUIDs who successfully fooled this monster with Vanish
+    /// These players cannot be targeted while their VanishIsActive is true
+    /// </summary>
+    private HashSet<uint> FooledByVanishPlayers;
+
+    /// <summary>
+    /// Marks a player as having successfully fooled this monster with Vanish
+    /// </summary>
+    /// <param name="player">The player who fooled the monster</param>
+    public void AddVanishedPlayer(Player player)
+    {
+        if (FooledByVanishPlayers == null)
+        {
+            FooledByVanishPlayers = new HashSet<uint>();
+        }
+
+        FooledByVanishPlayers.Add(player.Guid.Full);
+    }
+
+    /// <summary>
+    /// Checks if a player is currently vanished from this monster's perspective
+    /// </summary>
+    /// <param name="player">The player to check</param>
+    /// <returns>True if the player fooled this monster and their vanish is still active</returns>
+    public bool IsPlayerVanished(Player player)
+    {
+        if (FooledByVanishPlayers == null || !FooledByVanishPlayers.Contains(player.Guid.Full))
+        {
+            return false;
+        }
+
+        // Check if the player's vanish is still active
+        if (!player.VanishIsActive)
+        {
+            // Vanish expired, remove from tracking
+            FooledByVanishPlayers.Remove(player.Guid.Full);
+            return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Called periodically for idle monsters to check for stationary players
+    /// </summary>
+    public void PeriodicTargetScan()
+    {
+        if (MonsterState != State.Idle || (!Attackable && TargetingTactic == TargetingTactic.None))
+        {
+            return;
+        }
+
+        if ((Tolerance & ExcludeSpawnScan) != 0)
+        {
+            return;
+        }
+
+        // Scan for all creatures in range, including stationary ones
+        var creatures = PhysicsObj.ObjMaint.GetVisibleTargetsValuesOfTypeCreature();
+
+        foreach (var creature in creatures)
+        {
+            var player = creature as Player;
+            if (player != null && (!player.Attackable || player.Teleporting || (player.Hidden ?? false)))
+            {
+                continue;
+            }
+
+            if (Tolerance.HasFlag(Tolerance.Monster) && (creature is Player || creature is CombatPet))
+            {
+                continue;
+            }
+
+            var distSq = PhysicsObj.get_distance_sq_to_object(creature.PhysicsObj, true);
+
+            if (distSq > VisualAwarenessRangeSq)
+            {
+                continue;
+            }
+
+            if (player != null && player.TestStealth(this, distSq, $"{Name} sees you! You lose stealth."))
+            {
+                continue;
+            }
+
+            // Check if player fooled this monster with vanish
+            if (player != null && IsPlayerVanished(player))
+            {
+                continue;
+            }
+
+            // Found a valid target - wake up!
+            creature.AlertMonster(this);
+            break;
+        }
     }
 }

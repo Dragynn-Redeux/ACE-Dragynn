@@ -6,9 +6,11 @@ partial class Creature
 {
     protected const double monsterTickInterval = 0.2;
     protected const double monsterThreatTickInterval = 1.0;
+    protected const double monsterTargetScanInterval = 2.0;
 
     public double NextMonsterTickTime;
     public double NextMonsterThreatTickTime;
+    public double NextMonsterTargetScanTime;
 
     private bool firstUpdate = true;
 
@@ -37,6 +39,13 @@ partial class Creature
             if (MonsterState == State.Return)
             {
                 MonsterState = State.Idle;
+            }
+
+            // Periodic scan for stationary players
+            if (currentUnixTime > NextMonsterTargetScanTime)
+            {
+                PeriodicTargetScan();
+                NextMonsterTargetScanTime = currentUnixTime + monsterTargetScanInterval;
             }
 
             if (IsFactionMob || HasFoeType)

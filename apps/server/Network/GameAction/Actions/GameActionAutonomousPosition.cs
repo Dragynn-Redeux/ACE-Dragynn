@@ -1,9 +1,12 @@
 using ACE.Entity;
+using Serilog;
 
 namespace ACE.Server.Network.GameAction.Actions;
 
 public static class GameActionAutonomousPosition
 {
+    private static readonly ILogger _log = Log.ForContext(typeof(GameActionAutonomousPosition));
+
     /// <summary>
     /// Sent every ~1 second by the client when a player is moving,
     /// with the latest position from the client
@@ -14,6 +17,13 @@ public static class GameActionAutonomousPosition
         //Console.WriteLine($"{session.Player.Name}.AutoPos");
 
         var position = new Position(message.Payload);
+
+        if (position.PositionX == 0 && position.PositionY == 0 && position.Cell == 0)
+        {
+            // fix invalid null location sent by client
+            _log.Warning("Player {PlayerName} (0x{PlayerGuid}) sent invalid null position", session.Player.Name, session.Player.Guid);
+            return;
+        }
 
         var instanceTimestamp = message.Payload.ReadUInt16();
         var serverControlTimestamp = message.Payload.ReadUInt16();

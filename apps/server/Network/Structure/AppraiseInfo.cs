@@ -1887,7 +1887,7 @@ public class AppraiseInfo
         var ratingAmount = 100 - Math.Round((ignoreArmor * 100), 0);
 
         var itemTier = LootGenerationFactory.GetTierFromWieldDifficulty(wo.WieldDifficulty ?? 1);
-        var rangeMinAtTier = Math.Round(LootTables.BonusIgnoreArmorPerTier[itemTier - 1] * 100, 0);
+        var rangeMinAtTier = 10 + Math.Round(LootTables.BonusIgnoreArmorPerTier[itemTier - 1] * 100, 0);
 
         _hasExtraPropertiesText = true;
 
@@ -2010,7 +2010,7 @@ public class AppraiseInfo
             var ratingAmount = 100.0f - Math.Round((ignoreWard * 100), 0);
 
             var itemTier = LootGenerationFactory.GetTierFromWieldDifficulty(wo.WieldDifficulty ?? 1);
-            var rangeMinAtTier = Math.Round(LootTables.BonusIgnoreWardPerTier[itemTier - 1] * 100, 0);
+            var rangeMinAtTier = 10 + Math.Round(LootTables.BonusIgnoreWardPerTier[itemTier - 1] * 100, 0);
 
             _hasExtraPropertiesText = true;
 

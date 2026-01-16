@@ -65,6 +65,43 @@ partial class Creature
     public double NextCancelTime;
 
     /// <summary>
+    /// Validates that AttackTarget is in a valid state for movement calculations
+    /// </summary>
+    private bool IsAttackTargetValid()
+    {
+        if (AttackTarget == null)
+        {
+            return false;
+        }
+
+        if (AttackTarget.Location == null)
+        {
+            _log.Warning("AttackTarget.Location is null for {Monster} targeting {Target}", Name, AttackTarget.Name);
+            return false;
+        }
+
+        if (AttackTarget.PhysicsObj == null)
+        {
+            _log.Warning("AttackTarget.PhysicsObj is null for {Monster} targeting {Target}", Name, AttackTarget.Name);
+            return false;
+        }
+
+        // Check if target is dead
+        if (AttackTarget is Creature targetCreature && targetCreature.IsDead)
+        {
+            return false;
+        }
+
+        // Check if target is destroyed or being destroyed
+        if (AttackTarget.IsDestroyed)
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
     /// Starts the process of monster turning towards target
     /// </summary>
     public void StartTurn()
@@ -73,6 +110,14 @@ partial class Creature
         //return;
         if (!MoveReady())
         {
+            return;
+        }
+
+        if (!IsAttackTargetValid())
+        {
+            _log.Warning("StartTurn aborted - invalid AttackTarget for {Monster}", Name);
+            ResetAttack();
+            FindNextTarget(false);
             return;
         }
 
@@ -131,6 +176,13 @@ partial class Creature
     /// </summary>
     public void OnTurnComplete()
     {
+        if (!IsAttackTargetValid())
+        {
+            _log.Warning("OnTurnComplete aborted - invalid AttackTarget for {Monster}", Name);
+            ResetAttack();
+            return;
+        }
+
         var dir = Vector3.Normalize(AttackTarget.Location.ToGlobal() - Location.ToGlobal());
         Location.Rotate(dir);
 
@@ -197,6 +249,11 @@ partial class Creature
     /// </summary>
     public float EstimateTurnTo()
     {
+        if (!IsAttackTargetValid())
+        {
+            return 0f;
+        }
+
         return GetRotateDelay(AttackTarget);
     }
 
@@ -205,6 +262,11 @@ partial class Creature
     /// </summary>
     public float EstimateMoveTo()
     {
+        if (!IsAttackTargetValid() || MoveSpeed == 0f)
+        {
+            return 0f;
+        }
+
         return GetDistanceToTarget() / MoveSpeed;
     }
 
@@ -229,7 +291,7 @@ partial class Creature
     /// </summary>
     public float GetDistanceToTarget()
     {
-        if (AttackTarget == null)
+        if (!IsAttackTargetValid())
         {
             return float.MaxValue;
         }
@@ -267,6 +329,12 @@ partial class Creature
     /// </summary>
     public Vector3 GetDestination()
     {
+        if (!IsAttackTargetValid())
+        {
+            _log.Warning("GetDestination returning current location - invalid AttackTarget for {Monster}", Name);
+            return Location.Pos;
+        }
+
         var dir = Vector3.Normalize(Location.ToGlobal() - AttackTarget.Location.ToGlobal());
         return AttackTarget.Location.Pos + dir * (AttackTarget.PhysicsObj.GetRadius() + PhysicsObj.GetRadius());
     }
@@ -282,10 +350,19 @@ partial class Creature
             return;
         }
 
+        // Only validate AttackTarget if we're not returning home
+        if (MonsterState != State.Return && !IsAttackTargetValid())
+        {
+            _log.Warning("Movement aborted - invalid AttackTarget for {Monster}", Name);
+            ResetAttack();
+            FindNextTarget(false);
+            return;
+        }
+
         //if (!IsRanged)
         UpdatePosition();
 
-        if (MonsterState == State.Awake && GetDistanceToTarget() >= MaxChaseRange)
+        if (MonsterState == State.Awake && AttackTarget != null && GetDistanceToTarget() >= MaxChaseRange)
         {
             CancelMoveTo();
             FindNextTarget(false);
@@ -447,8 +524,9 @@ partial class Creature
     /// </summary>
     public void SetFinalPosition()
     {
-        if (AttackTarget == null)
+        if (!IsAttackTargetValid())
         {
+            _log.Warning("SetFinalPosition aborted - invalid AttackTarget for {Monster}", Name);
             return;
         }
 

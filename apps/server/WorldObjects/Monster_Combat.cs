@@ -203,6 +203,9 @@ partial class Creature
             if (CurrentSpell is null)
             {
                 _log.Error("Monster_Combat.GetMaxRange() - CurrentSpell is null for creature: {Monster}", Name);
+                // Fix: Break out or return a default value when CurrentSpell is null
+                CurrentAttack = CombatType.Melee;
+                break;
             }
 
             // select a magic spell
@@ -311,7 +314,7 @@ partial class Creature
         if (AttackTarget is Creature creatureAttackTarget)
         {
             LastAttackedCreature = creatureAttackTarget;
-            LastAttackTime = Common.Time.GetUnixTime();
+            LastAttackTime = Time.GetUnixTime();
         }
 
         EmoteManager.OnAttack(AttackTarget);

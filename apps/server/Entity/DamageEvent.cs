@@ -33,6 +33,7 @@ public class DamageEvent
     private CreatureSkill _attackSkill;
     private AttackType _attackType; // slash / thrust / punch / kick / offhand / multistrike
     private float _attributeMod;
+    private float _backstabDamageMultiplier;
     private float _baseDamage;
     private BaseDamageMod _baseDamageMod;
     private float _combatAbilityFuryDamageBonus;
@@ -674,6 +675,7 @@ public class DamageEvent
         _combatAbilitySteadyStrikeDamageBonus = GetCombatAbilitySteadySrikeDamageBonus(playerAttacker);
         _recklessnessMod = Creature.GetRecklessnessMod(attacker, defender);
         SneakAttackMod = attacker.GetSneakAttackMod(defender);
+        _backstabDamageMultiplier = Creature.GetStealthBackstabDamageMultiplier(playerAttacker, defender);
         _attackHeightDamageBonus += GetHighAttackHeightBonus(playerAttacker);
         _ratingElementalDamageBonus = Jewel.HandleElementalBonuses(playerAttacker, DamageType);
         _ratingPierceResistanceBonus = GetRatingPierceResistanceBonus(defender, playerAttacker);
@@ -864,7 +866,7 @@ public class DamageEvent
             return 1.0f;
         }
 
-        if (CheckForStealthBackstabAutoCrit(playerAttacker, defender) || CheckForRatingReprisal(playerAttacker))
+        if (CheckForRatingReprisal(playerAttacker))
         {
             playerAttacker.IsAttackFromStealth = false;
             return 1.0f;
@@ -934,6 +936,7 @@ public class DamageEvent
                * _ratingPierceResistanceBonus
                * _recklessnessMod
                * SneakAttackMod
+               * _backstabDamageMultiplier
                * _attackHeightDamageBonus
                * _ammoEffectMod
                * _levelScalingMod;
@@ -941,44 +944,6 @@ public class DamageEvent
 
     private float GetNonCriticalDamageBeforeMitigation()
     {
-        // if (_playerAttacker is not null)
-        // {
-        //     Console.WriteLine($"Before Mitigaion\n" +
-        //                       $" -Base Damage{_baseDamage}\n" +
-        //                       $" -Attribute: {_attributeMod}\n" +
-        //                       $" -Power: {_powerMod}\n" +
-        //                       $" -Slayer: {_slayerMod}\n" +
-        //                       $" -DamageRating: {_damageRatingMod}\n" +
-        //                       $" -Reckless: {_recklessnessMod}\n" +
-        //                       $" -SneakAttack: {SneakAttackMod}\n" +
-        //                       $" -AttackHeight: {_attackHeightDamageBonus}\n" +
-        //                       $" -ElementalDamageRating: {_ratingElementalDamageBonus}\n" +
-        //                       $" -PierceResistanceRating: {_ratingPierceResistanceBonus}\n" +
-        //                       $" -DualWield: {_dualWieldDamageBonus}\n" +
-        //                       $" -TwoHand: {_twohandedCombatDamageBonus}\n" +
-        //                       $" -MultiShot: {_combatAbilityMultishotDamagePenalty}\n" +
-        //                       $" -Fury: {_combatAbilityFuryDamageBonus}\n" +
-        //                       $" -SteadyStrike: {_combatAbilitySteadyStrikeDamageBonus}\n" +
-        //                       $" -LevelScaling: {_levelScalingMod}\n" +
-        //                       $" -TOTAL: {_baseDamage
-        //                                   * _attributeMod
-        //                                   * _powerMod
-        //                                   * _slayerMod
-        //                                   * _damageRatingMod
-        //                                   * _recklessnessMod
-        //                                   * SneakAttackMod
-        //                                   * _attackHeightDamageBonus
-        //                                   * _ratingElementalDamageBonus
-        //                                   * _dualWieldDamageBonus
-        //                                   * _twohandedCombatDamageBonus
-        //                                   * _combatAbilityMultishotDamagePenalty
-        //                                   * _combatAbilityFuryDamageBonus
-        //                                   * _combatAbilityRelentlessDamagePenalty
-        //                                   * _combatAbilitySteadyStrikeDamageBonus
-        //                                   * _ammoEffectMod
-        //                                   * _levelScalingMod}");
-        // }
-
         return _baseDamage
                * _attributeMod
                * _powerMod
@@ -986,6 +951,7 @@ public class DamageEvent
                * _damageRatingMod
                * _recklessnessMod
                * SneakAttackMod
+               * _backstabDamageMultiplier
                * _attackHeightDamageBonus
                * _ratingElementalDamageBonus
                * _ratingPierceResistanceBonus
@@ -997,15 +963,6 @@ public class DamageEvent
                * _combatAbilitySteadyStrikeDamageBonus
                * _ammoEffectMod
                * _levelScalingMod;
-    }
-
-
-    /// <summary>
-    /// Guaranteed critical hit when using Backstab while attacking from behind and stealthed
-    /// </summary>
-    private bool CheckForStealthBackstabAutoCrit(Player playerAttacker, Creature creatureTarget)
-    {
-        return playerAttacker is { BackstabIsActive: true, IsAttackFromStealth: true } && playerAttacker.IsBehindTargetCreature(creatureTarget);
     }
 
     private float GetMitigation(Creature attacker, Creature defender)
