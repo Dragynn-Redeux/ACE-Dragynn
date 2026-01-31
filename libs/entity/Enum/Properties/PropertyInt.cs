@@ -871,6 +871,7 @@ public enum PropertyInt : ushort
     CombatFocusSkill3SpellRemoved = 512,
     CombatFocusSkill3SpellAdded = 513,
     CombatFocusPrestigeVersionId = 514,
+    PassiveThreatPerTick = 515,
 
     [ServerOnly]
     PCAPRecordedAutonomousMovement = 8007,

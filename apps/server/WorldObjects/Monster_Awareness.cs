@@ -194,6 +194,10 @@ partial class Creature
     }
     private const int ThreatMinimum = 100;
     private double ThreatGainedSinceLastTick = 1;
+    public bool GeneratesPassiveThreat =>
+    GetProperty(PropertyBool.GeneratesPassiveThreat) ?? false;
+    public int PassiveThreatPerTick =>
+    GetProperty(PropertyInt.PassiveThreatPerTick) ?? 0;
 
     private Dictionary<Creature, int> ThreatLevel;
     public Dictionary<Creature, float> PositiveThreat;
@@ -201,6 +205,56 @@ partial class Creature
 
     public List<Player> SkipThreatFromNextAttackTargets = [];
     public List<Player> DoubleThreatFromNextAttackTargets = [];
+    private void ApplyPassiveThreatPerTick()
+    {
+        var targets = GetAttackTargets();
+
+        // Unconditional debug: list current attack targets and their passive threat values
+        Console.WriteLine($"{Name} ApplyPassiveTargets: {string.Join(", ", targets.Select(t => t.Name + "(" + t.PassiveThreatPerTick + ")"))}");
+
+        foreach (var target in targets)
+        {
+            if (!target.GeneratesPassiveThreat)
+            {
+                continue;
+            }
+            var passiveThreat = target.PassiveThreatPerTick;
+            if (passiveThreat < 2)
+            {
+                continue;
+            }
+
+            // cap at ThreatMinimum + passiveThreat
+            ThreatLevel.TryAdd(target, ThreatMinimum);
+
+            var current = ThreatLevel[target];
+            var max = ThreatMinimum + passiveThreat;
+            var increase = Math.Min(passiveThreat, max - current);
+
+            // Diagnostic: show why we might skip or what increase would be applied
+            Console.WriteLine($"{Name} PassiveCheck: target={target.Name} current={current} max={max} computedIncrease={increase} passiveThreat={passiveThreat}");
+
+            if (current >= max)
+            {
+                continue;
+            }
+            if (DebugThreatSystem)
+            {
+                _log.Information(
+                    "PASSIVE THREAT: {Name} passive threat += {Increase} for {Target} (passive={PassiveThreat})",
+                    Name,
+                    increase,
+                    target.Name,
+                    passiveThreat
+                );
+            }
+
+            // Always print passive increases so they appear alongside other console debug lines
+            Console.WriteLine($"{Name} passive threat applied -> {target.Name} +{increase} (passive={passiveThreat})");
+
+            IncreaseTargetThreatLevel(target, increase);
+        }
+    }
 
     public void IncreaseTargetThreatLevel(Creature targetCreature, int amount)
     {
@@ -270,6 +324,11 @@ partial class Creature
 
         threatGained = threatGained < minimumSubtraction ? minimumSubtraction : threatGained;
 
+        if (DebugThreatSystem)
+        {
+            Console.WriteLine($"{Name} TickDown: totalThreat={totalThreat} count={ThreatLevel.Count} ThreatGainedSinceLastTick={ThreatGainedSinceLastTick} computedThreatGained={threatGained} minimumSubtraction={minimumSubtraction}");
+        }
+
         foreach (var key in ThreatLevel.Keys)
         {
             if (ThreatLevel[key] > ThreatMinimum)
@@ -283,8 +342,10 @@ partial class Creature
             }
         }
 
-        //if (DebugThreatSystem)
-        //    _log.Information("TickDownAllTargetThreatLevels() - {Name} - {Threat}", Name, threatGained);
+        if (DebugThreatSystem)
+        {
+            _log.Information("TickDownAllTargetThreatLevels() - {Name} - {Threat}", Name, threatGained);
+        }
 
         ThreatGainedSinceLastTick = 0;
     }
@@ -699,10 +760,31 @@ partial class Creature
     {
         var visibleTargets = new List<Creature>();
 
-        foreach (var creature in PhysicsObj.ObjMaint.GetVisibleTargetsValuesOfTypeCreature())
+        // Start with the engine's normal "attack targets" list (players / pets / foes / etc.)
+        var candidates = PhysicsObj.ObjMaint.GetVisibleTargetsValuesOfTypeCreature().ToList();
+
+        // Hard include: any visible creature that generates passive threat, even if it isn't in the normal
+        // AttackTargets pipeline yet. These only become valid if they are already within attack range.
+        foreach (var obj in PhysicsObj.ObjMaint.GetVisibleObjects(PhysicsObj.CurCell))
         {
-            // ensure attackable
-            if (!creature.Attackable && creature.TargetingTactic == TargetingTactic.None || creature.Teleporting)
+            var c = obj.WeenieObj.WorldObject as Creature;
+            if (c != null && c.GeneratesPassiveThreat && !candidates.Contains(c))
+            {
+                candidates.Add(c);
+            }
+        }
+
+        foreach (var creature in candidates)
+        {
+            if (creature == null)
+            {
+                continue;
+            }
+
+            var allowPassiveThreat = creature.GeneratesPassiveThreat;
+
+            // ensure attackable (unless passive threat target)
+            if ((!allowPassiveThreat && !creature.Attackable && creature.TargetingTactic == TargetingTactic.None) || creature.Teleporting)
             {
                 continue;
             }
@@ -713,12 +795,6 @@ partial class Creature
                 continue;
             }
 
-            // ensure within 'detection radius' ?
-            var chaseDistSq = creature == AttackTarget ? MaxChaseRangeSq : VisualAwarenessRangeSq;
-
-            /*if (Location.SquaredDistanceTo(creature.Location) > chaseDistSq)
-                continue;*/
-
             var distSq = PhysicsObj.get_distance_sq_to_object(creature.PhysicsObj, true);
 
             if (creature is Player targetPlayer && targetPlayer.TestStealth(this, distSq, $"{Name} sees you! You lose stealth."))
@@ -726,9 +802,23 @@ partial class Creature
                 continue;
             }
 
-            if (distSq > chaseDistSq)
+            if (allowPassiveThreat)
             {
-                continue;
+                // Passive-threat targets must be within "noticed" range to be considered.
+                // Use VisualAwarenessRange so this can be tuned per-weenie via PropertyFloat.VisualAwarenessRange.
+                if (distSq > VisualAwarenessRangeSq)
+                {
+                    continue;
+                }
+            }
+            else
+            {
+                // Normal behavior: within detection/chase radius
+                var chaseDistSq = creature == AttackTarget ? MaxChaseRangeSq : VisualAwarenessRangeSq;
+                if (distSq > chaseDistSq)
+                {
+                    continue;
+                }
             }
 
             // if this monster belongs to a faction,
