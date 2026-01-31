@@ -158,10 +158,12 @@ partial class Creature
 
     protected virtual void HandleFindTarget()
     {
-        if (Timers.RunningTime < NextFindTarget)
-        {
+        // Passive objectives never acquire attack targets
+        if (GeneratesPassiveThreat)
             return;
-        }
+
+        if (Timers.RunningTime < NextFindTarget)
+            return;
 
         FindNextTarget(false);
     }
@@ -196,8 +198,8 @@ partial class Creature
     private double ThreatGainedSinceLastTick = 1;
     public bool GeneratesPassiveThreat =>
     GetProperty(PropertyBool.GeneratesPassiveThreat) ?? false;
-    public int PassiveThreatPerTick =>
-    GetProperty(PropertyInt.PassiveThreatPerTick) ?? 0;
+    public int PassiveThreatBias =>
+    GetProperty(PropertyInt.PassiveThreatBias) ?? 0;
 
     private Dictionary<Creature, int> ThreatLevel;
     public Dictionary<Creature, float> PositiveThreat;
@@ -205,12 +207,9 @@ partial class Creature
 
     public List<Player> SkipThreatFromNextAttackTargets = [];
     public List<Player> DoubleThreatFromNextAttackTargets = [];
-    private void ApplyPassiveThreatPerTick()
+    private void ApplyPassiveThreatBias()
     {
         var targets = GetAttackTargets();
-
-        // Unconditional debug: list current attack targets and their passive threat values
-        Console.WriteLine($"{Name} ApplyPassiveTargets: {string.Join(", ", targets.Select(t => t.Name + "(" + t.PassiveThreatPerTick + ")"))}");
 
         foreach (var target in targets)
         {
@@ -218,7 +217,7 @@ partial class Creature
             {
                 continue;
             }
-            var passiveThreat = target.PassiveThreatPerTick;
+            var passiveThreat = target.PassiveThreatBias;
             if (passiveThreat < 2)
             {
                 continue;
@@ -230,9 +229,6 @@ partial class Creature
             var current = ThreatLevel[target];
             var max = ThreatMinimum + passiveThreat;
             var increase = Math.Min(passiveThreat, max - current);
-
-            // Diagnostic: show why we might skip or what increase would be applied
-            Console.WriteLine($"{Name} PassiveCheck: target={target.Name} current={current} max={max} computedIncrease={increase} passiveThreat={passiveThreat}");
 
             if (current >= max)
             {
@@ -249,10 +245,20 @@ partial class Creature
                 );
             }
 
-            // Always print passive increases so they appear alongside other console debug lines
-            Console.WriteLine($"{Name} passive threat applied -> {target.Name} +{increase} (passive={passiveThreat})");
+            // apply passive baseline without contributing to ThreatGainedSinceLastTick
+            ThreatLevel[target] += increase;
 
-            IncreaseTargetThreatLevel(target, increase);
+            if (DebugThreatSystem)
+            {
+                _log.Information(
+                    "THREAT INCREASED (PASSIVE): {Monster} -> {Target} +={Amount} new={NewThreat}",
+                    Name,
+                    target.Name,
+                    increase,
+                    ThreatLevel[target]
+                );
+            }
+
         }
     }
 
@@ -302,6 +308,17 @@ partial class Creature
 
         if (DebugThreatSystem)
         {
+            _log.Information(
+                "THREAT INCREASED: {Monster} -> {Target} +={Amount} new={NewThreat}",
+                Name,
+                targetCreature.Name,
+                amount,
+                ThreatLevel[targetCreature]
+            );
+        }
+
+        if (DebugThreatSystem)
+        {
             Console.WriteLine($"{Name} threat increased towards {targetCreature.Name} by +{amount}");
         }
     }
@@ -312,6 +329,11 @@ partial class Creature
     /// </summary>
     private void TickDownAllTargetThreatLevels()
     {
+        if (ThreatLevel == null || ThreatLevel.Count == 0)
+        {
+            return;
+        }
+
         var totalThreat = 0;
         foreach (var kvp in ThreatLevel)
         {
@@ -340,6 +362,16 @@ partial class Creature
             {
                 ThreatLevel[key] = ThreatMinimum;
             }
+            // Keep passive-threat targets at or above their baseline
+            if (key.GeneratesPassiveThreat && key.PassiveThreatBias >= 2)
+            {
+                var passiveFloor = ThreatMinimum + key.PassiveThreatBias;
+                if (ThreatLevel[key] < passiveFloor)
+                {
+                ThreatLevel[key] = passiveFloor;
+                }
+            }
+
         }
 
         if (DebugThreatSystem)
@@ -452,6 +484,9 @@ partial class Creature
                         }
                     }
                 }
+
+                // Apply passive threat sources (e.g., crates) so they influence selection math
+                ApplyPassiveThreatBias();
 
                 if (ThreatLevel?.Count == 0)
                 {

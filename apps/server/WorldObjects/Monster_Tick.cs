@@ -122,7 +122,7 @@ partial class Creature
 
         if (currentUnixTime > NextMonsterThreatTickTime)
         {
-            ApplyPassiveThreatPerTick();
+            ApplyPassiveThreatBias();
             TickDownAllTargetThreatLevels();
 
             NextMonsterThreatTickTime = currentUnixTime + monsterThreatTickInterval;
