@@ -18,6 +18,7 @@ using ACE.Server.Network;
 using ACE.Server.Network.GameEvent.Events;
 using ACE.Server.Network.GameMessages.Messages;
 using ACE.Server.Network.Structure;
+using MarketBroker = ACE.Server.Market.MarketBroker;
 
 namespace ACE.Server.WorldObjects;
 
@@ -5152,6 +5153,36 @@ partial class Player
             return;
         }
 
+        if (target is Creature brokerCreature && MarketBroker.IsMarketBroker(brokerCreature))
+        {
+            // Market Broker uses "Refuse" semantics (examine) for any listable item so the player keeps the item.
+            if (!MarketBroker.IsSellable(item, out var reason))
+            {
+                Session.Network.EnqueueSend(
+                    new GameEventInventoryServerSaveFailed(Session, item.Guid.Full, WeenieError.TradeAiRefuseEmote)
+                );
+                SendTransientError(reason);
+                return;
+            }
+
+            if (!target.ExamineItemsSilently.HasValue || target.ExamineItemsSilently == false)
+            {
+                Session.Network.EnqueueSend(
+                    new GameMessageSystemChat(
+                        $"You allow {target.Name} to examine your {item.NameWithMaterial}.",
+                        ChatMessageType.Broadcast
+                    )
+                );
+            }
+
+            Session.Network.EnqueueSend(
+                new GameEventInventoryServerSaveFailed(Session, item.Guid.Full, WeenieError.TradeAiRefuseEmote)
+            );
+
+            MarketBroker.StartListingFromRefuse(this, item);
+            return;
+        }
+
         if (item.Name == "IOU" && item.WeenieType == WeenieType.Book && target.Name == "Town Crier")
         {
             HandleIOUTurnIn(target, item);
@@ -5249,18 +5280,37 @@ partial class Player
 
                 if (!target.ExamineItemsSilently.HasValue || target.ExamineItemsSilently == false)
                 {
-                    Session.Network.EnqueueSend(
-                        new GameMessageSystemChat(
-                            $"You allow {target.Name} to examine your {item.NameWithMaterial}.",
-                            ChatMessageType.Broadcast
-                        )
-                    );
+                    if (target is Creature marketBrokerCreature2 && MarketBroker.IsMarketBroker(marketBrokerCreature2))
+                    {
+                        Session.Network.EnqueueSend(
+                            new GameEventTell(
+                                target,
+                                $"You allow {target.Name} to examine your {item.NameWithMaterial}.",
+                                this,
+                                ChatMessageType.Tell
+                            )
+                        );
+                    }
+                    else
+                    {
+                        Session.Network.EnqueueSend(
+                            new GameMessageSystemChat(
+                                $"You allow {target.Name} to examine your {item.NameWithMaterial}.",
+                                ChatMessageType.Broadcast
+                            )
+                        );
+                    }
                 }
 
                 Session.Network.EnqueueSend(
                     new GameEventInventoryServerSaveFailed(Session, item.Guid.Full, WeenieError.TradeAiRefuseEmote)
                 );
                 target.EmoteManager.ExecuteEmoteSet(emoteResult, this);
+
+                if (target is Creature marketBrokerCreature && MarketBroker.IsMarketBroker(marketBrokerCreature))
+                {
+                    MarketBroker.StartListingFromRefuse(this, item);
+                }
             }
             else
             {

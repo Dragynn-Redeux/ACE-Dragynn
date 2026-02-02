@@ -850,6 +850,133 @@ PRIMARY KEY (`id`)
 ) ENGINE=INNODB DEFAULT CHARSET=utf8mb4;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
+--
+-- Table structure for table `player_market_listings`
+--
+
+DROP TABLE IF EXISTS `player_market_listings`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE IF NOT EXISTS `player_market_listings` (
+  `Id` INT NOT NULL AUTO_INCREMENT,
+  `SellerAccountId` INT UNSIGNED NOT NULL,
+  `SellerCharacterId` INT UNSIGNED NULL,
+  `SellerName` VARCHAR(100) NULL,
+
+  `ItemGuid` INT UNSIGNED NOT NULL,
+  `ItemBiotaId` INT UNSIGNED NOT NULL,
+  `ItemWeenieClassId` INT UNSIGNED NOT NULL,
+
+  `OriginalValue` INT NOT NULL,
+  `ListedPrice` INT NOT NULL,
+
+  `CurrencyType` INT NOT NULL,
+  `MarketVendorTier` INT NOT NULL,
+  `ItemTier` INT NULL,
+  `WieldReq` INT NULL,
+
+  `Inscription` TEXT NULL,
+  `OriginalInscription` TEXT NULL,
+
+  `CreatedAtUtc` DATETIME(6) NOT NULL,
+  `ExpiresAtUtc` DATETIME(6) NOT NULL,
+
+  `IsCancelled` TINYINT(1) NOT NULL,
+  `IsSold` TINYINT(1) NOT NULL,
+
+  `BuyerAccountId` INT UNSIGNED NULL,
+  `BuyerCharacterId` INT UNSIGNED NULL,
+  `BuyerName` VARCHAR(100) NULL,
+
+  `SoldAtUtc` DATETIME(6) NULL,
+  `ReturnedAtUtc` DATETIME(6) NULL,
+
+  `RowVersion` BIGINT UNSIGNED NOT NULL DEFAULT 0,
+
+  PRIMARY KEY (`Id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `player_market_payouts`
+--
+
+DROP TABLE IF EXISTS `player_market_payouts`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+
+CREATE TABLE IF NOT EXISTS `player_market_payouts` (
+  `Id` INT NOT NULL AUTO_INCREMENT,
+
+  `ListingId` INT NOT NULL,
+
+  `SellerAccountId` INT UNSIGNED NOT NULL,
+  `SellerCharacterId` INT UNSIGNED NULL,
+
+  `Amount` INT NOT NULL,
+
+  `CurrencyType` INT NOT NULL,
+  `Status` INT NOT NULL,
+
+  `CreatedAtUtc` DATETIME(6) NOT NULL,
+  `ClaimedAtUtc` DATETIME(6) NULL,
+
+  `RowVersion` BIGINT UNSIGNED NOT NULL DEFAULT 0,
+
+  PRIMARY KEY (`Id`),
+  KEY `ix_player_market_payouts_listing_id` (`ListingId`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `player_market_transactions`
+--
+
+DROP TABLE IF EXISTS `player_market_transactions`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+
+CREATE TABLE IF NOT EXISTS `player_market_transactions` (
+  `Id` INT NOT NULL AUTO_INCREMENT,
+
+  `listing_id` INT NOT NULL,
+  `payout_id` INT NULL,
+
+  `seller_account_id` INT UNSIGNED NOT NULL,
+  `seller_character_id` INT UNSIGNED NULL,
+  `seller_name` VARCHAR(100) NULL,
+
+  `buyer_account_id` INT UNSIGNED NOT NULL,
+  `buyer_character_id` INT UNSIGNED NULL,
+  `buyer_name` VARCHAR(100) NULL,
+
+  `item_weenie_class_id` INT UNSIGNED NOT NULL,
+  `item_guid` INT UNSIGNED NOT NULL,
+  `item_biota_id` INT UNSIGNED NOT NULL,
+  `item_name` VARCHAR(200) NULL,
+
+  `quantity` INT NOT NULL,
+
+  `price` INT NOT NULL,
+  `fee_amount` INT NOT NULL,
+  `seller_net_amount` INT NOT NULL,
+  `currency_type` INT NOT NULL,
+  `market_vendor_tier` INT NOT NULL,
+
+  `created_at_utc` DATETIME(6) NOT NULL,
+
+  `RowVersion` BIGINT UNSIGNED NOT NULL DEFAULT 0,
+
+  PRIMARY KEY (`Id`),
+
+  KEY `ix_pml_seller_account_created` (`seller_account_id`, `created_at_utc`),
+  KEY `ix_pml_buyer_account_created` (`buyer_account_id`, `created_at_utc`),
+  KEY `ix_pml_listing_id` (`listing_id`),
+  KEY `ix_pml_created_at` (`created_at_utc`),
+  KEY `ix_pml_itemwc_created` (`item_weenie_class_id`, `created_at_utc`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
 /*!40101 SET SQL_MODE=@OLD_SQL_MODE */;
 /*!40014 SET FOREIGN_KEY_CHECKS=@OLD_FOREIGN_KEY_CHECKS */;
 /*!40014 SET UNIQUE_CHECKS=@OLD_UNIQUE_CHECKS */;

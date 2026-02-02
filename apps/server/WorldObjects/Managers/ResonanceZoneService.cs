@@ -34,9 +34,13 @@ public class ResonanceZoneService
     // Portal Storm warning throttles
     private readonly Dictionary<uint, double> _psWarnNextSwirlForPlayer = new();
     private readonly Dictionary<uint, double> _psWarnNextMessageForPlayer = new();
+    // Attackable-off (admin) hint throttles
+    private readonly Dictionary<uint, double> _psImmuneNextMessageForPlayer = new();
+    private readonly Dictionary<uint, double> _shroudImmuneNextMessageForPlayer = new();
     // Prune per-player PortalStorm eligibility cache periodically
     private double _psNextEligibilityPruneAt;
     private const double PsEligibilityPruneIntervalSeconds = 300; // 5 minutes
+    private const double ImmuneMsgIntervalSeconds = 30.0;
 
 
     private void LogZoneOverlapsAtLoad()
@@ -184,7 +188,7 @@ public class ResonanceZoneService
         _log.Information(
             "PortalStorm config: Global={Global}, Cap={Cap}, Interval={Interval}s, Cooldown={Cooldown}s",
             PropertyManager.GetBool("ps_global", true).Item,
-            PropertyManager.GetDouble("ps_cap", 8).Item,
+            PropertyManager.GetDouble("ps_cap", 25).Item,
             PropertyManager.GetDouble("ps_interval", 60).Item,
             PropertyManager.GetDouble("ps_cooldown", 120).Item
         );
@@ -245,16 +249,22 @@ public class ResonanceZoneService
             _psNextEligibilityPruneAt = currentUnixTime + PsEligibilityPruneIntervalSeconds;
         }
 
-        // Bucket players by landblock once
-        var byLandblock = new Dictionary<uint, List<Player>>();
+        // Bucket players by landblock once (split eligible vs immune by Attackable)
+        var eligibleByLandblock = new Dictionary<uint, List<Player>>();
+        var immuneByLandblock = new Dictionary<uint, List<Player>>();
+
         foreach (var p in online)
         {
             var lb = p.Location.Landblock;
-            if (!byLandblock.TryGetValue(lb, out var list))
+
+            var dict = p.Attackable ? eligibleByLandblock : immuneByLandblock;
+
+            if (!dict.TryGetValue(lb, out var list))
             {
                 list = new List<Player>();
-                byLandblock[lb] = list;
+                dict[lb] = list;
             }
+
             list.Add(p);
         }
 
@@ -263,7 +273,7 @@ public class ResonanceZoneService
         {
             var landblock = kvp.Key;
 
-            if (!byLandblock.TryGetValue(landblock, out var playersInLb) || playersInLb.Count == 0)
+            if (!eligibleByLandblock.TryGetValue(landblock, out var playersInLb) || playersInLb.Count == 0)
             {
                     // cancel pending if nobody is here anymore
                     _psPendingTeleportAtForLandblock.Remove(landblock);
@@ -303,6 +313,32 @@ public class ResonanceZoneService
                 // Warning should still occur even during landblock cooldown
                 if (inRegionCount >= cap - 1 && inRegionCount > 0)
                 {
+            // Notify Attackable-off players that they'd be affected (immune), throttled
+            if (immuneByLandblock.TryGetValue(landblock, out var immuneInLb) && immuneInLb.Count > 0)
+            {
+                foreach (var p in immuneInLb)
+                {
+                    var d = (ToWorld2D(p.Location) - zoneWorld).LengthSquared();
+                    if (d > maxDistSq)
+                    {
+                        continue;
+                    }
+
+                    var id = p.Guid.Full;
+
+                    if (!_psImmuneNextMessageForPlayer.TryGetValue(id, out var nextAt) || currentUnixTime >= nextAt)
+                    {
+                        p.Session.Network.EnqueueSend(
+                            new GameMessageSystemChat(
+                                "A portal storm builds nearby. You would be affected, but your Attackable state is OFF.",
+                                ChatMessageType.System
+                            )
+                        );
+                        _psImmuneNextMessageForPlayer[id] = currentUnixTime + ImmuneMsgIntervalSeconds;
+                    }
+                }
+            }
+
                     FireStormWarning(zone, inRegion, currentUnixTime);
                 }
 
@@ -399,6 +435,7 @@ public class ResonanceZoneService
         PrunePlayerDict(_psPlayerNextEligible);
         PrunePlayerDict(_psWarnNextSwirlForPlayer);
         PrunePlayerDict(_psWarnNextMessageForPlayer);
+        PrunePlayerDict(_psImmuneNextMessageForPlayer);
 
         // ── Shroud (per-player)
         PrunePlayerDict(_nextTeleportAllowed);
@@ -406,6 +443,7 @@ public class ResonanceZoneService
         PrunePlayerDict(_shroudedNextMessage);
         PrunePlayerDict(_outerWarnNextSwirl);
         PrunePlayerDict(_outerWarnNextMessage);
+        PrunePlayerDict(_shroudImmuneNextMessageForPlayer);
 
         // ── PortalStorm (per-landblock)
         var landblocksWithPlayers =
@@ -696,6 +734,7 @@ public class ResonanceZoneService
             {
                 continue; // not eligible
             }
+
             // eligible zone (within max distance + event active)
             if (chosenZone == null || distanceSq < chosenDistSq)
             {
@@ -711,6 +750,30 @@ public class ResonanceZoneService
             return;
         }
 
+
+        // Attackable-off players are immune to shroud effects; show a throttled hint ONLY if a shroud is active here
+        if (!player.Attackable)
+        {
+            var shroudActiveHere = IsShroudZoneActive(chosenZone);
+            if (shroudActiveHere)
+            {
+                var id = player.Guid.Full;
+
+                if (!_shroudImmuneNextMessageForPlayer.TryGetValue(id, out var nextAt) || currentUnixTime >= nextAt)
+                {
+                    player.Session.Network.EnqueueSend(
+                        new GameMessageSystemChat(
+                            "A resonance shroud presses in around you. You would be affected, but your Attackable state is OFF.",
+                            ChatMessageType.System
+                        )
+                    );
+                    _shroudImmuneNextMessageForPlayer[id] = currentUnixTime + ImmuneMsgIntervalSeconds;
+                }
+            }
+
+            ClearAllStateFor(player);
+            return;
+        }
        
         // Existing behavior, applied to chosen zone only
         var chosenInnerSq = chosenZone.Radius * chosenZone.Radius;
@@ -736,10 +799,10 @@ public class ResonanceZoneService
                 {   
                      HandleTeleport(player, chosenZone, currentUnixTime);
                 }
-
             }
         }
     }
+
     private void HandleTeleport(Player player, ResonanceZoneEntry zone, double currentUnixTime)
     {
         var guid = player.Guid.Full;
@@ -892,7 +955,7 @@ public class ResonanceZoneService
         // Tunables (live)
         var clearance = (float)PropertyManager.GetDouble("rz_teleport_clearance", 0.5).Item;
         var maxfall   = (float)PropertyManager.GetDouble("rz_maxfall", 0.5).Item;
-
+        
         // Zone center in world space
         var zoneWorld = ToWorld2D(zone.Location);
 

@@ -19,6 +19,7 @@ using ACE.Server.Factories.Enum;
 using ACE.Server.Managers;
 using ACE.Server.Network.GameEvent.Events;
 using ACE.Server.Network.GameMessages.Messages;
+using MarketBroker = ACE.Server.Market.MarketBroker;
 using Serilog;
 
 namespace ACE.Server.WorldObjects.Managers;
@@ -3389,6 +3390,11 @@ public class EmoteManager
         }
 
         ExecuteEmoteSet(EmoteCategory.Use, null, activator);
+
+        if (activator is Player player && MarketBroker.IsMarketBroker(WorldObject))
+        {
+            MarketBroker.SendHelp(player);
+        }
     }
 
 
@@ -3522,6 +3528,11 @@ public class EmoteManager
     public void OnTalkDirect(Player player, string message)
     {
         ExecuteEmoteSet(EmoteCategory.ReceiveTalkDirect, message, player);
+
+        if (MarketBroker.IsMarketBroker(WorldObject))
+        {
+            MarketBroker.HandleTalkDirect(player, WorldObject, message);
+        }
     }
 
     /// <summary>

@@ -6,6 +6,7 @@ using ACE.Entity.Enum.Properties;
 using ACE.Server.Entity;
 using ACE.Server.Factories;
 using ACE.Server.Managers;
+using ACE.Server.Market;
 using ACE.Server.Network.GameEvent.Events;
 using ACE.Server.Network.GameMessages.Messages;
 
@@ -109,6 +110,70 @@ partial class Player
             if (TryCreateInInventoryWithNetworking(item))
             {
                 vendor.UniqueItemsForSale.Remove(item.Guid);
+
+                // MARKET HOOK: if this unique is a market listing, mark it sold and create a payout,
+                // then restore original value.
+                ACE.Database.Models.Shard.PlayerMarketListing listing = null;
+
+                var marketListingId = item.GetProperty(PropertyInt.MarketListingId);
+                // Prefer direct lookup by listing id when tagged.
+                if (marketListingId.HasValue && marketListingId.Value > 0)
+                {
+                    listing = MarketServiceLocator.PlayerMarketRepository.GetListingById(marketListingId.Value);
+                }
+
+                // Fallback: for older market items that are not tagged with MarketListingId.
+                // Note: display clones may not preserve the original biota id.
+                if (listing == null && item.Biota != null)
+                {
+                    listing = MarketServiceLocator.PlayerMarketRepository
+                        .GetListingByItemBiotaId((uint)item.Biota.Id);
+                }
+
+                // Fallback: some items may not have biota; try the purchased object's guid.
+                listing ??= MarketServiceLocator.PlayerMarketRepository
+                    .GetListingByItemGuid(item.Guid.Full);
+
+                if (listing != null)
+                {
+                    if (!MarketServiceLocator.PlayerMarketRepository.MarkListingSold(listing, this))
+                    {
+                        SendTransientError("That item is no longer available.");
+                        continue;
+                    }
+
+                    var fee = MarketServiceLocator.CalculateSaleFee(listing.ListedPrice);
+                    var net = MarketServiceLocator.CalculateNetAfterFee(listing.ListedPrice);
+
+                    var payout = MarketServiceLocator.PlayerMarketRepository.CreatePayout(listing, net);
+
+                    // Track sale/spend history (skip self-purchases).
+                    if (listing.SellerAccountId != Character.AccountId)
+                    {
+                        var tx = MarketServiceLocator.PlayerMarketRepository.CreateTransaction(listing, payout, this);
+                        tx.ItemName = item.Name;
+                        tx.Quantity = item.StackSize ?? 1;
+                        tx.Price = listing.ListedPrice;
+                        tx.FeeAmount = fee;
+                        tx.SellerNetAmount = net;
+                    }
+
+                    // Notify seller if they are online.
+                    Player seller = null;
+                    if (listing.SellerCharacterId.HasValue)
+                    {
+                        seller = PlayerManager.GetOnlinePlayer(new ACE.Entity.ObjectGuid(listing.SellerCharacterId.Value));
+                    }
+
+                    if (seller?.Session != null)
+                    {
+                        var msg = $"[Market] Your market listing sold! {item.Name} for {listing.ListedPrice:N0} pyreals. Claim your payout at the Market Broker.";
+                        seller.Session.Network.EnqueueSend(new GameMessageSystemChat(msg, ChatMessageType.Tell));
+                    }
+
+                    // restore original value before saving item again
+                    item.Value = listing.OriginalValue;
+                }
 
                 // this was only for when the unique item was sold to the vendor,
                 // to determine when the item should rot on the vendor. it gets removed now

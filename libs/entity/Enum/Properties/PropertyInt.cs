@@ -874,6 +874,9 @@ public enum PropertyInt : ushort
     PassiveThreatThreshold = 515,
 
     [ServerOnly]
+    MarketListingId = 515,
+
+    [ServerOnly]
     PCAPRecordedAutonomousMovement = 8007,
 
     [ServerOnly]

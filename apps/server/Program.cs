@@ -12,6 +12,7 @@ using ACE.DatLoader;
 using ACE.Server.Commands.Handlers;
 using ACE.Server.Discord;
 using ACE.Server.Managers;
+using ACE.Server.Market;
 using ACE.Server.Mods;
 using ACE.Server.Network;
 using ACE.Server.Network.Managers;
@@ -260,6 +261,17 @@ partial class Program
 
         _log.Information("Starting PropertyManager...");
         PropertyManager.Initialize();
+
+        _log.Information("Initializing PlayerMarket...");
+        MarketServiceLocator.Initialize(
+            new DbPlayerMarketRepository(),
+            new PlayerMarketConfig
+            {
+                ListingLifetime = TimeSpan.FromDays(7),
+                MaxActiveListingsPerAccount = 50,
+                DefaultPayoutCurrency = MarketCurrencyType.Pyreal,
+                RequireManualReclaimOnExpire = true
+            });
 
         RecipeComponentUseEmote.Initialize();
 

@@ -93,6 +93,12 @@ public partial class ShardDbContext : DbContext
 
     public DbSet<ResonanceZoneRow> ResonanceZoneEntries { get; set; }
 
+    public virtual DbSet<PlayerMarketListing> PlayerMarketListings { get; set; } = null!;
+
+    public virtual DbSet<PlayerMarketPayout> PlayerMarketPayouts { get; set; } = null!;
+
+    public virtual DbSet<PlayerMarketTransaction> PlayerMarketTransactions { get; set; } = null!;
+
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
         if (!optionsBuilder.IsConfigured)
@@ -1376,6 +1382,128 @@ public partial class ShardDbContext : DbContext
                 .HasColumnName("session_ip");
             entity.Property(e => e.LoginDateTime)
                 .HasColumnName("login_date_time");
+        });
+
+        // Market listing
+        modelBuilder.Entity<PlayerMarketListing>(entity =>
+        {
+            entity.ToTable("player_market_listings");
+
+            entity.HasKey(e => e.Id);
+
+            entity.Property(e => e.Id).ValueGeneratedOnAdd().HasColumnName("Id");
+
+            entity.Property(e => e.SellerAccountId).HasColumnName("SellerAccountId");
+            entity.Property(e => e.SellerCharacterId).HasColumnName("SellerCharacterId");
+            entity.Property(e => e.SellerName).HasMaxLength(64).HasColumnName("SellerName");
+
+            entity.Property(e => e.ItemGuid).HasColumnName("ItemGuid");
+            entity.Property(e => e.ItemBiotaId).HasColumnName("ItemBiotaId");
+            entity.Property(e => e.ItemWeenieClassId).HasColumnName("ItemWeenieClassId");
+
+            entity.Property(e => e.OriginalValue).HasColumnName("OriginalValue");
+            entity.Property(e => e.ListedPrice).HasColumnName("ListedPrice");
+
+            entity.Property(e => e.CurrencyType).HasColumnName("CurrencyType");
+            entity.Property(e => e.MarketVendorTier).HasColumnName("MarketVendorTier");
+            entity.Property(e => e.ItemTier).HasColumnName("ItemTier");
+            entity.Property(e => e.WieldReq).HasColumnName("WieldReq");
+
+            entity.Property(e => e.Inscription).HasMaxLength(256).HasColumnName("Inscription");
+            entity.Property(e => e.OriginalInscription).HasMaxLength(256).HasColumnName("OriginalInscription");
+
+            entity.Property(e => e.CreatedAtUtc).HasColumnName("CreatedAtUtc");
+            entity.Property(e => e.ExpiresAtUtc).HasColumnName("ExpiresAtUtc");
+
+            entity.Property(e => e.IsCancelled).HasColumnName("IsCancelled");
+            entity.Property(e => e.IsSold).HasColumnName("IsSold");
+
+            entity.Property(e => e.BuyerAccountId).HasColumnName("BuyerAccountId");
+            entity.Property(e => e.BuyerCharacterId).HasColumnName("BuyerCharacterId");
+            entity.Property(e => e.BuyerName).HasMaxLength(64).HasColumnName("BuyerName");
+
+            entity.Property(e => e.SoldAtUtc).HasColumnName("SoldAtUtc");
+
+            // RowVersion is a bigint counter in your schema (not a SQL rowversion/timestamp).
+            entity.Property(e => e.RowVersion)
+                .HasColumnName("RowVersion")
+                .HasColumnType("bigint")
+                .HasDefaultValueSql("0")
+                .ValueGeneratedOnAddOrUpdate();
+        });
+
+        // Market payout
+        modelBuilder.Entity<PlayerMarketPayout>(entity =>
+        {
+            entity.ToTable("player_market_payouts");
+
+            entity.HasKey(e => e.Id);
+
+            entity.Property(e => e.Id).ValueGeneratedOnAdd().HasColumnName("Id");
+            entity.Property(e => e.ListingId).HasColumnName("ListingId");
+            entity.Property(e => e.SellerAccountId).HasColumnName("SellerAccountId");
+            entity.Property(e => e.SellerCharacterId).HasColumnName("SellerCharacterId");
+            entity.Property(e => e.Amount).HasColumnName("Amount");
+            entity.Property(e => e.CurrencyType).HasColumnName("CurrencyType");
+            entity.Property(e => e.Status).HasColumnName("Status");
+            entity.Property(e => e.CreatedAtUtc).HasColumnName("CreatedAtUtc");
+            entity.Property(e => e.ClaimedAtUtc).HasColumnName("ClaimedAtUtc");
+
+            // RowVersion is a bigint counter in your schema (not a SQL rowversion/timestamp).
+            entity.Property(e => e.RowVersion)
+                .HasColumnName("RowVersion")
+                .HasColumnType("bigint")
+                .HasDefaultValueSql("0")
+                .ValueGeneratedOnAddOrUpdate();
+        });
+
+        // Market transaction
+        modelBuilder.Entity<PlayerMarketTransaction>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("PRIMARY");
+
+            entity.ToTable("player_market_transactions");
+
+            entity.HasIndex(e => new { e.SellerAccountId, e.CreatedAtUtc });
+            entity.HasIndex(e => new { e.BuyerAccountId, e.CreatedAtUtc });
+            entity.HasIndex(e => e.ListingId);
+            entity.HasIndex(e => e.CreatedAtUtc);
+            entity.HasIndex(e => new { e.ItemWeenieClassId, e.CreatedAtUtc });
+
+            entity.Property(e => e.Id).ValueGeneratedOnAdd();
+
+            entity.Property(e => e.ListingId).HasColumnName("listing_id");
+            entity.Property(e => e.PayoutId).HasColumnName("payout_id");
+
+            entity.Property(e => e.SellerAccountId).HasColumnName("seller_account_id");
+            entity.Property(e => e.SellerCharacterId).HasColumnName("seller_character_id");
+            entity.Property(e => e.SellerName).HasColumnName("seller_name").HasMaxLength(100);
+
+            entity.Property(e => e.BuyerAccountId).HasColumnName("buyer_account_id");
+            entity.Property(e => e.BuyerCharacterId).HasColumnName("buyer_character_id");
+            entity.Property(e => e.BuyerName).HasColumnName("buyer_name").HasMaxLength(100);
+
+            entity.Property(e => e.ItemWeenieClassId).HasColumnName("item_weenie_class_id");
+            entity.Property(e => e.ItemGuid).HasColumnName("item_guid");
+            entity.Property(e => e.ItemBiotaId).HasColumnName("item_biota_id");
+            entity.Property(e => e.ItemName).HasColumnName("item_name").HasMaxLength(200);
+
+            entity.Property(e => e.Quantity).HasColumnName("quantity");
+
+            entity.Property(e => e.Price).HasColumnName("price");
+            entity.Property(e => e.FeeAmount).HasColumnName("fee_amount");
+            entity.Property(e => e.SellerNetAmount).HasColumnName("seller_net_amount");
+            entity.Property(e => e.CurrencyType).HasColumnName("currency_type");
+            entity.Property(e => e.MarketVendorTier).HasColumnName("market_vendor_tier");
+
+            entity.Property(e => e.CreatedAtUtc).HasColumnName("created_at_utc");
+
+            // RowVersion is a bigint counter in your schema (not a SQL rowversion/timestamp).
+            entity.Property(e => e.RowVersion)
+                .HasColumnName("RowVersion")
+                .HasColumnType("bigint")
+                .HasDefaultValueSql("0")
+                .ValueGeneratedOnAddOrUpdate();
         });
 
         OnModelCreatingPartial(modelBuilder);

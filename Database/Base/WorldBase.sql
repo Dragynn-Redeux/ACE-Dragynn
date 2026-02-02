@@ -1275,6 +1275,27 @@ CREATE TABLE `weenie_properties_texture_map` (
 /*!40101 SET character_set_client = @saved_cs_client */;
 /*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
 
+--
+-- Table structure for table `weenie_properties_surface_map`
+--
+
+DROP TABLE IF EXISTS `weenie_properties_surface_map`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!50503 SET character_set_client = utf8mb4 */;
+CREATE TABLE weenie_properties_surface_map (
+    id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+    object_Id INT UNSIGNED NOT NULL,
+    `index` TINYINT UNSIGNED NOT NULL,
+    old_Id INT UNSIGNED NOT NULL,
+    new_Id INT UNSIGNED NOT NULL,
+    PRIMARY KEY (id),
+    CONSTRAINT fk_wpsm_weenie
+        FOREIGN KEY (object_Id) REFERENCES weenie(class_Id)
+        ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='Surface Map Changes of Weenies';
+/*!40101 SET character_set_client = @saved_cs_client */;
+/*!40103 SET TIME_ZONE=@OLD_TIME_ZONE */;
+
 /*!40101 SET SQL_MODE=@OLD_SQL_MODE */;
 /*!40014 SET FOREIGN_KEY_CHECKS=@OLD_FOREIGN_KEY_CHECKS */;
 /*!40014 SET UNIQUE_CHECKS=@OLD_UNIQUE_CHECKS */;
