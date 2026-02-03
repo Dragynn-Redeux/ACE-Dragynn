@@ -239,8 +239,17 @@ public enum PropertyFloat : ushort
     SigilTrinketHealthReserved = 198,
     ResistBleed = 199,
     ArchetypeSpellDamageMultiplier = 200,
-
+    
     [ServerOnly]
+    PatrolScanInterval = 201,
+    
+    [ServerOnly]
+    PatrolPauseMinSeconds = 202,
+    
+    [ServerOnly]
+    PatrolPauseMaxSeconds = 203,
+    [ServerOnly]
+
     PCAPRecordedWorkmanship = 8004,
 
     [ServerOnly]
@@ -332,18 +341,6 @@ public enum PropertyFloat : ushort
     BaseDamageMod = 20050,
     BaseElementalDamageMod = 20051,
     BaseManaConversionMod = 20052,
-    
-    [ServerOnly]
-    PatrolSpeed = 20053,
-    
-    [ServerOnly]
-    PatrolScanInterval = 20054,
-    
-    [ServerOnly]
-    PatrolPauseMinSeconds = 20055,
-    
-    [ServerOnly]
-    PatrolPauseMaxSeconds = 20056,
 }
 
 public static class PropertyFloatExtensions
