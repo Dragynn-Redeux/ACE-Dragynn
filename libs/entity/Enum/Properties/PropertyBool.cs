@@ -251,9 +251,11 @@ public enum PropertyBool : ushort
     JewelSocket10AlternateEffect = 171,
     NoRotCorpse = 172,
     CreatureArmorEffectsDamageReduction = 173,
-    GeneratesPassiveThreat = 174,
     [ServerOnly]
-    PatrolEnabled = 175,
+    PatrolEnabled = 174,
+    [ServerOnly]
+    GeneratesPassiveThreat = 175,
+
 
     /* custom */
     [ServerOnly]
