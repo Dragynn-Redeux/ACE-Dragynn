@@ -88,7 +88,7 @@ public sealed class PassiveThreatController
             var minFloorThreat = threatMinimum + additiveFloor;
 
             // Desired threat relative to max active threat.
-            // With only one top competitor, and your current thresholding behavior:
+            // With only one top competitor, and current thresholding behavior:
             // P(Passive) ≈ 1 - 0.5*max / PassiveThreat  => PassiveThreat = 0.5*max/(1-P)
             var desired = (int)Math.Ceiling((0.5f * maxActiveThreat) / Math.Max(1e-3f, (1.0f - targetPct)));
 

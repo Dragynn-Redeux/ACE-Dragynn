@@ -159,8 +159,8 @@ partial class Creature
 
     protected virtual void HandleFindTarget()
     {
-        // Passive objectives never acquire attack targets
-        if (GeneratesPassiveThreat)
+        // Only *non-combat* passive objectives never acquire targets (eg crates)
+        if (GeneratesPassiveThreat && TargetingTactic == TargetingTactic.None)
         {
             return;
         }
@@ -172,6 +172,7 @@ partial class Creature
 
         FindNextTarget(false);
     }
+
 
     private void SetNextTargetTime()
     {
