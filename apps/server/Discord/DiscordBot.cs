@@ -23,6 +23,7 @@ public class DiscordBot
     private IConfiguration _configuration;
     private IServiceProvider _services;
     private DiscordSocketClient _client;
+    private IConfigurationSection _discordSection;
 
     private readonly DiscordSocketConfig _socketConfig =
         new()
@@ -34,6 +35,24 @@ public class DiscordBot
     public async Task Initialize(IConfiguration configuration)
     {
         _configuration = configuration;
+
+        // Support being initialized with either the root configuration (containing a `Discord` section)
+        // or directly with the `Discord` section itself.
+        var maybeDiscord = _configuration.GetSection("Discord");
+        _discordSection = maybeDiscord.Exists() ? maybeDiscord : _configuration as IConfigurationSection;
+
+        if (_discordSection == null || !_discordSection.Exists())
+        {
+            _log.Information("Discord configuration section is missing; Discord integration will not start.");
+            return;
+        }
+
+        var discordEnabled = _discordSection.GetValue<bool?>("Enabled") ?? true;
+        if (!discordEnabled)
+        {
+            _log.Information("Discord integration is disabled via configuration (Discord:Enabled=false).");
+            return;
+        }
 
         _services = new ServiceCollection()
             .AddHttpClient()
@@ -50,22 +69,54 @@ public class DiscordBot
 
         await _services.GetRequiredService<InteractionHandler>().InitializeAsync();
 
-        _client.Ready += CreatePopulationChannelUpdateTimer;
-        _client.Ready += CreateUniquePopulationChannelUpdateTimer;
-        _client.Ready += CreateDayNightCycleChannelUpdateTimer;
+        // Feature toggles: each feature can be disabled via appsettings.
+        // Defaults to enabled when missing.
+        _client.Ready += () => RunInBackground(CreatePopulationChannelUpdateTimer);
+        _client.Ready += () => RunInBackground(CreateUniquePopulationChannelUpdateTimer);
+        _client.Ready += () => RunInBackground(CreateDayNightCycleChannelUpdateTimer);
+        _client.Ready += () => RunInBackground(CreateMarketChannelsUpdateTimers);
 
-        await _client.LoginAsync(TokenType.Bot, _configuration.GetValue<string>("Token"));
+        var token = _discordSection.GetValue<string>("Token");
+        await _client.LoginAsync(TokenType.Bot, token);
         await _client.StartAsync();
 
         await Task.Delay(Timeout.Infinite);
     }
 
+    private Task CreateMarketChannelsUpdateTimers()
+    {
+        try
+        {
+            var marketSection = _discordSection.GetSection("MarketChannels");
+            if (!marketSection.Exists())
+            {
+                return Task.CompletedTask;
+            }
+
+            if (!IsFeatureEnabled(marketSection))
+            {
+                return Task.CompletedTask;
+            }
+
+            MarketListingsPublisher.Initialize(_client, marketSection);
+        }
+        catch (Exception ex)
+        {
+            _log.Error(ex, "Failed to initialize MarketListingsPublisher");
+        }
+
+        return Task.CompletedTask;
+    }
+
     private Task CreatePopulationChannelUpdateTimer()
     {
-        var updateInterval = _configuration
-            .GetSection("StatChannels")
-            .GetSection("Population")
-            .GetValue<double>("UpdateInterval");
+        var section = _discordSection.GetSection("StatChannels").GetSection("Population");
+        if (!section.Exists() || !IsFeatureEnabled(section))
+        {
+            return Task.CompletedTask;
+        }
+
+        var updateInterval = section.GetValue<double>("UpdateInterval");
 
         var timer = new Timer { AutoReset = true, Interval = updateInterval };
 
@@ -78,7 +129,7 @@ public class DiscordBot
 
     private async void DoPopulationChannelUpdate(object sender, ElapsedEventArgs e)
     {
-        var populationChannelId = _configuration
+        var populationChannelId = _discordSection
             .GetSection("StatChannels")
             .GetSection("Population")
             .GetValue<ulong>("ChannelId");
@@ -113,10 +164,13 @@ public class DiscordBot
 
     private Task CreateUniquePopulationChannelUpdateTimer()
     {
-        var updateInterval = _configuration
-            .GetSection("StatChannels")
-            .GetSection("UniquePop")
-            .GetValue<double>("UpdateInterval");
+        var section = _discordSection.GetSection("StatChannels").GetSection("UniquePop");
+        if (!section.Exists() || !IsFeatureEnabled(section))
+        {
+            return Task.CompletedTask;
+        }
+
+        var updateInterval = section.GetValue<double>("UpdateInterval");
 
         var timer = new Timer { AutoReset = true, Interval = updateInterval };
 
@@ -129,7 +183,7 @@ public class DiscordBot
 
     private async void DoUniquePopulationChannelUpdate(object sender, ElapsedEventArgs e)
     {
-        var uniquePopulationChannelId = _configuration
+        var uniquePopulationChannelId = _discordSection
             .GetSection("StatChannels")
             .GetSection("UniquePop")
             .GetValue<ulong>("ChannelId");
@@ -166,10 +220,13 @@ public class DiscordBot
 
     private Task CreateDayNightCycleChannelUpdateTimer()
     {
-        var updateInterval = _configuration
-            .GetSection("StatChannels")
-            .GetSection("DayNightCycle")
-            .GetValue<double>("UpdateInterval");
+        var section = _discordSection.GetSection("StatChannels").GetSection("DayNightCycle");
+        if (!section.Exists() || !IsFeatureEnabled(section))
+        {
+            return Task.CompletedTask;
+        }
+
+        var updateInterval = section.GetValue<double>("UpdateInterval");
 
         var timer = new Timer { AutoReset = true, Interval = updateInterval };
 
@@ -182,11 +239,18 @@ public class DiscordBot
 
     private async void DoDayNightCycleChannelUpdate(object sender, ElapsedEventArgs e)
     {
-        var dayNightCycleChannelId = _configuration
+        var dayNightCycleChannelId = _discordSection
             .GetSection("StatChannels")
             .GetSection("DayNightCycle")
             .GetValue<ulong>("ChannelId");
         if (await _client.GetChannelAsync(dayNightCycleChannelId) is not IVoiceChannel channel)
+        {
+            return;
+        }
+
+        // If the feature is disabled at runtime (config reload), stop doing work.
+        var section = _discordSection.GetSection("StatChannels").GetSection("DayNightCycle");
+        if (!IsFeatureEnabled(section))
         {
             return;
         }
@@ -238,5 +302,28 @@ public class DiscordBot
         _log.Write(severity, message.Exception, "[{Source}] {Message}", message.Source, message.Message);
 
         await Task.CompletedTask;
+    }
+
+    private static bool IsFeatureEnabled(IConfiguration section)
+    {
+        // If missing, default to enabled to preserve legacy behavior.
+        return section.GetValue<bool?>("Enabled") ?? true;
+    }
+
+    private static Task RunInBackground(Func<Task> action)
+    {
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await action();
+            }
+            catch
+            {
+                // ignore; individual initializers handle their own logging
+            }
+        });
+
+        return Task.CompletedTask;
     }
 }

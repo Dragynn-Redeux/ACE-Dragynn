@@ -263,11 +263,17 @@ partial class Program
         PropertyManager.Initialize();
 
         _log.Information("Initializing PlayerMarket...");
+        var marketListingLifetimeSeconds = PropertyManager.GetDouble("market_listing_lifetime_seconds").Item;
+        if (marketListingLifetimeSeconds < 0)
+        {
+            marketListingLifetimeSeconds = 0;
+        }
+
         MarketServiceLocator.Initialize(
             new DbPlayerMarketRepository(),
             new PlayerMarketConfig
             {
-                ListingLifetime = TimeSpan.FromDays(7),
+                ListingLifetime = TimeSpan.FromSeconds(marketListingLifetimeSeconds),
                 MaxActiveListingsPerAccount = 50,
                 DefaultPayoutCurrency = MarketCurrencyType.Pyreal,
                 RequireManualReclaimOnExpire = true

@@ -1409,9 +1409,6 @@ public partial class ShardDbContext : DbContext
             entity.Property(e => e.ItemTier).HasColumnName("ItemTier");
             entity.Property(e => e.WieldReq).HasColumnName("WieldReq");
 
-            entity.Property(e => e.Inscription).HasMaxLength(256).HasColumnName("Inscription");
-            entity.Property(e => e.OriginalInscription).HasMaxLength(256).HasColumnName("OriginalInscription");
-
             entity.Property(e => e.CreatedAtUtc).HasColumnName("CreatedAtUtc");
             entity.Property(e => e.ExpiresAtUtc).HasColumnName("ExpiresAtUtc");
 

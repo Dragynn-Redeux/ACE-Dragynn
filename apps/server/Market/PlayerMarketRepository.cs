@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using ACE.Database.Models.Shard;
 using ACE.Server.Market;
+using ACE.Server.Managers;
 using ACE.Server.WorldObjects;
 
 public interface IPlayerMarketRepository
@@ -14,8 +15,7 @@ public interface IPlayerMarketRepository
         MarketCurrencyType currencyType,
         int vendorTier,
         int? wieldReq,
-        int? itemTier,
-        string inscription);
+        int? itemTier);
 
     IEnumerable<PlayerMarketListing> GetListingsForVendorTier(int vendorTier, DateTime nowUtc);
 
@@ -69,10 +69,17 @@ public sealed class PlayerMarketRepository : IPlayerMarketRepository
         MarketCurrencyType currencyType,
         int vendorTier,
         int? wieldReq,
-        int? itemTier,
-        string inscription)
+        int? itemTier)
     {
         var now = DateTime.UtcNow;
+        var lifetimeSeconds = PropertyManager
+            .GetDouble("market_listing_lifetime_seconds", MarketServiceLocator.Config.ListingLifetime.TotalSeconds)
+            .Item;
+
+        if (lifetimeSeconds < 0)
+        {
+            lifetimeSeconds = 0;
+        }
 
         var listing = new PlayerMarketListing
         {
@@ -89,29 +96,35 @@ public sealed class PlayerMarketRepository : IPlayerMarketRepository
             MarketVendorTier = vendorTier,
             ItemTier = itemTier,
             WieldReq = wieldReq,
-            Inscription = inscription,
-            OriginalInscription = item.GetProperty(ACE.Entity.Enum.Properties.PropertyString.Inscription),
             CreatedAtUtc = now,
-            ExpiresAtUtc = now + MarketServiceLocator.Config.ListingLifetime
+            ExpiresAtUtc = now + TimeSpan.FromSeconds(lifetimeSeconds)
         };
 
         _listingsById[listing.Id] = listing;
         _listingsByItemGuid[listing.ItemGuid] = listing;
         _listingsByItemBiotaId[listing.ItemBiotaId] = listing;
+        MarketListingEvents.RaiseListingCreated(listing.Id);
 
         return listing;
     }
 
     public IEnumerable<PlayerMarketListing> GetListingsForVendorTier(int vendorTier, DateTime nowUtc)
     {
-        return _listingsById.Values.Where(l =>
+        var baseQuery = _listingsById.Values.Where(l =>
+            !l.IsSold
+            && !l.IsCancelled
+            && l.ExpiresAtUtc > nowUtc);
+
+        if (vendorTier == 0)
+        {
+            return baseQuery.Where(l => !l.ItemTier.HasValue || l.MarketVendorTier == 0);
+        }
+
+        return baseQuery.Where(l =>
             // Prefer ItemTier-based routing when available.
             // Fall back to MarketVendorTier for older listings where ItemTier is null.
             ((l.ItemTier.HasValue && l.ItemTier.Value == vendorTier)
-             || (!l.ItemTier.HasValue && l.MarketVendorTier == vendorTier))
-            && !l.IsSold
-            && !l.IsCancelled
-            && l.ExpiresAtUtc > nowUtc);
+             || (!l.ItemTier.HasValue && l.MarketVendorTier == vendorTier)));
     }
 
     public IEnumerable<PlayerMarketListing> GetListingsForAccount(uint accountId, DateTime nowUtc)

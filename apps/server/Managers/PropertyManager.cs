@@ -670,6 +670,8 @@ public static class DefaultPropertyManager
         PropertyManager.ModifyLong("max_level", 126);
         PropertyManager.ModifyLong("fellowship_even_share_level", 50);
 
+        PropertyManager.ModifyLong("market_listing_max_price", 1_000_000_000);
+
         PropertyManager.ModifyDouble("vendor_unique_rot_time", 1800);
     }
 
@@ -834,7 +836,8 @@ public static class DefaultPropertyManager
         ("olthoi_north_camp_south_supply_level", new Property<long>(0, "Set the supply level of the Olthoi North Southern Camp.")),
         ("olthoi_north_camp_west_supply_level", new Property<long>(0, "Set the supply level of the Olthoi North Western Camp.")),
         ("olthoi_north_camp_north_supply_level", new Property<long>(0, "Set the supply level of the Olthoi North Northern Camp.")),
-        ("fragment_stability_phase_one", new Property<long>(0, "Phase One resonance stability tracker (0–15000 max)"))
+        ("fragment_stability_phase_one", new Property<long>(0, "Phase One resonance stability tracker (0–15000 max)")),
+        ("market_listing_max_price", new Property<long>(1_000_000_000, "Max market list price"))
     );
 
     public static readonly ReadOnlyDictionary<string, Property<double>> DefaultDoubleProperties = DictOf(
@@ -864,6 +867,7 @@ public static class DefaultPropertyManager
         ("spellcast_max_angle", new Property<double>(20.0, "for advanced player spell casting, the maximum angle to target release a spell projectile. retail seemed to default to value of around 20, although some players seem to prefer a higher 45 degree angle")),
         ("trophy_drop_rate", new Property<double>(1.0, "Modifier for trophies dropped on creature death")),
         ("unlocker_window", new Property<double>(10.0, "The number of seconds a player unlocking a chest has exclusive access to first opening the chest.")),
+        ("market_listing_lifetime_seconds", new Property<double>(60 * 60 * 24 * 7, "How long (in seconds) a player market listing remains active before it expires.")),
         ("vendor_unique_rot_time", new Property<double>(300, "the number of seconds before unique items sold to vendors disappear")),
         ("vitae_penalty", new Property<double>(0.05, "the amount of vitae penalty a player gets per death")),
         ("vitae_penalty_max", new Property<double>(0.40, "the maximum vitae penalty a player can have")),

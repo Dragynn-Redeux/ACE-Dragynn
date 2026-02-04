@@ -11,4 +11,6 @@ public sealed class MarketBrokerSessionState
     public DateTime? PendingExpiresAtUtc { get; set; }
 
     public int? PendingCancelListingId { get; set; }
+
+    public int? PendingCancelRequestedIndex { get; set; }
 }

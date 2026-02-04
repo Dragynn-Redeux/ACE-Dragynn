@@ -24,9 +24,6 @@ public class PlayerMarketListing
     public int? ItemTier { get; set; }
     public int? WieldReq { get; set; }
 
-    public string? Inscription { get; set; }
-    public string? OriginalInscription { get; set; }
-
     public DateTime CreatedAtUtc { get; set; }
     public DateTime ExpiresAtUtc { get; set; }
 

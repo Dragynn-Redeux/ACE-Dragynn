@@ -10,6 +10,10 @@ public class GameEventApproachVendor : GameEventMessage
     public GameEventApproachVendor(Session session, Vendor vendor, uint altCurrencySpent)
         : base(GameEventType.ApproachVendor, GameMessageGroup.UIQueue, session, 8192) // 5,376 is the average seen in retail pcaps, 15,272 is the max seen in retail pcaps
     {
+        // Ensure the per-thread market listing cache starts clean for this inventory serialization.
+        // This avoids repeated DB lookups when serializing large market vendor inventories.
+        WorldObject.ClearMarketListingCache();
+
         Writer.Write(vendor.Guid.Full);
 
         // the types of items vendor will purchase

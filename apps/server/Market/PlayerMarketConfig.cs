@@ -32,6 +32,7 @@ public sealed class PlayerMarketConfig
     /// Otherwise, expiration is only evaluated lazily (on vendor / lister interaction).
     /// </summary>
     public TimeSpan? ExpirationSweepInterval { get; init; } = TimeSpan.FromMinutes(5);
+
 }
 
 /// <summary>

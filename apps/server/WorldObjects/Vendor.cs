@@ -129,6 +129,13 @@ public class Vendor : Creature
         OpenForBusiness = ValidateVendorRequirements();
 
         SetMerchandiseItemTypes();
+
+        // Market vendors are driven by player listings. The client filters displayed items based on
+        // `MerchandiseItemTypes`, so allow all item categories for market vendors.
+        if (IsMarketVendor)
+        {
+            MerchandiseItemTypes = (int)ItemType.Item;
+        }
     }
 
     private bool ValidateVendorRequirements()
@@ -387,28 +394,26 @@ public class Vendor : Creature
             item.Value = listing.ListedPrice;
             item.AltCurrencyValue = listing.ListedPrice;
 
+            // For stackables, show the full stack price on the vendor UI.
+            // Value is derived from StackUnitValue * StackSize.
+            var stackSize = item.StackSize ?? 1;
+            if (stackSize > 1)
+            {
+                // Show listing price for the whole stack on the vendor UI. We keep the real stack size.
+                // StackUnitValue drives the displayed value for stackables.
+                item.SetProperty(PropertyInt.StackUnitValue, listing.ListedPrice);
+                item.SetStackSize(stackSize);
+            }
+
             // Tag the display item so we can resolve the listing on purchase.
             item.SetProperty(PropertyInt.MarketListingId, listing.Id);
 
-            // Show remaining listing time in the inscription.
-            var remaining = listing.ExpiresAtUtc - now;
-            if (remaining < TimeSpan.Zero)
-            {
-                remaining = TimeSpan.Zero;
-            }
-
-            var remainingText = $"{(int)Math.Floor(remaining.TotalDays)}d {remaining.Hours}h left";
-
-            if (!string.IsNullOrWhiteSpace(listing.Inscription))
-            {
-                item.SetProperty(PropertyString.Inscription, $"{listing.Inscription} ({remainingText})");
-            }
-            else
-            {
-                item.SetProperty(PropertyString.Inscription, remainingText);
-            }
-
             item.ContainerId = Guid.Full;
+            item.Location = null;
+
+            // Market listings are unique sale items; ensure create-list stack size is not treated as unlimited.
+            // Preserve correct quantity display for stackables.
+            item.VendorShopCreateListStackSize = Math.Max(1, item.StackSize ?? 1);
             item.CalculateObjDesc();
 
             // Ensure we don't silently overwrite items if a guid collision still occurs.
@@ -459,23 +464,7 @@ public class Vendor : Creature
 
         item.SetProperty(PropertyInt.MarketListingId, listing.Id);
 
-        var now = DateTime.UtcNow;
-        var remaining = listing.ExpiresAtUtc - now;
-        if (remaining < TimeSpan.Zero)
-        {
-            remaining = TimeSpan.Zero;
-        }
-
-        var remainingText = $"{(int)Math.Floor(remaining.TotalDays)}d {remaining.Hours}h left";
-
-        if (!string.IsNullOrWhiteSpace(listing.Inscription))
-        {
-            item.SetProperty(PropertyString.Inscription, $"{listing.Inscription} ({remainingText})");
-        }
-        else
-        {
-            item.SetProperty(PropertyString.Inscription, remainingText);
-        }
+        item.VendorShopCreateListStackSize = Math.Max(1, item.StackSize ?? 1);
 
         return true;
     }
@@ -885,7 +874,28 @@ public class Vendor : Creature
 
         foreach (var item in purchaseItems)
         {
-            var cost = GetSellCost(item);
+            uint cost;
+
+            // Market listings: the UI shows the listing price for the whole stack.
+            // Do not multiply cost by stack size.
+            var marketListingId = item.GetProperty(PropertyInt.MarketListingId);
+            if (marketListingId.HasValue && marketListingId.Value > 0)
+            {
+                var listing = MarketServiceLocator.PlayerMarketRepository.GetListingById(marketListingId.Value);
+                if (listing != null)
+                {
+                    cost = (uint)listing.ListedPrice;
+                }
+                else
+                {
+                    // Fallback: for stackables we set StackUnitValue to the listing price.
+                    cost = (uint)(item.GetProperty(PropertyInt.StackUnitValue) ?? (item.Value ?? 0));
+                }
+            }
+            else
+            {
+                cost = GetSellCost(item);
+            }
 
             // detect rollover?
             totalPrice += cost;

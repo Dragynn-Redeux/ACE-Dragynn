@@ -63,9 +63,9 @@ partial class Player
 
         var currencyWcid = vendor.AlternateCurrency ?? coinStackWcid;
 
-        SpendCurrency(currencyWcid, cost, true);
-
-        vendor.MoneyIncome += (int)cost;
+        // Create items first; if anything fails to add (e.g. encumbrance changed since validation),
+        // do not charge the player.
+        var allAdded = true;
 
         foreach (var item in genericItems)
         {
@@ -81,6 +81,8 @@ partial class Player
                     );
 
                     item.Destroy(); // cleanup for guid manager
+                    allAdded = false;
+                    break;
                 }
                 else
                 {
@@ -173,6 +175,20 @@ partial class Player
 
                     // restore original value before saving item again
                     item.Value = listing.OriginalValue;
+
+                    // If this was a stackable market listing display item, restore the per-unit value.
+                    // On vendor display we temporarily set StackUnitValue to the listing price so the
+                    // computed Value shows the full stack amount.
+                    var purchasedStackSize = item.StackSize ?? 1;
+                    if (purchasedStackSize > 1)
+                    {
+                        var originalUnitValue = listing.OriginalValue / purchasedStackSize;
+                        item.SetProperty(PropertyInt.StackUnitValue, originalUnitValue);
+                        item.SetStackSize(purchasedStackSize);
+                    }
+
+                     // This is vendor/listing metadata; do not keep it on the purchased item.
+                     item.RemoveProperty(PropertyInt.MarketListingId);
                 }
 
                 // this was only for when the unique item was sold to the vendor,
@@ -198,8 +214,54 @@ partial class Player
                 _log.Error(
                     $"[VENDOR] {Name}.FinalizeBuyTransaction({vendor.Name}) - couldn't add {item.Name} ({item.Guid}) to player inventory after validation, this shouldn't happen!"
                 );
+                allAdded = false;
+                break;
             }
         }
+
+        if (!allAdded)
+        {
+            // Best-effort: recalculate limits to send a more accurate failure reason.
+            // This can occur if encumbrance/slots changed between validation and finalization.
+            var itemsToReceive = new ItemsToReceive(this);
+
+            foreach (var item in genericItems)
+            {
+                var service = item.GetProperty(PropertyBool.VendorService) ?? false;
+                if (!service)
+                {
+                    itemsToReceive.Add(item.WeenieClassId, item.StackSize ?? 1);
+                }
+            }
+
+            foreach (var item in uniqueItems)
+            {
+                itemsToReceive.Add(item.WeenieClassId, item.StackSize ?? 1);
+            }
+
+            if (itemsToReceive.PlayerExceedsAvailableBurden)
+            {
+                SendTransientError("You are too encumbered to buy that!");
+            }
+            else if (itemsToReceive.PlayerOutOfInventorySlots)
+            {
+                SendTransientError("You do not have enough pack space to buy that!");
+            }
+            else if (itemsToReceive.PlayerOutOfContainerSlots)
+            {
+                SendTransientError("You do not have enough container slots to buy that!");
+            }
+            else
+            {
+                SendTransientError("Transaction failed.");
+            }
+
+            return;
+        }
+
+        SpendCurrency(currencyWcid, cost, true);
+
+        vendor.MoneyIncome += (int)cost;
 
         Session.Network.EnqueueSend(new GameMessageSound(Guid, Sound.PickUpItem));
 
