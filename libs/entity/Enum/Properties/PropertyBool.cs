@@ -251,6 +251,11 @@ public enum PropertyBool : ushort
     JewelSocket10AlternateEffect = 171,
     NoRotCorpse = 172,
     CreatureArmorEffectsDamageReduction = 173,
+    
+    [ServerOnly]
+    PatrolEnabled = 174,   
+    [ServerOnly]
+    PatrolForceWalk = 175, 
 
     
     [ServerOnly]
@@ -300,6 +305,7 @@ public enum PropertyBool : ushort
 
     [ServerOnly]
     VendorSellsSpecialItems = 9014,
+
 }
 
 public static class PropertyBoolExtensions

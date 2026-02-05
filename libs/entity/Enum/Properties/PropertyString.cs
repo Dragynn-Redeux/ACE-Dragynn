@@ -84,7 +84,7 @@ public enum PropertyString : ushort
 
     [ServerOnly]
     SigilTrinketAllowedSpecializedSkills = 53,
-    [ServerOnly ]
+    [ServerOnly]
     PatrolPath = 54,
 
     [ServerOnly]
