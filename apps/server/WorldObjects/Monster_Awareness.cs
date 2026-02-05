@@ -115,7 +115,8 @@ partial class Creature
             }
             else
             {
-                SetProperty(PropertyInt.TargetingTactic, (int)TargetingTactic);
+                // FIX: write the incoming value, not the property again
+                SetProperty(PropertyInt.TargetingTactic, (int)value);
             }
         }
     }
@@ -158,6 +159,12 @@ partial class Creature
 
     protected virtual void HandleFindTarget()
     {
+        // Only *non-combat* passive objectives never acquire targets (eg crates)
+        if (GeneratesPassiveThreat && TargetingTactic == TargetingTactic.None)
+        {
+            return;
+        }
+
         if (Timers.RunningTime < NextFindTarget)
         {
             return;
@@ -165,6 +172,7 @@ partial class Creature
 
         FindNextTarget(false);
     }
+
 
     private void SetNextTargetTime()
     {
@@ -187,23 +195,38 @@ partial class Creature
         NextFindTarget = Timers.RunningTime + next;
     }
 
-
     private bool DebugThreatSystem
     {
         get => PropertyManager.GetBool("debug_threat_system").Item;
     }
+    private readonly PassiveThreatController _passiveThreatController = new();
     private const int ThreatMinimum = 100;
     private double ThreatGainedSinceLastTick = 1;
+
+    public bool GeneratesPassiveThreat =>
+        GetProperty(PropertyBool.GeneratesPassiveThreat) ?? false;
+
+    public int PassiveThreatThreshold =>
+        GetProperty(PropertyInt.PassiveThreatThreshold) ?? 0;
 
     private Dictionary<Creature, int> ThreatLevel;
     public Dictionary<Creature, float> PositiveThreat;
     public Dictionary<Creature, float> NegativeThreat;
 
-    public List<Player> SkipThreatFromNextAttackTargets = [];
-    public List<Player> DoubleThreatFromNextAttackTargets = [];
+    private void EnsureThreatCollections()
+    {
+        ThreatLevel ??= new Dictionary<Creature, int>();
+        PositiveThreat ??= new Dictionary<Creature, float>();
+        NegativeThreat ??= new Dictionary<Creature, float>();
+    }
 
+    // FIX: avoid C# collection expression [] (not supported in many ACE builds)
+    public List<Player> SkipThreatFromNextAttackTargets = new();
+    public List<Player> DoubleThreatFromNextAttackTargets = new();
     public void IncreaseTargetThreatLevel(Creature targetCreature, int amount)
     {
+        EnsureThreatCollections();
+
         var modifiedAmount = Convert.ToSingle(amount);
 
         if (targetCreature is Player targetPlayer)
@@ -258,6 +281,13 @@ partial class Creature
     /// </summary>
     private void TickDownAllTargetThreatLevels()
     {
+        EnsureThreatCollections();
+        PruneDeadThreatTargets();
+        if (ThreatLevel.Count == 0)
+        {
+            return;
+        }
+
         var totalThreat = 0;
         foreach (var kvp in ThreatLevel)
         {
@@ -281,13 +311,42 @@ partial class Creature
             {
                 ThreatLevel[key] = ThreatMinimum;
             }
-        }
 
-        //if (DebugThreatSystem)
-        //    _log.Information("TickDownAllTargetThreatLevels() - {Name} - {Threat}", Name, threatGained);
+            // Keep passive-threat targets at or above their baseline
+            if (key.GeneratesPassiveThreat && key.PassiveThreatThreshold >= 2)
+            {
+                var passiveFloor = ThreatMinimum + key.PassiveThreatThreshold;
+                if (ThreatLevel[key] < passiveFloor)
+                {
+                    ThreatLevel[key] = passiveFloor;
+                }
+            }
+        }
 
         ThreatGainedSinceLastTick = 0;
     }
+    private void PruneDeadThreatTargets()
+    {
+        EnsureThreatCollections();
+
+        if (ThreatLevel.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var kvp in ThreatLevel.ToList())
+        {
+            var target = kvp.Key;
+
+            if (target == null || target.IsDead)
+            {
+                ThreatLevel.Remove(target);
+                PositiveThreat?.Remove(target);
+                NegativeThreat?.Remove(target);
+            }
+        }
+    }
+
 
     public virtual bool FindNextTarget(bool onTakeDamage, Creature untargetablePlayer = null)
     {
@@ -341,17 +400,6 @@ partial class Creature
                 ThreatLevel?.Remove(attackTargetCreature);
             }
 
-            // Generally, a creature chooses whom to attack based on:
-            //  - who it was last attacking,
-            //  - who attacked it last,
-            //  - or who caused it damage last.
-
-            // When players first enter the creature's detection radius, however, none of these things are useful yet,
-            // so the creature chooses a target randomly, weighted by distance.
-
-            // Players within the creature's detection sphere are weighted by how close they are to the creature --
-            // the closer you are, the more chance you have to be selected to be attacked.
-
             var prevAttackTarget = AttackTarget;
 
             var targetDistances = BuildTargetDistance(visibleTargets);
@@ -359,6 +407,8 @@ partial class Creature
             // New Threat System
             if (!(UseLegacyThreatSystem ?? false))
             {
+                EnsureThreatCollections();
+
                 // Manage Threat Level list
                 foreach (var targetCreature in visibleTargets)
                 {
@@ -391,6 +441,17 @@ partial class Creature
                         }
                     }
                 }
+
+                // Apply passive threat sources (e.g., crates) so they influence selection math
+                _passiveThreatController.ApplyPassiveThreatThreshold(
+                    this,
+                    visibleTargets,
+                    ThreatLevel,
+                    ThreatMinimum,
+                    DebugThreatSystem,
+                    _log
+                );
+                PruneDeadThreatTargets();
 
                 if (ThreatLevel?.Count == 0)
                 {
@@ -463,8 +524,6 @@ partial class Creature
                         }
 
                         // Adjust values for each entry in the sorted list so that entry's value includes the sum of all previous values.
-                        // i.e. KVPs of <1,30>, <2,38>, <3,45>
-                        // would become <1,30>, <2,68>, <3,113>
                         if (DebugThreatSystem)
                         {
                             _log.Information("Additive Threat Values - {Name}", Name);
@@ -540,16 +599,15 @@ partial class Creature
                             NegativeThreat[targetCreatureKey.Key] = percentile - 1;
                         }
                     }
-
+                    _passiveThreatController.UpdatePassiveLossStreaks(AttackTarget as Creature, ThreatLevel);
                     if (DebugThreatSystem)
                     {
-                        _log.Information("SELECTED PLAYER: {Name}", AttackTarget.Name);
+                       _log.Information("SELECTED PLAYER: {Name}", AttackTarget.Name);
                     }
                 }
             }
             else
             {
-                //var currentTactic = CurrentTargetingTactic;
                 if (onTakeDamage)
                 {
                     return false;
@@ -558,67 +616,47 @@ partial class Creature
                 switch (CurrentTargetingTactic)
                 {
                     case TargetingTactic.None:
-
-                        //Console.WriteLine($"{Name}.FindNextTarget(): TargetingTactic.None");
-                        break; // same as focused?
+                        break;
 
                     case TargetingTactic.Random:
-
-                        // this is a very common tactic with monsters,
-                        // although it is not truly random, it is weighted by distance
-                        //var targetDistances = BuildTargetDistance(visibleTargets);
                         AttackTarget = SelectWeightedDistance(targetDistances);
                         break;
 
                     case TargetingTactic.Focused:
-
-                        break; // always stick with original target?
+                        break;
 
                     case TargetingTactic.LastDamager:
-
                         var lastDamager = DamageHistory.LastDamager?.TryGetAttacker() as Creature;
                         if (lastDamager != null)
                         {
                             AttackTarget = lastDamager;
                         }
-
                         break;
 
                     case TargetingTactic.TopDamager:
-
                         var topDamager = DamageHistory.TopDamager?.TryGetAttacker() as Creature;
                         if (topDamager != null)
                         {
                             AttackTarget = topDamager;
                         }
-
                         break;
 
-                    // these below don't seem to be used in PY16 yet...
-
                     case TargetingTactic.Weakest:
-
-                        // should probably shuffle the list beforehand,
-                        // in case a bunch of levels of same level are in a group,
-                        // so the same player isn't always selected
                         var lowestLevel = visibleTargets.OrderBy(p => p.Level).FirstOrDefault();
                         AttackTarget = lowestLevel;
                         break;
 
                     case TargetingTactic.Strongest:
-
                         var highestLevel = visibleTargets.OrderByDescending(p => p.Level).FirstOrDefault();
                         AttackTarget = highestLevel;
                         break;
 
                     case TargetingTactic.Nearest:
-
                         var nearest = BuildTargetDistance(visibleTargets);
                         AttackTarget = nearest[0].Target;
                         break;
                 }
             }
-            //Console.WriteLine($"{Name}.FindNextTarget = {AttackTarget.Name}");
 
             var player = AttackTarget as Player;
             if (player != null && !Visibility && player.AddTrackedObject(this))
@@ -628,9 +666,6 @@ partial class Creature
                 );
             }
 
-            // If multiple player targets are nearby, check to see if the current target can force this monster to look for a new target
-            // Base chance to avoid monster aggro can be up to 25%, depending on monster perception and player deception.
-            // With Specialized Deception and the Smokescreen combat ability, it's possible for a player to receive 100% chance to avoid aggro.
             if (visibleTargets.Count > 1 && player != null && player.IsAttemptingToDeceive)
             {
                 var monsterPerception = GetCreatureSkill(Skill.Perception).Current;
@@ -639,7 +674,6 @@ partial class Creature
                 var skillCheck = SkillCheck.GetSkillChance(monsterPerception, playerDeception);
                 var chanceToDeceive = skillCheck * 0.25f;
 
-                // SPEC BONUS - Deception (chanceToDeceive value doubled)
                 if (
                     player.GetCreatureSkill(Skill.Deception).AdvancementClass == SkillAdvancementClass.Specialized
                     && visibleTargets.Count > 1
@@ -648,8 +682,7 @@ partial class Creature
                     chanceToDeceive *= 2;
                 }
 
-                // COMBAT ABILITY - Smokescreen (+50% to chanceToDeceive value, additively)
-                if (player is {SmokescreenIsActive: true})
+                if (player is { SmokescreenIsActive: true })
                 {
                     chanceToDeceive += 0.5f;
                 }
@@ -685,10 +718,6 @@ partial class Creature
         }
         finally
         {
-            // ServerPerformanceMonitor.AddToCumulativeEvent(
-            //     ServerPerformanceMonitor.CumulativeEventHistoryType.Monster_Awareness_FindNextTarget,
-            //     stopwatch.Elapsed.TotalSeconds
-            // );
         }
     }
 
@@ -699,10 +728,31 @@ partial class Creature
     {
         var visibleTargets = new List<Creature>();
 
-        foreach (var creature in PhysicsObj.ObjMaint.GetVisibleTargetsValuesOfTypeCreature())
+        // Start with the engine's normal "attack targets" list (players / pets / foes / etc.)
+        var candidates = PhysicsObj.ObjMaint.GetVisibleTargetsValuesOfTypeCreature().ToList();
+
+        // Hard include: any visible creature that generates passive threat, even if it isn't in the normal
+        // AttackTargets pipeline yet. These only become valid if they are already within attack range.
+        foreach (var obj in PhysicsObj.ObjMaint.GetVisibleObjects(PhysicsObj.CurCell))
         {
-            // ensure attackable
-            if (!creature.Attackable && creature.TargetingTactic == TargetingTactic.None || creature.Teleporting)
+            var c = obj.WeenieObj.WorldObject as Creature;
+            if (c != null && c.GeneratesPassiveThreat && !candidates.Contains(c))
+            {
+                candidates.Add(c);
+            }
+        }
+
+        foreach (var creature in candidates)
+        {
+            if (creature == null)
+            {
+                continue;
+            }
+
+            var allowPassiveThreat = creature.GeneratesPassiveThreat;
+
+            // ensure attackable (unless passive threat target)
+            if ((!allowPassiveThreat && !creature.Attackable && creature.TargetingTactic == TargetingTactic.None) || creature.Teleporting)
             {
                 continue;
             }
@@ -713,12 +763,6 @@ partial class Creature
                 continue;
             }
 
-            // ensure within 'detection radius' ?
-            var chaseDistSq = creature == AttackTarget ? MaxChaseRangeSq : VisualAwarenessRangeSq;
-
-            /*if (Location.SquaredDistanceTo(creature.Location) > chaseDistSq)
-                continue;*/
-
             var distSq = PhysicsObj.get_distance_sq_to_object(creature.PhysicsObj, true);
 
             if (creature is Player targetPlayer && targetPlayer.TestStealth(this, distSq, $"{Name} sees you! You lose stealth."))
@@ -726,9 +770,23 @@ partial class Creature
                 continue;
             }
 
-            if (distSq > chaseDistSq)
+            if (allowPassiveThreat)
             {
-                continue;
+                // Passive-threat targets must be within "noticed" range to be considered.
+                // Use VisualAwarenessRange so this can be tuned per-weenie via PropertyFloat.VisualAwarenessRange.
+                if (distSq > VisualAwarenessRangeSq)
+                {
+                    continue;
+                }
+            }
+            else
+            {
+                // Normal behavior: within detection/chase radius
+                var chaseDistSq = creature == AttackTarget ? MaxChaseRangeSq : VisualAwarenessRangeSq;
+                if (distSq > chaseDistSq)
+                {
+                    continue;
+                }
             }
 
             // if this monster belongs to a faction,
@@ -769,7 +827,6 @@ partial class Creature
 
         foreach (var target in targets)
         {
-            //targetDistance.Add(new TargetDistance(target, distSq ? Location.SquaredDistanceTo(target.Location) : Location.DistanceTo(target.Location)));
             targetDistance.Add(
                 new TargetDistance(
                     target,
@@ -793,18 +850,12 @@ partial class Creature
             return targetDistances[0].Target;
         }
 
-        // http://asheron.wikia.com/wiki/Wi_Flag
-
         var distSum = targetDistances.Select(i => i.Distance).Sum();
 
-        // get the sum of the inverted ratios
         var invRatioSum = targetDistances.Count - 1;
 
-        // roll between 0 - invRatioSum here,
-        // instead of 0-1 (the source of the original wi bug)
         var rng = ThreadSafeRandom.Next(0.0f, invRatioSum);
 
-        // walk the list
         var invRatio = 0.0f;
         foreach (var targetDistance in targetDistances)
         {
@@ -815,23 +866,16 @@ partial class Creature
                 return targetDistance.Target;
             }
         }
-        // precision error?
+
         Console.WriteLine(
             $"{Name}.SelectWeightedDistance: couldn't find target: {string.Join(",", targetDistances.Select(i => i.Distance))}"
         );
         return targetDistances[0].Target;
     }
 
-    /// <summary>
-    /// If one of these fields is set, monster scanning for targets when it first spawns in
-    /// is terminated immediately
-    /// </summary>
     private static readonly Tolerance ExcludeSpawnScan =
         Tolerance.NoAttack | Tolerance.Appraise | Tolerance.Provoke | Tolerance.Retaliate;
 
-    /// <summary>
-    /// Called when a monster is first spawning in
-    /// </summary>
     public void CheckTargets()
     {
         if (!Attackable && TargetingTactic == TargetingTactic.None || (Tolerance & ExcludeSpawnScan) != 0)
@@ -863,7 +907,6 @@ partial class Creature
                 continue;
             }
 
-            //var distSq = Location.SquaredDistanceTo(creature.Location);
             var distSq = PhysicsObj.get_distance_sq_to_object(creature.PhysicsObj, true);
             if (player != null && player.TestStealth(this, distSq, $"{creature.Name} sees you! You lose stealth."))
             {
@@ -876,6 +919,7 @@ partial class Creature
                 closestTarget = creature;
             }
         }
+
         if (closestTarget == null || closestDistSq > VisualAwarenessRangeSq)
         {
             return;
@@ -884,15 +928,7 @@ partial class Creature
         closestTarget.AlertMonster(this);
     }
 
-    /// <summary>
-    /// The most common value from retail
-    /// Some other common values are in the range of 12-25
-    /// </summary>
     private const float VisualAwarenessRange_Default = 18.0f;
-
-    /// <summary>
-    /// The highest value found in the current database
-    /// </summary>
     public const float VisualAwarenessRange_Highest = 75.0f;
 
     public double? VisualAwarenessRange
@@ -975,21 +1011,12 @@ partial class Creature
         }
     }
 
-    /// <summary>
-    /// A monster can only alert friendly mobs to the presence of each attack target
-    /// once every AlertThreshold
-    /// </summary>
     private static readonly TimeSpan AlertThreshold = TimeSpan.FromMinutes(2);
 
-    /// <summary>
-    /// AttackTarget => last alerted time
-    /// </summary>
     private Dictionary<uint, DateTime> Alerted;
 
     private void AlertFriendly()
     {
-        // if current attacker has already alerted this monster recently,
-        // don't re-alert friendlies
         if (
             Alerted != null
             && Alerted.TryGetValue(AttackTarget.Guid.Full, out var lastAlertTime)
@@ -1027,18 +1054,12 @@ partial class Creature
                 || FriendType != null && FriendType == nearbyCreature.CreatureType
             )
             {
-                //var distSq = Location.SquaredDistanceTo(nearbyCreature.Location);
                 var distSq = PhysicsObj.get_distance_sq_to_object(nearbyCreature.PhysicsObj, true);
                 if (distSq > nearbyCreature.AuralAwarenessRangeSq)
                 {
                     continue;
                 }
 
-                // scenario: spawn a faction mob, and then spawn a non-faction mob next to it, of the same CreatureType
-                // the spawning mob will become alerted by the faction mob, and will then go to alert its friendly types
-                // the faction mob happens to be a friendly type, so it in effect becomes alerted to itself
-                // this is to prevent the faction mob from adding itself to its retaliate targets / visible targets,
-                // and setting itself to its AttackTarget
                 if (nearbyCreature == AttackTarget)
                 {
                     continue;
@@ -1067,7 +1088,7 @@ partial class Creature
                 nearbyCreature.WakeUp(false);
             }
         }
-        // only set alerted if monsters were actually alerted
+
         if (alerted)
         {
             if (Alerted == null)
@@ -1079,9 +1100,6 @@ partial class Creature
         }
     }
 
-    /// <summary>
-    /// Wakes up a faction monster from any non-faction monsters wandering within range
-    /// </summary>
     private void FactionMob_CheckMonsters()
     {
         if (MonsterState != State.Idle)
@@ -1093,13 +1111,11 @@ partial class Creature
 
         foreach (var creature in creatures)
         {
-            // ensure type isn't already handled elsewhere
             if (creature is Player || creature is CombatPet)
             {
                 continue;
             }
 
-            // ensure attackable
             if (
                 creature.IsDead
                 || !creature.Attackable && creature.TargetingTactic == TargetingTactic.None
@@ -1109,13 +1125,11 @@ partial class Creature
                 continue;
             }
 
-            // ensure another faction
             if (SameFaction(creature) && !PotentialFoe(creature))
             {
                 continue;
             }
 
-            // ensure within detection range
             if (PhysicsObj.get_distance_sq_to_object(creature.PhysicsObj, true) > VisualAwarenessRangeSq)
             {
                 continue;
@@ -1139,22 +1153,9 @@ partial class Creature
         return playerCombatAbility;
     }
 
-    /// <summary>
-    /// Tracks players who have vanished from this monster's sight
-    /// Key: Player GUID, Value: Expiration time (unix timestamp)
-    /// </summary>
     private Dictionary<uint, double> VanishedPlayers;
-
-    /// <summary>
-    /// Tracks player GUIDs who successfully fooled this monster with Vanish
-    /// These players cannot be targeted while their VanishIsActive is true
-    /// </summary>
     private HashSet<uint> FooledByVanishPlayers;
 
-    /// <summary>
-    /// Marks a player as having successfully fooled this monster with Vanish
-    /// </summary>
-    /// <param name="player">The player who fooled the monster</param>
     public void AddVanishedPlayer(Player player)
     {
         if (FooledByVanishPlayers == null)
@@ -1165,11 +1166,6 @@ partial class Creature
         FooledByVanishPlayers.Add(player.Guid.Full);
     }
 
-    /// <summary>
-    /// Checks if a player is currently vanished from this monster's perspective
-    /// </summary>
-    /// <param name="player">The player to check</param>
-    /// <returns>True if the player fooled this monster and their vanish is still active</returns>
     public bool IsPlayerVanished(Player player)
     {
         if (FooledByVanishPlayers == null || !FooledByVanishPlayers.Contains(player.Guid.Full))
@@ -1177,10 +1173,8 @@ partial class Creature
             return false;
         }
 
-        // Check if the player's vanish is still active
         if (!player.VanishIsActive)
         {
-            // Vanish expired, remove from tracking
             FooledByVanishPlayers.Remove(player.Guid.Full);
             return false;
         }
@@ -1188,9 +1182,6 @@ partial class Creature
         return true;
     }
 
-    /// <summary>
-    /// Called periodically for idle monsters to check for stationary players
-    /// </summary>
     public void PeriodicTargetScan()
     {
         if (MonsterState != State.Idle || (!Attackable && TargetingTactic == TargetingTactic.None))
@@ -1203,7 +1194,6 @@ partial class Creature
             return;
         }
 
-        // Scan for all creatures in range, including stationary ones
         var creatures = PhysicsObj.ObjMaint.GetVisibleTargetsValuesOfTypeCreature();
 
         foreach (var creature in creatures)
@@ -1231,13 +1221,11 @@ partial class Creature
                 continue;
             }
 
-            // Check if player fooled this monster with vanish
             if (player != null && IsPlayerVanished(player))
             {
                 continue;
             }
 
-            // Found a valid target - wake up!
             creature.AlertMonster(this);
             break;
         }
