@@ -1401,6 +1401,8 @@ public partial class ShardDbContext : DbContext
             entity.Property(e => e.ItemBiotaId).HasColumnName("ItemBiotaId");
             entity.Property(e => e.ItemWeenieClassId).HasColumnName("ItemWeenieClassId");
 
+            entity.Property(e => e.ItemSnapshotJson).HasColumnName("ItemSnapshotJson");
+
             entity.Property(e => e.OriginalValue).HasColumnName("OriginalValue");
             entity.Property(e => e.ListedPrice).HasColumnName("ListedPrice");
 

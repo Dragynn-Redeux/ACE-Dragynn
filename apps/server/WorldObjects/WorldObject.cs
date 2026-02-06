@@ -24,6 +24,7 @@ using ACE.Server.Physics.Animation;
 using ACE.Server.Physics.Common;
 using ACE.Server.Physics.Util;
 using ACE.Server.WorldObjects.Managers;
+using ACE.Server.Market;
 using Serilog;
 using Landblock = ACE.Server.Entity.Landblock;
 using Position = ACE.Entity.Position;
@@ -1088,7 +1089,12 @@ public abstract partial class WorldObject : IActor
 
         CurrentLandblock?.RemoveWorldObject(Guid);
 
-        RemoveBiotaFromDatabase();
+        // Market listing escrow items are persisted in the shard DB and referenced by PlayerMarketListing.ItemBiotaId.
+        // We construct temporary WorldObject instances for display/inspection; destroying those must not delete escrow.
+        if (!MarketEscrowGuard.ShouldPreserveBiotaOnDestroy(this))
+        {
+            RemoveBiotaFromDatabase();
+        }
 
         if (Guid.IsDynamic())
         {

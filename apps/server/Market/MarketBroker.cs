@@ -14,6 +14,8 @@ namespace ACE.Server.Market;
 
 public static class MarketBroker
 {
+    private static readonly Serilog.ILogger Log = Serilog.Log.ForContext(typeof(MarketBroker));
+
     public const string TemplateName = "Market Broker";
 
     private static string? TryGetListingItemName(ACE.Database.Models.Shard.PlayerMarketListing listing)
@@ -670,10 +672,21 @@ public static class MarketBroker
                     var entityBiota = Database.Adapter.BiotaConverter.ConvertToEntityBiota(biota);
                     item = WorldObjectFactory.CreateWorldObject(entityBiota);
                 }
+                else if (!string.IsNullOrWhiteSpace(listing.ItemSnapshotJson))
+                {
+                    item = MarketListingSnapshotSerializer.TryRecreateWorldObjectFromSnapshot(listing.ItemSnapshotJson);
+                }
             }
             catch
             {
-                item = null;
+                if (!string.IsNullOrWhiteSpace(listing.ItemSnapshotJson))
+                {
+                    item = MarketListingSnapshotSerializer.TryRecreateWorldObjectFromSnapshot(listing.ItemSnapshotJson);
+                }
+                else
+                {
+                    item = null;
+                }
             }
 
             if (item == null)
@@ -823,10 +836,37 @@ public static class MarketBroker
                     var entityBiota = Database.Adapter.BiotaConverter.ConvertToEntityBiota(biota);
                     item = WorldObjectFactory.CreateWorldObject(entityBiota);
                 }
+                else
+                {
+                    Log.Warning(
+                        "Market cancel failed: biota not found for listing {ListingId} (ItemBiotaId={ItemBiotaId}, ItemGuid={ItemGuid}, WCID={WCID}, SellerAccountId={SellerAccountId}, SellerCharacterId={SellerCharacterId})",
+                        listing.Id,
+                        listing.ItemBiotaId,
+                        listing.ItemGuid,
+                        listing.ItemWeenieClassId,
+                        listing.SellerAccountId,
+                        listing.SellerCharacterId);
+
+                    if (!string.IsNullOrWhiteSpace(listing.ItemSnapshotJson))
+                    {
+                        item = MarketListingSnapshotSerializer.TryRecreateWorldObjectFromSnapshot(listing.ItemSnapshotJson);
+                    }
+                }
             }
-            catch
+            catch (Exception ex)
             {
-                // ignore
+                Log.Error(
+                    ex,
+                    "Market cancel failed: exception while recreating escrow item for listing {ListingId} (ItemBiotaId={ItemBiotaId}, ItemGuid={ItemGuid}, WCID={WCID})",
+                    listing.Id,
+                    listing.ItemBiotaId,
+                    listing.ItemGuid,
+                    listing.ItemWeenieClassId);
+
+                if (item == null && !string.IsNullOrWhiteSpace(listing.ItemSnapshotJson))
+                {
+                    item = MarketListingSnapshotSerializer.TryRecreateWorldObjectFromSnapshot(listing.ItemSnapshotJson);
+                }
             }
         }
 

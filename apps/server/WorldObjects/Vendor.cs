@@ -357,8 +357,101 @@ public class Vendor : Creature
 
         var listings = MarketServiceLocator.PlayerMarketRepository
             .GetListingsForVendorTier(vendorTier, now)
-            .OrderBy(l => l.ListedPrice)
-            .ThenBy(l => l.Id);
+            .ToList();
+
+        static int GetSectionSortOrder(int itemTypeInt)
+        {
+            return itemTypeInt switch
+            {
+                (int)ItemType.MeleeWeapon => 1,
+                (int)ItemType.MissileWeapon => 2,
+                (int)ItemType.Caster => 3,
+                (int)ItemType.Armor => 4,
+                (int)ItemType.Jewelry => 5,
+                (int)ItemType.Clothing => 6,
+                _ => 999,
+            };
+        }
+
+        static int GetSortSubType(Weenie weenie, int itemTypeInt)
+        {
+            if (weenie?.PropertiesInt == null)
+            {
+                return 0;
+            }
+
+            if (itemTypeInt is (int)ItemType.Weapon or (int)ItemType.MeleeWeapon or (int)ItemType.MissileWeapon or (int)ItemType.Caster)
+            {
+                return weenie.PropertiesInt.TryGetValue(PropertyInt.WeaponSkill, out var ws) ? ws : 0;
+            }
+
+            if (itemTypeInt == (int)ItemType.Armor)
+            {
+                var wc = weenie.PropertiesInt.TryGetValue((PropertyInt)393, out var weightClass) ? weightClass : 0;
+                var cp = weenie.PropertiesInt.TryGetValue(PropertyInt.ClothingPriority, out var clothingPriority) ? clothingPriority : 0;
+                return (wc << 16) | (cp & 0xFFFF);
+            }
+
+            return 0;
+        }
+
+        static int GetEffectivePriceKey(ACE.Database.Models.Shard.PlayerMarketListing listing, Weenie weenie, int itemTypeInt)
+        {
+            var listedPrice = listing.ListedPrice;
+
+            if (itemTypeInt == (int)ItemType.Armor
+                && weenie?.PropertiesInt != null
+                && weenie.PropertiesInt.TryGetValue(PropertyInt.ArmorSlots, out var slots)
+                && slots > 0)
+            {
+                return (int)Math.Ceiling(listedPrice / (double)slots);
+            }
+
+            // stacks: sort by per-unit
+            var stackSize = 1;
+            try
+            {
+                if (listing.ItemBiotaId > 0)
+                {
+                    var biota = DatabaseManager.Shard.BaseDatabase.GetBiota(listing.ItemBiotaId, true);
+                    var stack = biota?.BiotaPropertiesInt?.FirstOrDefault(p => p.Type == (ushort)PropertyInt.StackSize)?.Value;
+                    if (stack.HasValue && stack.Value > 1)
+                    {
+                        stackSize = stack.Value;
+                    }
+                }
+            }
+            catch
+            {
+                // ignore
+            }
+
+            return stackSize > 1 ? (int)Math.Ceiling(listedPrice / (double)stackSize) : listedPrice;
+        }
+
+        var isMiscTier = vendorTier == 0;
+        listings = listings
+            .Select(l =>
+            {
+                var weenie = DatabaseManager.World.GetCachedWeenie(l.ItemWeenieClassId);
+                var itemTypeInt = int.MaxValue;
+                if (weenie?.PropertiesInt != null && weenie.PropertiesInt.TryGetValue(PropertyInt.ItemType, out var it))
+                {
+                    itemTypeInt = it;
+                }
+
+                var sectionOrder = GetSectionSortOrder(itemTypeInt);
+                var subType = GetSortSubType(weenie, itemTypeInt);
+                var priceKey = GetEffectivePriceKey(l, weenie, itemTypeInt);
+                return new { listing = l, sectionOrder, subType, itemTypeInt, priceKey };
+            })
+            .OrderBy(x => x.sectionOrder)
+            .ThenBy(x => x.subType)
+            .ThenBy(x => isMiscTier ? x.listing.ItemWeenieClassId : 0u)
+            .ThenBy(x => x.priceKey)
+            .ThenBy(x => x.listing.Id)
+            .Select(x => x.listing)
+            .ToList();
 
         // Avoid N+1 opens/closes/contexts by batching biota fetches through a single context.
         // Note: ShardDatabase.GetBiota(ShardDbContext, ...) still does per-biota queries for
