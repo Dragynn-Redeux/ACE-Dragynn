@@ -248,8 +248,8 @@ public enum PropertyFloat : ushort
     
     [ServerOnly]
     PatrolPauseMaxSeconds = 203,
+    
     [ServerOnly]
-
     PCAPRecordedWorkmanship = 8004,
 
     [ServerOnly]

@@ -34,10 +34,15 @@ public sealed class PatrolComponent
 
     public PatrolComponent(Creature creature)
     {
+        if (creature == null)
+        {
+            throw new ArgumentNullException(nameof(creature));
+        }
         _creature = creature;
 
-        // Capture patrol center once (original spawn/home).
-        _patrolHome = new Position(_creature.Home);
+        // Capture patrol center once (original spawn/home). If Home isn't set, fall back quietly.
+        var homePos = _creature.Home ?? _creature.Location;
+        _patrolHome = new Position(homePos);
 
         ReloadPath();
     }
@@ -272,7 +277,7 @@ public sealed class PatrolComponent
 
         return min + ((float)Random.Shared.NextDouble() * (max - min));
     }
-        private void RejoinLoopFromCurrentPosition(double currentUnixTime)
+    private void RejoinLoopFromCurrentPosition(double currentUnixTime)
     {
         // Clear any in-flight leg so we don't "arrive" at an old target after interruption.
         _currentDest = null;
@@ -331,7 +336,7 @@ public sealed class PatrolComponent
         }
         else if (count == 2)
         {
-            candidate = (int)(_creature.Guid.Full % 2);
+            candidate = (bestIndex + (int)(_creature.Guid.Full % 2)) % 2;
         }
 
         _index = candidate;
