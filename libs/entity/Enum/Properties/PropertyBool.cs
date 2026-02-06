@@ -253,13 +253,13 @@ public enum PropertyBool : ushort
     CreatureArmorEffectsDamageReduction = 173,
     
     [ServerOnly]
-    PatrolEnabled = 174,   
-    [ServerOnly]
-    PatrolForceWalk = 175, 
-
+    PatrolEnabled = 174,
     
     [ServerOnly]
-    GeneratesPassiveThreat = 175,
+    PatrolForceWalk = 175,
+    
+    [ServerOnly]
+    GeneratesPassiveThreat = 176,
 
     [ServerOnly]
     PatrolEnabled = 174,
