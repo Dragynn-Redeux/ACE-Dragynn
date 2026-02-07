@@ -59,71 +59,174 @@ internal sealed class MarketSnapshotUpdater
                 return;
             }
 
-        var now = DateTime.UtcNow;
-        var unixNow = new DateTimeOffset(now).ToUnixTimeSeconds();
+            var now = DateTime.UtcNow;
+            var unixNow = new DateTimeOffset(now).ToUnixTimeSeconds();
 
-        var listings = MarketServiceLocator.PlayerMarketRepository
-            .GetListingsForVendorTier(marketTier, now)
-            .ToList();
+            var listings = MarketServiceLocator.PlayerMarketRepository
+                .GetListingsForVendorTier(marketTier, now)
+                .ToList();
 
-        var totalActive = listings.Count;
+            var totalActive = listings.Count;
 
-        var sorted = listings
-            .Select(l =>
-            {
-                var sort = GetSortKey(l);
-                var sectionKey = GetSnapshotSectionKey(l);
-                var itemType = sort.ItemType; // Store raw item type
-                var subType = sort.SubType; // Store subType for sorting
-                var priceKey = l.ListedPrice;
-                try
+            var sorted = listings
+                .Select(l =>
                 {
-                    var weenie = DatabaseManager.World.GetCachedWeenie(l.ItemWeenieClassId);
-                    if (weenie?.PropertiesInt != null
-                        && weenie.PropertiesInt.TryGetValue(PropertyInt.ItemType, out var it)
-                        && it == (int)ItemType.Armor
-                        && weenie.PropertiesInt.TryGetValue(PropertyInt.ArmorSlots, out var slots)
-                        && slots > 0)
+                    var sort = GetSortKey(l);
+                    var sectionKey = GetSnapshotSectionKey(l);
+                    var itemType = sort.ItemType; // Store raw item type
+                    var subType = sort.SubType; // Store subType for sorting
+                    var priceKey = l.ListedPrice;
+                    var salvageMaterialKey = int.MaxValue;
+                    var salvageWorkKey = float.MaxValue;
+                    var salvageUnitPriceKey = int.MaxValue;
+                    var gemMaterialKey = int.MaxValue;
+                    var gemWorkKey = float.MaxValue;
+                    var consumableWeenieTypeKey = int.MaxValue;
+                    var consumableWcidKey = uint.MaxValue;
+                    var consumableUnitPriceKey = int.MaxValue;
+                    try
                     {
-                        priceKey = (int)Math.Ceiling(l.ListedPrice / (double)slots);
-                    }
-                    else
-                    {
-                        var text = MarketListingFormatter.BuildListingMarkdown(l, now);
-                        var firstLine = text.Split('\n', 2, StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? string.Empty;
-                        var idx = firstLine.IndexOf('x', StringComparison.Ordinal);
-                        if (idx >= 0)
+                        var weenie = DatabaseManager.World.GetCachedWeenie(l.ItemWeenieClassId);
+                        if (weenie != null && (weenie.WeenieType == WeenieType.Food || weenie.WeenieType == WeenieType.Healer))
                         {
-                            var span = firstLine.AsSpan(idx + 1);
-                            var len = 0;
-                            while (len < span.Length && char.IsDigit(span[len]))
-                            {
-                                len++;
-                            }
+                            itemType = (int)ItemType.Food;
+                            consumableWeenieTypeKey = (int)weenie.WeenieType;
+                            consumableWcidKey = l.ItemWeenieClassId;
+                        }
 
-                            if (len > 0 && int.TryParse(span[..len], out var stack) && stack > 1)
+                        if (weenie?.PropertiesInt != null
+                            && weenie.PropertiesInt.TryGetValue(PropertyInt.ItemType, out var it)
+                            && it == (int)ItemType.Armor
+                            && weenie.PropertiesInt.TryGetValue(PropertyInt.ArmorSlots, out var slots)
+                            && slots > 0)
+                        {
+                            priceKey = (int)Math.Ceiling(l.ListedPrice / (double)slots);
+                        }
+
+                        if (itemType == (int)ItemType.Food)
+                        {
+                            var wo = MarketListingSnapshotSerializer.TryRecreateWorldObjectFromSnapshot(l.ItemSnapshotJson);
+                            if (wo != null)
                             {
-                                priceKey = (int)Math.Ceiling(l.ListedPrice / (double)stack);
+                                try
+                                {
+                                    var qty = wo.StackSize ?? 0;
+                                    if (qty > 1)
+                                    {
+                                        consumableUnitPriceKey = (int)Math.Ceiling(l.ListedPrice / (double)qty);
+                                    }
+                                    else
+                                    {
+                                        consumableUnitPriceKey = l.ListedPrice;
+                                    }
+                                }
+                                finally
+                                {
+                                    wo.Destroy();
+                                }
+                            }
+                            else
+                            {
+                                consumableUnitPriceKey = l.ListedPrice;
+                            }
+                        }
+                        else
+                        {
+                            var text = MarketListingFormatter.BuildListingMarkdown(l, now);
+                            var firstLine = text.Split('\n', 2, StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? string.Empty;
+                            var idx = firstLine.IndexOf('x', StringComparison.Ordinal);
+                            if (idx >= 0)
+                            {
+                                var span = firstLine.AsSpan(idx + 1);
+                                var len = 0;
+                                while (len < span.Length && char.IsDigit(span[len]))
+                                {
+                                    len++;
+                                }
+
+                                if (len > 0 && int.TryParse(span[..len], out var stack) && stack > 1)
+                                {
+                                    priceKey = (int)Math.Ceiling(l.ListedPrice / (double)stack);
+                                }
+                            }
+                        }
+
+                        if (sort.ItemType == (int)ItemType.TinkeringMaterial)
+                        {
+                            var wo = MarketListingSnapshotSerializer.TryRecreateWorldObjectFromSnapshot(l.ItemSnapshotJson);
+                            if (wo != null)
+                            {
+                                try
+                                {
+                                    salvageMaterialKey = wo.MaterialType.HasValue ? (int)wo.MaterialType.Value : int.MaxValue;
+                                    salvageWorkKey = wo.Workmanship ?? float.MaxValue;
+                                    var qty = wo.Structure ?? 0;
+                                    if (qty > 0)
+                                    {
+                                        salvageUnitPriceKey = (int)Math.Ceiling(l.ListedPrice / (double)qty);
+                                    }
+                                }
+                                finally
+                                {
+                                    wo.Destroy();
+                                }
+                            }
+                        }
+                        else if (sort.ItemType == (int)ItemType.Gem)
+                        {
+                            var wo = MarketListingSnapshotSerializer.TryRecreateWorldObjectFromSnapshot(l.ItemSnapshotJson);
+                            if (wo != null)
+                            {
+                                try
+                                {
+                                    gemMaterialKey = wo.MaterialType.HasValue ? (int)wo.MaterialType.Value : int.MaxValue;
+                                    gemWorkKey = wo.Workmanship ?? float.MaxValue;
+                                }
+                                finally
+                                {
+                                    wo.Destroy();
+                                }
                             }
                         }
                     }
-                }
-                catch
-                {
-                    // ignore
-                }
-                return new MarketSnapshotRenderer.SortedListing(l, sectionKey, itemType, subType, priceKey, l.Id);
-            })
-            .OrderBy(x => GetSectionSortOrder(x.SectionKey, x.ItemType))
-            .ThenBy(x => x.SubType)
-            .ThenBy(x => marketTier == 0 ? x.Listing.ItemWeenieClassId : 0u)
-            .ThenBy(x => x.ListedPrice)
-            .ThenBy(x => x.ListingId)
-            .ToList();
+                    catch
+                    {
+                        // ignore
+                    }
+                    return new MarketSnapshotRenderer.SortedListing(
+                        l,
+                        sectionKey,
+                        itemType,
+                        subType,
+                        priceKey,
+                        l.Id,
+                        salvageMaterialKey,
+                        salvageWorkKey,
+                        salvageUnitPriceKey,
+                        gemMaterialKey,
+                        gemWorkKey,
+                        consumableWeenieTypeKey,
+                        consumableWcidKey,
+                        consumableUnitPriceKey);
+                })
+                .OrderBy(x => GetSectionSortOrder(x.SectionKey, x.ItemType))
+                .ThenBy(x => x.SubType)
+                .ThenBy(x => x.ItemType == (int)ItemType.TinkeringMaterial ? x.SalvageMaterialKey : int.MaxValue)
+                .ThenBy(x => x.ItemType == (int)ItemType.TinkeringMaterial ? x.SalvageWorkKey : float.MaxValue)
+                .ThenBy(x => x.ItemType == (int)ItemType.TinkeringMaterial ? x.SalvageUnitPriceKey : int.MaxValue)
+                .ThenBy(x => x.ItemType == (int)ItemType.Gem ? x.GemMaterialKey : int.MaxValue)
+                .ThenBy(x => x.ItemType == (int)ItemType.Gem ? (marketTier == 0 ? x.Listing.ItemWeenieClassId : 0u) : (marketTier == 0 ? x.Listing.ItemWeenieClassId : 0u))
+                .ThenBy(x => x.ItemType == (int)ItemType.Gem ? x.GemWorkKey : float.MaxValue)
+                .ThenBy(x => x.ItemType == (int)ItemType.Food ? x.ConsumableWeenieTypeKey : int.MaxValue)
+                .ThenBy(x => x.ItemType == (int)ItemType.Food ? x.ConsumableWcidKey : uint.MaxValue)
+                .ThenBy(x => x.ItemType == (int)ItemType.Food ? x.ConsumableUnitPriceKey : int.MaxValue)
+                .ThenBy(x => x.ListedPrice)
+                .ThenBy(x => x.ListingId)
+                .ToList();
 
-        var snapshotPosts = _renderer.BuildPosts(sorted, tierTitle, totalActive, unixNow, now, _policy);
+            var snapshotPosts = _renderer.BuildPosts(sorted, tierTitle, totalActive, unixNow, now, _policy);
 
-        var existing = await GetOrDiscoverSnapshotMessageIds(channelId, threadChannel);
+            var existing = await GetOrDiscoverSnapshotMessageIds(channelId, threadChannel);
 
             var keepIds = await ReconcileSnapshotMessages(threadChannel, existing, snapshotPosts, _policy);
             _snapshotMessageIdsByThreadId[channelId] = keepIds;
@@ -312,6 +415,11 @@ internal sealed class MarketSnapshotUpdater
 
     private static MarketSnapshotRenderer.SnapshotSectionKey GetSnapshotSectionKey(ACE.Database.Models.Shard.PlayerMarketListing listing)
     {
+        if (listing.ItemWeenieClassId >= 1052500 && listing.ItemWeenieClassId <= 1052511)
+        {
+            return MarketSnapshotRenderer.SnapshotSectionKey.BeastParts;
+        }
+
         try
         {
             var weenie = DatabaseManager.World.GetCachedWeenie(listing.ItemWeenieClassId);
@@ -386,6 +494,34 @@ internal sealed class MarketSnapshotUpdater
 
                 // Pack into one int so ThenBy(SubType) yields (wc, cp)
                 subType = (wc << 16) | (cp & 0xFFFF);
+            }
+        }
+        else if (itemTypeInt == (int)ItemType.Writable)
+        {
+            // Scroll sorting: spell level/difficulty, then school, then fall through to price.
+            // Pack into one int so ThenBy(SubType) yields (levelLike, schoolLike).
+            try
+            {
+                var spellId = 0;
+                if (weenie.PropertiesInt != null)
+                {
+                    if (weenie.PropertiesInt.TryGetValue(PropertyInt.ItemSpellId, out var sid))
+                    {
+                        spellId = sid;
+                    }
+                }
+
+                if (spellId > 0)
+                {
+                    var spell = new ACE.Server.Entity.Spell((uint)spellId, loadDB: true);
+                    var levelLike = (int)Math.Clamp(spell.Level, 0u, 255u);
+                    var schoolLike = (int)spell.School;
+                    subType = (levelLike << 16) | (schoolLike & 0xFFFF);
+                }
+            }
+            catch
+            {
+                // ignore
             }
         }
 

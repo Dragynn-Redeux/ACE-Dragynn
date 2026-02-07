@@ -67,6 +67,23 @@ public class Vendor : Creature
 {
     private static readonly VendorItemComparer VendorItemComparer = new VendorItemComparer();
 
+    private enum MarketSection
+    {
+        Unknown = 999,
+        MeleeWeapon = 1,
+        MissileWeapon = 2,
+        Caster = 3,
+        Armor = 4,
+        Jewelry = 5,
+        Clothing = 6,
+        Salvage = 7,
+        Gem = 8,
+        Food = 9,
+        Healer = 10,
+        Useless = 11,
+        Misc = 999,
+    }
+
     public readonly Dictionary<ObjectGuid, WorldObject> DefaultItemsForSale = new Dictionary<ObjectGuid, WorldObject>();
     private Dictionary<ObjectGuid, WorldObject> TempDefaultItemsForSale = new Dictionary<ObjectGuid, WorldObject>();
 
@@ -355,22 +372,12 @@ public class Vendor : Creature
         var vendorTier = Tier.HasValue && Tier.Value != 0 ? Tier.Value : ShopTier;
         var now = DateTime.UtcNow;
 
-        var listings = MarketServiceLocator.PlayerMarketRepository
-            .GetListingsForVendorTier(vendorTier, now)
-            .ToList();
+        List<ACE.Database.Models.Shard.PlayerMarketListing> listings;
+        listings = MarketServiceLocator.PlayerMarketRepository.GetListingsForVendorTier(vendorTier, now).ToList();
 
-        static int GetSectionSortOrder(int itemTypeInt)
+        static int GetSectionSortOrder(MarketSection section)
         {
-            return itemTypeInt switch
-            {
-                (int)ItemType.MeleeWeapon => 1,
-                (int)ItemType.MissileWeapon => 2,
-                (int)ItemType.Caster => 3,
-                (int)ItemType.Armor => 4,
-                (int)ItemType.Jewelry => 5,
-                (int)ItemType.Clothing => 6,
-                _ => 999,
-            };
+            return (int)section;
         }
 
         static int GetSortSubType(Weenie weenie, int itemTypeInt)
@@ -392,6 +399,18 @@ public class Vendor : Creature
                 return (wc << 16) | (cp & 0xFFFF);
             }
 
+            // Salvage: TargetType > MaterialType > Workmanship
+            if (itemTypeInt == (int)ItemType.TinkeringMaterial)
+            {
+                var targetType = weenie.PropertiesInt.TryGetValue(PropertyInt.TargetType, out var tt) ? tt : 0;
+                var materialType = weenie.PropertiesInt.TryGetValue(PropertyInt.MaterialType, out var mt) ? mt : 0;
+                var workmanship = weenie.PropertiesInt.TryGetValue(PropertyInt.ItemWorkmanship, out var wm) ? wm : 0;
+
+                // Pack into a single sortable key. TargetType tends to be a bitfield but ordering by numeric value
+                // is still stable/consistent for grouping.
+                return (targetType << 16) | ((materialType & 0xFF) << 8) | (workmanship & 0xFF);
+            }
+
             return 0;
         }
 
@@ -409,27 +428,16 @@ public class Vendor : Creature
 
             // stacks: sort by per-unit
             var stackSize = 1;
-            try
+            if (weenie?.PropertiesInt != null && weenie.PropertiesInt.TryGetValue(PropertyInt.StackSize, out var stack) && stack > 1)
             {
-                if (listing.ItemBiotaId > 0)
-                {
-                    var biota = DatabaseManager.Shard.BaseDatabase.GetBiota(listing.ItemBiotaId, true);
-                    var stack = biota?.BiotaPropertiesInt?.FirstOrDefault(p => p.Type == (ushort)PropertyInt.StackSize)?.Value;
-                    if (stack.HasValue && stack.Value > 1)
-                    {
-                        stackSize = stack.Value;
-                    }
-                }
-            }
-            catch
-            {
-                // ignore
+                stackSize = stack;
             }
 
             return stackSize > 1 ? (int)Math.Ceiling(listedPrice / (double)stackSize) : listedPrice;
         }
 
         var isMiscTier = vendorTier == 0;
+
         listings = listings
             .Select(l =>
             {
@@ -440,14 +448,74 @@ public class Vendor : Creature
                     itemTypeInt = it;
                 }
 
-                var sectionOrder = GetSectionSortOrder(itemTypeInt);
+                var section = MarketSection.Unknown;
+                if (itemTypeInt == (int)ItemType.MeleeWeapon)
+                {
+                    section = MarketSection.MeleeWeapon;
+                }
+                else if (itemTypeInt == (int)ItemType.MissileWeapon)
+                {
+                    section = MarketSection.MissileWeapon;
+                }
+                else if (itemTypeInt == (int)ItemType.Caster)
+                {
+                    section = MarketSection.Caster;
+                }
+                else if (itemTypeInt == (int)ItemType.Armor)
+                {
+                    section = MarketSection.Armor;
+                }
+                else if (itemTypeInt == (int)ItemType.Jewelry)
+                {
+                    section = MarketSection.Jewelry;
+                }
+                else if (itemTypeInt == (int)ItemType.Clothing)
+                {
+                    section = MarketSection.Clothing;
+                }
+                else if (itemTypeInt == (int)ItemType.TinkeringMaterial)
+                {
+                    section = MarketSection.Salvage;
+                }
+                else if (itemTypeInt == (int)ItemType.Gem)
+                {
+                    section = MarketSection.Gem;
+                }
+                else if (itemTypeInt == (int)ItemType.Food)
+                {
+                    section = MarketSection.Food;
+                }
+                else if (itemTypeInt == (int)ItemType.Useless)
+                {
+                    section = MarketSection.Useless;
+                }
+                else if (itemTypeInt == (int)ItemType.Misc)
+                {
+                    section = MarketSection.Misc;
+                }
+
+                // For misc-tier market vendors we want additional sections that are normally lumped together.
+                // Re-map the section key without changing the underlying listing.
+                if (isMiscTier && section == MarketSection.Misc && weenie != null)
+                {
+                    if (weenie.WeenieType == WeenieType.Healer)
+                    {
+                        section = MarketSection.Healer;
+                    }
+                    else if (weenie.WeenieType == WeenieType.Food)
+                    {
+                        section = MarketSection.Food;
+                    }
+                }
+
+                var sectionOrder = GetSectionSortOrder(section);
                 var subType = GetSortSubType(weenie, itemTypeInt);
                 var priceKey = GetEffectivePriceKey(l, weenie, itemTypeInt);
                 return new { listing = l, sectionOrder, subType, itemTypeInt, priceKey };
             })
             .OrderBy(x => x.sectionOrder)
             .ThenBy(x => x.subType)
-            .ThenBy(x => isMiscTier ? x.listing.ItemWeenieClassId : 0u)
+            .ThenBy(x => x.listing.ItemWeenieClassId)
             .ThenBy(x => x.priceKey)
             .ThenBy(x => x.listing.Id)
             .Select(x => x.listing)
@@ -458,6 +526,13 @@ public class Vendor : Creature
         // populated collections, but this avoids creating a new DbContext per listing.
         using var shardDbContext = new ACE.Database.Models.Shard.ShardDbContext();
 
+        Dictionary<uint, ACE.Database.Models.Shard.Biota> biotaById = null;
+        var biotaIds = listings.Where(l => l.ItemBiotaId > 0).Select(l => l.ItemBiotaId).Distinct().ToList();
+        if (biotaIds.Count > 0)
+        {
+            biotaById = DatabaseManager.Shard.BaseDatabase.GetBiotaBulk(shardDbContext, biotaIds);
+        }
+
         foreach (var listing in listings)
         {
             WorldObject item = null;
@@ -465,7 +540,9 @@ public class Vendor : Creature
             // Prefer the persisted biota so the listed item retains all stats/properties.
             if (listing.ItemBiotaId > 0)
             {
-                var biota = DatabaseManager.Shard.BaseDatabase.GetBiota(shardDbContext, listing.ItemBiotaId);
+                ACE.Database.Models.Shard.Biota biota = null;
+                biotaById?.TryGetValue(listing.ItemBiotaId, out biota);
+
                 if (biota != null)
                 {
                     // Create a display copy with a new GUID so multiple listings don't collide
@@ -477,8 +554,19 @@ public class Vendor : Creature
             }
 
             // Fallback: create from base weenie (will not retain rolled stats).
-            item ??= WorldObjectFactory.CreateNewWorldObject(listing.ItemWeenieClassId);
             if (item == null)
+            {
+                item = WorldObjectFactory.CreateNewWorldObject(listing.ItemWeenieClassId);
+            }
+            if (item == null)
+            {
+                continue;
+            }
+
+            // Listing may have expired/been removed after the initial query but before we build
+            // the display inventory. Skip generating a display item in that case.
+            var listingExists = MarketServiceLocator.PlayerMarketRepository.GetListingById(listing.Id) != null;
+            if (!listingExists)
             {
                 continue;
             }
@@ -501,13 +589,19 @@ public class Vendor : Creature
             // Tag the display item so we can resolve the listing on purchase.
             item.SetProperty(PropertyInt.MarketListingId, listing.Id);
 
+            // Client-side vendor UI filtering can hide salvage (tinkering material) entries for some vendor templates.
+            // For market-vendor display purposes, remap salvage to Misc so it renders in the list.
+            if (item.ItemType == ItemType.TinkeringMaterial)
+            {
+                item.ItemType = ItemType.Misc;
+            }
+
             item.ContainerId = Guid.Full;
             item.Location = null;
 
             // Market listings are unique sale items; ensure create-list stack size is not treated as unlimited.
             // Preserve correct quantity display for stackables.
             item.VendorShopCreateListStackSize = Math.Max(1, item.StackSize ?? 1);
-            item.CalculateObjDesc();
 
             // Ensure we don't silently overwrite items if a guid collision still occurs.
             if (!UniqueItemsForSale.TryAdd(item.Guid, item))
@@ -523,7 +617,6 @@ public class Vendor : Creature
 
                     item = recreated;
                     item.ContainerId = Guid.Full;
-                    item.CalculateObjDesc();
                 }
 
                 UniqueItemsForSale[item.Guid] = item;
@@ -866,6 +959,17 @@ public class Vendor : Creature
             // check unique items
             else if (UniqueItemsForSale.TryGetValue(itemGuid, out var uniqueItemForSale))
             {
+                var marketListingId = uniqueItemForSale.GetProperty(PropertyInt.MarketListingId);
+                if (marketListingId.HasValue && marketListingId.Value > 0)
+                {
+                    var listing = MarketServiceLocator.PlayerMarketRepository.GetListingById(marketListingId.Value);
+                    if (listing == null)
+                    {
+                        player.SendTransientError("That item is no longer available.");
+                        return false;
+                    }
+                }
+
                 uniqueItems.Add(uniqueItemForSale);
             }
             else

@@ -6,6 +6,7 @@ using System.Linq;
 using System.Timers;
 using ACE.Database;
 using ACE.Server.Factories.Tables.Cantrips;
+using ACE.Server.Market;
 using Serilog;
 
 namespace ACE.Server.Managers;
@@ -837,7 +838,8 @@ public static class DefaultPropertyManager
         ("olthoi_north_camp_west_supply_level", new Property<long>(0, "Set the supply level of the Olthoi North Western Camp.")),
         ("olthoi_north_camp_north_supply_level", new Property<long>(0, "Set the supply level of the Olthoi North Northern Camp.")),
         ("fragment_stability_phase_one", new Property<long>(0, "Phase One resonance stability tracker (0–15000 max)")),
-        ("market_listing_max_price", new Property<long>(1_000_000_000, "Max market list price"))
+        ("market_listing_max_price", new Property<long>(1_000_000_000, "Max market list price")),
+        ("market_max_active_listings_per_account", new Property<long>(30, "Max listings per account"))
     );
 
     public static readonly ReadOnlyDictionary<string, Property<double>> DefaultDoubleProperties = DictOf(
