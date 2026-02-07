@@ -1,8 +1,9 @@
 using ACE.Entity.Enum.Properties;
-using ACE.Server.WorldObjects.Patrol;
 using System.Numerics;
 using ACE.Entity.Enum;
+using ACE.Server.WorldObjects.Patrol;
 namespace ACE.Server.WorldObjects;
+
 
 partial class Creature
 {
@@ -35,10 +36,12 @@ partial class Creature
     /// <summary>
     /// Clears any in-flight patrol destination so patrol can resume cleanly after combat.
     /// </summary>
-    public void PatrolResetDestination()
+    public void PatrolResetDestination(double currentUnixTime = 0)
     {
-        Patrol?.ResetDestination();
+        Patrol?.ResetDestination(currentUnixTime);
     }
+
+
     public void CancelMoveToForEmote()
     {
         if (PhysicsObj?.MovementManager?.MoveToManager == null)

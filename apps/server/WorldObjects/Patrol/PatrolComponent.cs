@@ -2,6 +2,7 @@ using System;
 using ACE.Entity;
 using ACE.Entity.Enum.Properties;
 using ACE.Server.Entity;
+using ACE.Entity.Enum;
 
 namespace ACE.Server.WorldObjects.Patrol;
 
@@ -18,6 +19,9 @@ public sealed class PatrolComponent
     private double _nextMoveTime;
     private Position _currentDest;
     private Position _finalDest;
+    private float? _cachedPathRadius;
+    private bool _isLeashing;
+    private Position _leashDest;
 
     // Pause handling (applied only on real waypoints, not detours)
     private float _pauseOnArrivalSeconds;
@@ -32,7 +36,47 @@ public sealed class PatrolComponent
     private bool _needsRejoin;
     private const float ArriveDistance = 1.5f;
 
-    public PatrolComponent(Creature creature)
+    private static readonly (float x, float y)[] DetourOffsets =
+    {
+        ( 2.0f,  0.0f),
+        (-2.0f,  0.0f),
+        ( 0.0f,  2.0f),
+        ( 0.0f, -2.0f),
+        ( 1.5f,  1.5f),
+        (-1.5f,  1.5f),
+        ( 1.5f, -1.5f),
+        (-1.5f, -1.5f),
+    };
+
+    private void ClearDestinations()
+    {
+        _currentDest = null;
+        _finalDest = null;
+    }
+
+    private void ClearMovementState()
+    {
+        ClearDestinations();
+
+        _detouring = false;
+        _stuckAttempts = 0;
+        _stuckSinceTime = 0;
+        _lastSamplePos = null;
+        _nextProgressSampleTime = 0;
+        _pauseOnArrivalSeconds = 0f;
+    }
+
+    private static float DistSq(Position a, Position b)
+    {
+        var dx = a.Pos.X - b.Pos.X;
+        var dy = a.Pos.Y - b.Pos.Y;
+        var dz = a.Pos.Z - b.Pos.Z;
+        return (dx * dx) + (dy * dy) + (dz * dz);
+    }
+
+
+
+public PatrolComponent(Creature creature)
     {
         if (creature == null)
         {
@@ -52,6 +96,9 @@ public sealed class PatrolComponent
     {
         var raw = _creature.GetProperty(PropertyString.PatrolPath);
         _path = PatrolPath.Parse(raw);
+        _cachedPathRadius = null;
+        _isLeashing = false;
+        _leashDest = null;
         _index = 0;
 
         _currentDest = null;
@@ -71,25 +118,18 @@ public sealed class PatrolComponent
     /// Clears any in-flight patrol destination so patrol can't be wedged "waiting to arrive"
     /// after a combat interruption.
     /// </summary>
+    
     public void ResetDestination(double currentUnixTime = 0)
     {
-        _currentDest = null;
-        _finalDest = null;
-
-        _detouring = false;
-        _stuckAttempts = 0;
-        _stuckSinceTime = 0;
-        _lastSamplePos = null;
-        _nextProgressSampleTime = 0;
-        _pauseOnArrivalSeconds = 0f;
+        ClearMovementState();
 
         // After interruptions, recompute next waypoint from current position.
         _needsRejoin = true;
 
         // Allow immediate next waypoint after reset.
         _nextMoveTime = currentUnixTime;
-
     }
+
 
 
     public void Update(double currentUnixTime)
@@ -110,6 +150,14 @@ public sealed class PatrolComponent
         {
             return;
         }
+        // Patrol is idle movement; if we're stuck in combat stance with no target, return to NonCombat
+        // and wait for the stance animation to finish before moving (prevents skating/jitter).
+        if (_creature.CombatMode != CombatMode.NonCombat)
+        {
+            var stanceTime = _creature.SetCombatMode(CombatMode.NonCombat);
+            _nextMoveTime = Math.Max(_nextMoveTime, currentUnixTime + stanceTime);
+            return;
+        }
 
         // If patrol was interrupted (combat/emote), rejoin the loop at a computed waypoint.
         if (_needsRejoin)
@@ -117,14 +165,48 @@ public sealed class PatrolComponent
             RejoinLoopFromCurrentPosition(currentUnixTime);
             _needsRejoin = false;
         }
-        // If we have an in-flight destination, see if we've arrived or if we're stuck.
+        
+
+        // Leash: if we drifted too far while fighting, return to the closest waypoint before resuming.
+        if (IsOutsideLeash())
+        {
+            if (!_isLeashing)
+            {
+                _isLeashing = true;
+                _leashDest = GetClosestWaypointPosition();
+
+                // Clear any old patrol leg ONCE when leashing begins.
+                ClearMovementState();
+
+                _needsRejoin = false;
+                _nextMoveTime = currentUnixTime;
+            }
+
+            // Already leashing: do NOT keep clearing/reissuing moves every tick.
+            if (_currentDest != null || currentUnixTime < _nextMoveTime)
+            {
+                return;
+            }
+
+            // No pauses/detours while leashing.
+            _pauseOnArrivalSeconds = 0f;
+            _finalDest = _leashDest;
+            _currentDest = _leashDest;
+
+            _detouring = false;
+            _stuckAttempts = 0;
+            _stuckSinceTime = currentUnixTime;
+            _lastSamplePos = new Position(_creature.Location);
+
+            IssueMove(_leashDest, currentUnixTime);
+
+            _nextMoveTime = currentUnixTime + 0.75;
+            return;
+        }        
+        // If we have an in-flight destination, see if we've arrived or if we're stuck., see if we've arrived or if we're stuck.
         if (_currentDest != null)
         {
-            var dx = _creature.Location.Pos.X - _currentDest.Pos.X;
-            var dy = _creature.Location.Pos.Y - _currentDest.Pos.Y;
-            var dz = _creature.Location.Pos.Z - _currentDest.Pos.Z;
-
-            var distSq = (dx * dx) + (dy * dy) + (dz * dz);
+            var distSq = DistSq(_creature.Location, _currentDest);
 
             if (distSq > (ArriveDistance * ArriveDistance))
             {
@@ -168,6 +250,18 @@ public sealed class PatrolComponent
             // Arrived at _currentDest
             _currentDest = null;
 
+            // If we were leashing back to the route, stop here and rejoin cleanly.
+            if (_isLeashing)
+            {
+                _isLeashing = false;
+                _leashDest = null;
+                _finalDest = null;
+
+                _needsRejoin = true;
+                _nextMoveTime = currentUnixTime + 0.5;
+                return;
+            }
+
             // If we were detouring, immediately resume the real waypoint.
             // Never pause on detours.
             if (_detouring && _finalDest != null)
@@ -204,21 +298,7 @@ public sealed class PatrolComponent
         _index = (_index + 1) % _path.Count;
 
         // Base position is the cached patrol center (original spawn/home).
-        var basePos = new Position(_patrolHome);
-        var nextPos = new Position(basePos);
-
-        // 2D-only movement: compute XY from home + offsets, Z from terrain.
-        nextPos.PositionX = basePos.Pos.X + offset.Dx;
-        nextPos.PositionY = basePos.Pos.Y + offset.Dy;
-
-        // Update cell before terrain lookup.
-        nextPos.LandblockId = new LandblockId(nextPos.GetCell());
-
-        // Terrain height accounts for hills.
-        nextPos.PositionZ = nextPos.GetTerrainZ();
-
-        // Update cell again after Z assignment.
-        nextPos.LandblockId = new LandblockId(nextPos.GetCell());
+        var nextPos = BuildWaypoint(_patrolHome, offset);
 
         // Pause: fixed override on waypoint, otherwise weenie random default range.
         _pauseOnArrivalSeconds = offset.PauseSeconds ?? GetDefaultPauseSeconds();
@@ -277,23 +357,83 @@ public sealed class PatrolComponent
 
         return min + ((float)Random.Shared.NextDouble() * (max - min));
     }
+    private float GetPathRadius()
+    {
+        if (_cachedPathRadius.HasValue)
+        {
+            return _cachedPathRadius.Value;
+        }
+
+        var max = 0f;
+
+        if (_path != null && _path.Count > 0)
+        {
+            for (var i = 0; i < _path.Count; i++)
+            {
+                var wp = _path[i];
+                var r = MathF.Sqrt((wp.Dx * wp.Dx) + (wp.Dy * wp.Dy));
+                if (r > max)
+                {
+                    max = r;
+                }
+            }
+        }
+
+        _cachedPathRadius = max;
+        return max;
+    }
+
+    private float GetLeashRadius()
+    {
+        var r = GetPathRadius();
+        if (r <= 0.001f)
+        {
+            return 0f;
+        }
+        // 10% slack + small constant buffer to avoid tiny patrols being too strict
+        return (r * 1.10f) + 2.0f;
+    }
+
+    private bool IsOutsideLeash()
+    {
+        var leash = GetLeashRadius();
+        if (leash <= 0f)
+        {
+            return false;
+        }
+
+        var dx = _creature.Location.Pos.X - _patrolHome.Pos.X;
+        var dy = _creature.Location.Pos.Y - _patrolHome.Pos.Y;
+
+        return (dx * dx + dy * dy) > (leash * leash);
+    }
+
+    private Position GetClosestWaypointPosition()
+    {
+        // Caller ensures _path.Count > 0
+        var best = BuildWaypoint(_patrolHome, _path[0]);
+        var bestDistSq = float.MaxValue;
+
+        for (var i = 0; i < _path.Count; i++)
+        {
+            var wpPos = BuildWaypoint(_patrolHome, _path[i]);
+
+            var distSq = DistSq(_creature.Location, wpPos);
+            if (distSq < bestDistSq)
+            {
+                bestDistSq = distSq;
+                best = wpPos;
+            }
+        }
+
+        return best;
+    }
+
     private void RejoinLoopFromCurrentPosition(double currentUnixTime)
     {
         // Clear any in-flight leg so we don't "arrive" at an old target after interruption.
-        _currentDest = null;
-        _finalDest = null;
-
-        _detouring = false;
-        _stuckAttempts = 0;
-        _stuckSinceTime = 0;
-        _lastSamplePos = null;
-        _nextProgressSampleTime = 0;
-
-        _pauseOnArrivalSeconds = 0f;
+        ClearMovementState();
         _nextMoveTime = currentUnixTime;
-
-        // Base position is the cached patrol center (original spawn/home).
-        var basePos = new Position(_patrolHome);
 
         // Find the closest waypoint to our current location.
         var bestIndex = 0;
@@ -301,13 +441,9 @@ public sealed class PatrolComponent
 
         for (var i = 0; i < _path.Count; i++)
         {
-            var wp = BuildWaypoint(basePos, _path[i]);
+            var wp = BuildWaypoint(_patrolHome, _path[i]);
 
-            var dx = _creature.Location.Pos.X - wp.Pos.X;
-            var dy = _creature.Location.Pos.Y - wp.Pos.Y;
-            var dz = _creature.Location.Pos.Z - wp.Pos.Z;
-
-            var distSq = (dx * dx) + (dy * dy) + (dz * dz);
+            var distSq = DistSq(_creature.Location, wp);
 
             if (distSq < bestDistSq)
             {
@@ -387,21 +523,9 @@ public sealed class PatrolComponent
 
         _stuckAttempts++;
 
-        (float x, float y)[] offsets =
+        if (_stuckAttempts <= DetourOffsets.Length)
         {
-            ( 2.0f,  0.0f),
-            (-2.0f,  0.0f),
-            ( 0.0f,  2.0f),
-            ( 0.0f, -2.0f),
-            ( 1.5f,  1.5f),
-            (-1.5f,  1.5f),
-            ( 1.5f, -1.5f),
-            (-1.5f, -1.5f),
-        };
-
-        if (_stuckAttempts <= offsets.Length)
-        {
-            var (ox, oy) = offsets[_stuckAttempts - 1];
+            var (ox, oy) = DetourOffsets[_stuckAttempts - 1];
 
             var detour = new Position(_creature.Location);
             detour.PositionX = detour.Pos.X + ox;

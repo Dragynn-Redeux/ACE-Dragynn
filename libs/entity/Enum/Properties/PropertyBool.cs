@@ -261,11 +261,6 @@ public enum PropertyBool : ushort
     [ServerOnly]
     GeneratesPassiveThreat = 176,
 
-    [ServerOnly]
-    PatrolEnabled = 174,
-    [ServerOnly]
-    PatrolForceWalk = 175,
-
     /* custom */
     [ServerOnly]
     LinkedPortalOneSummon = 9001,
