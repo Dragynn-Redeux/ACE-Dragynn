@@ -67,6 +67,17 @@ public class Vendor : Creature
 {
     private static readonly VendorItemComparer VendorItemComparer = new VendorItemComparer();
 
+    private sealed class MarketVendorSession
+    {
+        public DateTime CreatedAtUtc { get; } = DateTime.UtcNow;
+        public Dictionary<ObjectGuid, WorldObject> ItemsByGuid { get; } = new();
+    }
+
+    // Market vendor inventory must be per-player; otherwise multiple shoppers will overwrite the shared
+    // `UniqueItemsForSale` view and clients will hold stale GUID references.
+    private readonly Dictionary<uint, MarketVendorSession> _marketSessionsByPlayerGuid = new();
+    private static readonly TimeSpan MarketSessionTtl = TimeSpan.FromMinutes(5);
+
     private enum MarketSection
     {
         Unknown = 999,
@@ -223,10 +234,7 @@ public class Vendor : Creature
     {
         if (IsMarketVendor)
         {
-            // For pure market vendors, always refresh market inventory on open.
-            DefaultItemsForSale.Clear();
-            UniqueItemsForSale.Clear();
-            LoadMarketInventory();
+            // Market vendor inventory is generated per-player on open.
             return;
         }
 
@@ -234,7 +242,6 @@ public class Vendor : Creature
         {
             return;
         }
-
         SetShopTier();
 
         var itemsForSale = new Dictionary<(uint weenieClassId, int paletteTemplate, double shade), uint>();
@@ -308,6 +315,252 @@ public class Vendor : Creature
         //}
 
         inventoryloaded = true;
+    }
+
+    private void PruneMarketSessions()
+    {
+        if (_marketSessionsByPlayerGuid.Count == 0)
+        {
+            return;
+        }
+
+        var cutoff = DateTime.UtcNow - MarketSessionTtl;
+        var expired = _marketSessionsByPlayerGuid
+            .Where(kvp => kvp.Value.CreatedAtUtc < cutoff)
+            .Select(kvp => kvp.Key)
+            .ToList();
+
+        foreach (var key in expired)
+        {
+            _marketSessionsByPlayerGuid.Remove(key);
+        }
+    }
+
+    public Dictionary<ObjectGuid, WorldObject> GetItemsForSaleFor(Player player)
+    {
+        if (!IsMarketVendor)
+        {
+            return null;
+        }
+
+        PruneMarketSessions();
+
+        if (!_marketSessionsByPlayerGuid.TryGetValue(player.Guid.Full, out var session) || session.ItemsByGuid.Count == 0)
+        {
+            session = new MarketVendorSession();
+
+            // Build a snapshot for this player only.
+            var items = LoadMarketInventorySnapshot();
+            foreach (var kvp in items)
+            {
+                session.ItemsByGuid[kvp.Key] = kvp.Value;
+            }
+
+            _marketSessionsByPlayerGuid[player.Guid.Full] = session;
+        }
+
+        return session.ItemsByGuid;
+    }
+
+    public void RemoveFromMarketSession(Player player, ObjectGuid itemGuid)
+    {
+        if (!IsMarketVendor)
+        {
+            return;
+        }
+
+        if (_marketSessionsByPlayerGuid.TryGetValue(player.Guid.Full, out var session))
+        {
+            session.ItemsByGuid.Remove(itemGuid);
+        }
+    }
+
+    private Dictionary<ObjectGuid, WorldObject> LoadMarketInventorySnapshot()
+    {
+        var snapshot = new Dictionary<ObjectGuid, WorldObject>();
+
+        // Lazy-expire old listings whenever a market vendor is opened.
+        MarketServiceLocator.PlayerMarketRepository.ExpireListings(DateTime.UtcNow);
+
+        if (!Tier.HasValue || Tier.Value == 0)
+        {
+            SetShopTier();
+        }
+
+        var vendorTier = Tier.HasValue && Tier.Value != 0 ? Tier.Value : ShopTier;
+        var now = DateTime.UtcNow;
+
+        List<ACE.Database.Models.Shard.PlayerMarketListing> listings;
+        listings = MarketServiceLocator.PlayerMarketRepository.GetListingsForVendorTier(vendorTier, now).ToList();
+
+        // Ordering logic mirrored from LoadMarketInventory
+        var isMiscTier = vendorTier == 0;
+
+        listings = listings
+            .Select(l =>
+            {
+                var weenie = DatabaseManager.World.GetCachedWeenie(l.ItemWeenieClassId);
+                var itemTypeInt = int.MaxValue;
+                if (weenie?.PropertiesInt != null && weenie.PropertiesInt.TryGetValue(PropertyInt.ItemType, out var it))
+                {
+                    itemTypeInt = it;
+                }
+
+                var section = MarketSection.Unknown;
+                if (itemTypeInt == (int)ItemType.MeleeWeapon)
+                {
+                    section = MarketSection.MeleeWeapon;
+                }
+                else if (itemTypeInt == (int)ItemType.MissileWeapon)
+                {
+                    section = MarketSection.MissileWeapon;
+                }
+                else if (itemTypeInt == (int)ItemType.Caster)
+                {
+                    section = MarketSection.Caster;
+                }
+                else if (itemTypeInt == (int)ItemType.Armor)
+                {
+                    section = MarketSection.Armor;
+                }
+                else if (itemTypeInt == (int)ItemType.Jewelry)
+                {
+                    section = MarketSection.Jewelry;
+                }
+                else if (itemTypeInt == (int)ItemType.Clothing)
+                {
+                    section = MarketSection.Clothing;
+                }
+                else if (itemTypeInt == (int)ItemType.TinkeringMaterial)
+                {
+                    section = MarketSection.Salvage;
+                }
+                else if (itemTypeInt == (int)ItemType.Gem)
+                {
+                    section = MarketSection.Gem;
+                }
+                else if (itemTypeInt == (int)ItemType.Food)
+                {
+                    section = MarketSection.Food;
+                }
+                else if (itemTypeInt == (int)ItemType.Useless)
+                {
+                    section = MarketSection.Useless;
+                }
+                else if (itemTypeInt == (int)ItemType.Misc)
+                {
+                    section = MarketSection.Misc;
+                }
+
+                if (isMiscTier && section == MarketSection.Misc && weenie != null)
+                {
+                    if (weenie.WeenieType == WeenieType.Healer)
+                    {
+                        section = MarketSection.Healer;
+                    }
+                    else if (weenie.WeenieType == WeenieType.Food)
+                    {
+                        section = MarketSection.Food;
+                    }
+                }
+
+                var subType = 0;
+                if (weenie?.PropertiesInt != null)
+                {
+                    if (itemTypeInt is (int)ItemType.Weapon or (int)ItemType.MeleeWeapon or (int)ItemType.MissileWeapon or (int)ItemType.Caster)
+                    {
+                        subType = weenie.PropertiesInt.TryGetValue(PropertyInt.WeaponSkill, out var ws) ? ws : 0;
+                    }
+                    else if (itemTypeInt == (int)ItemType.Armor)
+                    {
+                        var wc = weenie.PropertiesInt.TryGetValue((PropertyInt)393, out var weightClass) ? weightClass : 0;
+                        var cp = weenie.PropertiesInt.TryGetValue(PropertyInt.ClothingPriority, out var clothingPriority) ? clothingPriority : 0;
+                        subType = (wc << 16) | (cp & 0xFFFF);
+                    }
+                    else if (itemTypeInt == (int)ItemType.TinkeringMaterial)
+                    {
+                        var targetType = weenie.PropertiesInt.TryGetValue(PropertyInt.TargetType, out var tt) ? tt : 0;
+                        var materialType = weenie.PropertiesInt.TryGetValue(PropertyInt.MaterialType, out var mt) ? mt : 0;
+                        var workmanship = weenie.PropertiesInt.TryGetValue(PropertyInt.ItemWorkmanship, out var wm) ? wm : 0;
+                        subType = (targetType << 16) | ((materialType & 0xFF) << 8) | (workmanship & 0xFF);
+                    }
+                }
+
+                var priceKey = l.ListedPrice;
+                if (itemTypeInt == (int)ItemType.Armor
+                    && weenie?.PropertiesInt != null
+                    && weenie.PropertiesInt.TryGetValue(PropertyInt.ArmorSlots, out var slots)
+                    && slots > 0)
+                {
+                    priceKey = (int)Math.Ceiling(l.ListedPrice / (double)slots);
+                }
+
+                return new { listing = l, sectionOrder = (int)section, subType, priceKey };
+            })
+            .OrderBy(x => x.sectionOrder)
+            .ThenBy(x => x.subType)
+            .ThenBy(x => x.listing.ItemWeenieClassId)
+            .ThenBy(x => x.priceKey)
+            .ThenBy(x => x.listing.Id)
+            .Select(x => x.listing)
+            .ToList();
+
+        using var shardDbContext = new ACE.Database.Models.Shard.ShardDbContext();
+
+        Dictionary<uint, ACE.Database.Models.Shard.Biota> biotaById = null;
+        var biotaIds = listings.Where(l => l.ItemBiotaId > 0).Select(l => l.ItemBiotaId).Distinct().ToList();
+        if (biotaIds.Count > 0)
+        {
+            biotaById = DatabaseManager.Shard.BaseDatabase.GetBiotaBulk(shardDbContext, biotaIds);
+        }
+
+        foreach (var listing in listings)
+        {
+            if (MarketServiceLocator.PlayerMarketRepository.GetListingById(listing.Id) == null)
+            {
+                continue;
+            }
+
+            WorldObject item = null;
+
+            if (listing.ItemBiotaId > 0 && biotaById != null && biotaById.TryGetValue(listing.ItemBiotaId, out var shardBiota) && shardBiota != null)
+            {
+                var displayBiota = Database.Adapter.BiotaConverter.ConvertToEntityBiota(shardBiota);
+                displayBiota.Id = GuidManager.NewDynamicGuid().Full;
+                item = WorldObjectFactory.CreateWorldObject(displayBiota);
+            }
+
+            item ??= WorldObjectFactory.CreateNewWorldObject(listing.ItemWeenieClassId);
+            if (item == null)
+            {
+                continue;
+            }
+
+            item.Value = listing.ListedPrice;
+            item.AltCurrencyValue = listing.ListedPrice;
+
+            var stackSize = item.StackSize ?? 1;
+            if (stackSize > 1)
+            {
+                item.SetProperty(PropertyInt.StackUnitValue, listing.ListedPrice);
+                item.SetStackSize(stackSize);
+            }
+
+            item.SetProperty(PropertyInt.MarketListingId, listing.Id);
+
+            if (item.ItemType == ItemType.TinkeringMaterial)
+            {
+                item.ItemType = ItemType.Misc;
+            }
+
+            item.ContainerId = Guid.Full;
+            item.Location = null;
+            item.VendorShopCreateListStackSize = Math.Max(1, item.StackSize ?? 1);
+
+            snapshot[item.Guid] = item;
+        }
+
+        return snapshot;
     }
 
     private void LoadInventoryItem(
@@ -700,6 +953,37 @@ public class Vendor : Creature
         }
     }
 
+    public void forEachItem(Player player, Action<WorldObject> action)
+    {
+        foreach (var kvp in DefaultItemsForSale)
+        {
+            if (UseAltCurrencValue(kvp.Value.AltCurrencyValue))
+            {
+                kvp.Value.Value = kvp.Value.AltCurrencyValue;
+            }
+
+            action(kvp.Value);
+        }
+
+        if (IsMarketVendor)
+        {
+            var items = GetItemsForSaleFor(player);
+            if (items != null)
+            {
+                foreach (var kvp in items)
+                {
+                    action(kvp.Value);
+                }
+            }
+            return;
+        }
+
+        foreach (var kvp in UniqueItemsForSale)
+        {
+            action(kvp.Value);
+        }
+    }
+
     public List<WorldObject> GetDefaultItemsByWcid(uint wcid)
     {
         return DefaultItemsForSale.Values.Where(i => i.WeenieClassId == wcid).ToList();
@@ -710,8 +994,43 @@ public class Vendor : Creature
     /// </summary>
     public bool TryGetItemForSale(ObjectGuid itemGuid, out WorldObject itemForSale)
     {
-        return DefaultItemsForSale.TryGetValue(itemGuid, out itemForSale)
-            || UniqueItemsForSale.TryGetValue(itemGuid, out itemForSale);
+        if (DefaultItemsForSale.TryGetValue(itemGuid, out itemForSale))
+        {
+            return true;
+        }
+
+        // Market vendors are per-player and must be resolved via the player's vendor session.
+        // This parameterless overload is used by generic lookups (e.g. appraisal) and would otherwise
+        // fail to find the item, resulting in empty/no-stat appraisals.
+        if (IsMarketVendor)
+        {
+            itemForSale = null;
+            return false;
+        }
+
+        return UniqueItemsForSale.TryGetValue(itemGuid, out itemForSale);
+    }
+
+    public bool TryGetItemForSale(Player player, ObjectGuid itemGuid, out WorldObject itemForSale)
+    {
+        if (DefaultItemsForSale.TryGetValue(itemGuid, out itemForSale))
+        {
+            return true;
+        }
+
+        if (IsMarketVendor)
+        {
+            var items = GetItemsForSaleFor(player);
+            if (items != null && items.TryGetValue(itemGuid, out itemForSale))
+            {
+                return true;
+            }
+
+            itemForSale = null;
+            return false;
+        }
+
+        return UniqueItemsForSale.TryGetValue(itemGuid, out itemForSale);
     }
 
     /// <summary>
@@ -775,11 +1094,11 @@ public class Vendor : Creature
     /// Sends the latest vendor inventory list to player, rotates vendor towards player, and performs the appropriate emote.
     /// </summary>
     /// <param name="action">The action performed by the player</param>
-    public void ApproachVendor(Player player, VendorType action = VendorType.Undef, uint altCurrencySpent = 0)
+    public void ApproachVendor(Player player, VendorType action = VendorType.Undef, uint altCurrencySpent = 0, bool skipRestock = false)
     {
         // Market vendors should not rotate uniques or restock random items.
         // Their inventory is driven purely by the player market repository.
-        if (!IsMarketVendor)
+        if (!IsMarketVendor && !skipRestock)
         {
             RotUniques();
             RestockRandomItems();
@@ -956,16 +1275,23 @@ public class Vendor : Creature
 
                 defaultItemProfiles.Add(itemProfile);
             }
-            // check unique items
-            else if (UniqueItemsForSale.TryGetValue(itemGuid, out var uniqueItemForSale))
+            // check unique items (market vendors are per-player)
+            else if (TryGetItemForSale(player, itemGuid, out var uniqueItemForSale))
             {
+                // If this is actually a default item, it has already been handled above.
+                if (!IsMarketVendor && defaultItemForSale != null)
+                {
+                    // no-op
+                }
+
                 var marketListingId = uniqueItemForSale.GetProperty(PropertyInt.MarketListingId);
                 if (marketListingId.HasValue && marketListingId.Value > 0)
                 {
                     var listing = MarketServiceLocator.PlayerMarketRepository.GetListingById(marketListingId.Value);
                     if (listing == null)
                     {
-                        player.SendTransientError("That item is no longer available.");
+                        // Stale market listing: remove it from the player's vendor snapshot and refresh the UI.
+                        player.HandleStaleVendorPurchaseByGuid(this, itemGuid);
                         return false;
                     }
                 }
@@ -974,7 +1300,7 @@ public class Vendor : Creature
             }
             else
             {
-                player.SendTransientError("That item is no longer available.");
+                player.HandleStaleVendorPurchaseByGuid(this, itemGuid);
                 return false;
             }
         }
