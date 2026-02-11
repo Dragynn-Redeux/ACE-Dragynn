@@ -13,7 +13,7 @@ public sealed class PlayerMarketConfig
     /// Maximum number of active listings allowed per account.
     /// Set to 0 or negative to disable the limit.
     /// </summary>
-    public int MaxActiveListingsPerAccount { get; init; } = 50;
+    public int MaxActiveListingsPerAccount { get; init; } = 30;
 
     /// <summary>
     /// Whether sellers are paid in pyreals or trade notes by default.

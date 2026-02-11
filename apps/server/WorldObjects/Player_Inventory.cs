@@ -851,7 +851,7 @@ partial class Player
             {
                 if (lastOpenedContainer is Vendor lastUsedVendor)
                 {
-                    if (lastUsedVendor.TryGetItemForSale(objectGuid, out result))
+                    if (lastUsedVendor.TryGetItemForSale(this, objectGuid, out result))
                     {
                         rootOwner = lastUsedVendor;
                         return result;

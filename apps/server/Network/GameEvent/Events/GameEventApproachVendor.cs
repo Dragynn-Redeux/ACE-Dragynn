@@ -49,11 +49,21 @@ public class GameEventApproachVendor : GameEventMessage
             Writer.WriteString16L(string.Empty);
         }
 
-        var numItems = vendor.DefaultItemsForSale.Count + vendor.UniqueItemsForSale.Count;
+        var numItems = vendor.DefaultItemsForSale.Count;
+        if (vendor.IsMarketVendor)
+        {
+            var items = vendor.GetItemsForSaleFor(session.Player);
+            numItems += items?.Count ?? 0;
+        }
+        else
+        {
+            numItems += vendor.UniqueItemsForSale.Count;
+        }
 
         Writer.Write(numItems);
 
         vendor.forEachItem(
+            session.Player,
             (obj) =>
             {
                 var stackSize = obj.VendorShopCreateListStackSize ?? obj.StackSize ?? 1; // -1 = unlimited supply

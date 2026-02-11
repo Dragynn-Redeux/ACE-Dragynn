@@ -6,6 +6,7 @@ using ACE.Entity.Enum;
 using ACE.Entity.Enum.Properties;
 using ACE.Server.Entity;
 using ACE.Server.Factories;
+using ACE.Server.Managers;
 using ACE.Server.Market;
 using Discord;
 
@@ -172,9 +173,40 @@ internal static class MarketListingFormatter
         var wieldReq = listing.WieldReq.HasValue ? $"{reqLabel} {listing.WieldReq.Value}" : $"{reqLabel} -";
         var stackText = stackSize > 1 ? $"x{stackSize}" : "";
 
+        static int? TryResolveSalvageQtyFromInstance(uint weenieClassId, int stackSize, ACE.Server.WorldObjects.WorldObject? obj)
+        {
+            try
+            {
+                if (stackSize > 1)
+                {
+                    return null;
+                }
+
+                if (obj?.ItemType == ItemType.TinkeringMaterial && obj.Structure.HasValue && obj.Structure.Value > 0)
+                {
+                    return obj.Structure.Value;
+                }
+            }
+            catch
+            {
+                // ignore
+            }
+
+            return null;
+        }
+
         var priceText = stackSize > 1
             ? $"{listing.ListedPrice:N0} py ({(int)Math.Ceiling(listing.ListedPrice / (double)stackSize):N0} py ea)"
             : $"{listing.ListedPrice:N0} py";
+
+        // Salvage (tinkering material): show unit price right after the price text in the title line.
+        // Uses item `Structure` as the quantity.
+        var salvageQty = TryResolveSalvageQtyFromInstance(listing.ItemWeenieClassId, stackSize, GetOrCreateWorldObject(listing, cache));
+        if (salvageQty.HasValue && salvageQty.Value > 0)
+        {
+            var perUnit = (int)Math.Ceiling(listing.ListedPrice / (double)salvageQty.Value);
+            priceText += $" ({perUnit:N0} py/unit)";
+        }
 
         try
         {
@@ -272,6 +304,16 @@ internal static class MarketListingFormatter
                 priceText = $"{listedPrice:N0} py";
             }
 
+            if (stackSize <= 1 && obj.ItemType == ItemType.TinkeringMaterial)
+            {
+                var qty = obj.Structure ?? 0;
+                if (qty > 0)
+                {
+                    var perUnit = (int)Math.Ceiling(listedPrice / (double)qty);
+                    priceText += $" ({perUnit:N0} py/unit)";
+                }
+            }
+
             try
             {
                 var weenie = DatabaseManager.World.GetCachedWeenie(listing.ItemWeenieClassId);
@@ -364,6 +406,64 @@ internal static class MarketListingFormatter
         string expiresAtText,
         List<string> commonParts)
     {
+        if (obj.ItemType == ItemType.Gem)
+        {
+            var lines = new List<string>(1);
+
+            if (obj.Workmanship.HasValue)
+            {
+                lines.Add($"- Wk {obj.Workmanship.Value:0.##}");
+            }
+
+            return lines.Count > 0
+                ? new ListingDetails(headerTitle, sellerName, expiresAtText, lines)
+                : null;
+        }
+
+        if (obj.ItemType == ItemType.TinkeringMaterial)
+        {
+            var lines = new List<string>(2);
+
+            if (obj.Workmanship.HasValue && obj.MaterialType.HasValue && obj.Structure.HasValue && obj.Structure.Value > 0)
+            {
+                lines.Add($"- Wk {obj.Workmanship.Value:0.##} | Type {obj.MaterialType.Value} | Qty {obj.Structure.Value}");
+            }
+
+            return lines.Count > 0
+                ? new ListingDetails(headerTitle, sellerName, expiresAtText, lines)
+                : null;
+        }
+
+        if (obj.ItemType == ItemType.Useless)
+        {
+            var lines = new List<string>(1);
+            var tq = obj.GetProperty(PropertyInt.TrophyQuality);
+            if (tq.HasValue)
+            {
+                lines.Add($"- Quality {tq.Value}");
+            }
+
+            return lines.Count > 0
+                ? new ListingDetails(headerTitle, sellerName, expiresAtText, lines)
+                : null;
+        }
+
+        if (obj.ItemType == ItemType.ManaStone)
+        {
+            // Mana stones: omit req line; show mana-related stats compactly.
+            var lines = new List<string>(2);
+
+            var cap = obj.GetProperty(PropertyInt.ItemMaxMana);
+            var stored = obj.GetProperty(PropertyInt.ItemCurMana);
+            lines.Add($"- M.Cap: {(cap.HasValue ? cap.Value.ToString("N0") : "-")} | M.Stored: {(stored.HasValue ? stored.Value.ToString("N0") : "-")}");
+
+            var eff = obj.GetProperty(PropertyFloat.ItemEfficiency);
+            var destroyChance = obj.GetProperty(PropertyFloat.ManaStoneDestroyChance);
+            lines.Add($"- Eff: {(eff.HasValue ? (eff.Value * 100).ToString("0.#") + "%" : "-")} | Dest%: {(destroyChance.HasValue ? (destroyChance.Value * 100).ToString("0.#") + "%" : "-")}");
+
+            return new ListingDetails(headerTitle, sellerName, expiresAtText, lines);
+        }
+
         if (obj.ItemType is ItemType.Weapon or ItemType.MeleeWeapon or ItemType.MissileWeapon or ItemType.Caster)
         {
             var lines = FormatWeaponDetailsMultiline(obj);
@@ -841,7 +941,7 @@ internal static class MarketListingFormatter
         var line1 = new List<string>(6);
 
         var req = obj.WieldDifficulty;
-        var reqLabel = ResolveWieldLabelFromSkillType(obj.WieldSkillType, "Lv.Req");
+        var reqLabel = ResolveWieldLabelFromSkillType(obj.WieldSkillType, "Lv");
         line1.Add(req.HasValue ? $"{reqLabel} {req.Value}" : $"{reqLabel} -");
 
         var color = obj.GetProperty(PropertyInt.SigilTrinketColor);
@@ -868,7 +968,12 @@ internal static class MarketListingFormatter
 
         var line2 = new List<string>(8);
         AppendPropertyFloatIfPresent(obj, line2, PropertyFloat.SigilTrinketTriggerChance, "Proc%", multiplyBy100: true);
-        AppendPropertyFloatIfPresent(obj, line2, PropertyFloat.CooldownDuration, "Cooldown");
+        var cooldown = obj.GetProperty(PropertyFloat.CooldownDuration);
+        if (cooldown.HasValue)
+        {
+            var seconds = Math.Round(cooldown.Value, 1, MidpointRounding.AwayFromZero);
+            line2.Add($"Cooldown {seconds:0.#}s");
+        }
         AppendPropertyFloatIfPresent(obj, line2, PropertyFloat.SigilTrinketReductionAmount, "Reduction", skipIfZero: true);
         AppendPropertyFloatIfPresent(obj, line2, PropertyFloat.SigilTrinketIntensity, "Intensity", skipIfZero: true);
         AddIndentedLine(lines, line2);
@@ -980,6 +1085,43 @@ internal static class MarketListingFormatter
         if (!string.IsNullOrWhiteSpace(cache.Name))
         {
             return cache.Name;
+        }
+
+        // Prefer a reconstructed WorldObject when possible so item names include dynamic fields
+        // like salvage material types.
+        try
+        {
+            if (listing.ItemBiotaId > 0)
+            {
+                var biota = DatabaseManager.Shard.BaseDatabase.GetBiota(listing.ItemBiotaId, true);
+                if (biota != null)
+                {
+                    var entityBiota = Database.Adapter.BiotaConverter.ConvertToEntityBiota(biota);
+                    var obj = WorldObjectFactory.CreateWorldObject(entityBiota);
+                    try
+                    {
+                        if (obj.ItemType == ItemType.TinkeringMaterial)
+                        {
+                            cache.Name = obj.NameWithMaterial;
+                            return cache.Name;
+                        }
+
+                        if (!string.IsNullOrWhiteSpace(obj.Name))
+                        {
+                            cache.Name = obj.Name;
+                            return cache.Name;
+                        }
+                    }
+                    finally
+                    {
+                        obj.Destroy();
+                    }
+                }
+            }
+        }
+        catch
+        {
+            // ignore
         }
 
         if (listing.ItemBiotaId > 0)
