@@ -130,9 +130,13 @@ partial class Player
 
             // Market vendors: the display item is a per-player clone. If the underlying listing was
             // already purchased/expired, don't add the clone to inventory.
+            // Also: market stack listings are displayed as a single entry (StackSize=1) with quantity in the name.
+            // On purchase, restore the real stack size and base name from the stored listing snapshot.
             var marketListingIdPreAdd = itemToCreate.GetProperty(PropertyInt.MarketListingId);
+            int? marketListingIdSafe = null;
             if (marketListingIdPreAdd.HasValue && marketListingIdPreAdd.Value > 0)
             {
+                marketListingIdSafe = marketListingIdPreAdd.Value;
                 var listingStillExists = MarketServiceLocator.PlayerMarketRepository.GetListingById(marketListingIdPreAdd.Value);
                 if (listingStillExists == null)
                 {
@@ -140,6 +144,46 @@ partial class Player
                     allAdded = false;
                     break;
                 }
+
+                if (!string.IsNullOrWhiteSpace(listingStillExists.ItemSnapshotJson))
+                {
+                    var reconstructed = MarketListingSnapshotSerializer.TryRecreateWorldObjectFromSnapshot(listingStillExists.ItemSnapshotJson);
+                    if (reconstructed != null)
+                    {
+                        // Preserve the per-player display GUID (used for session cleanup), but restore the true
+                        // stack size and base name (removes the quantity prefix used for vendor display).
+                        if (!string.IsNullOrWhiteSpace(reconstructed.Name))
+                        {
+                            itemToCreate.SetProperty(PropertyString.Name, reconstructed.Name);
+                        }
+
+                        if (reconstructed.StackSize is > 1)
+                        {
+                            itemToCreate.SetStackSize(reconstructed.StackSize.Value);
+                        }
+
+                        // Restore original value/unit value from the snapshot so the purchased item doesn't
+                        // retain the market display pricing.
+                        itemToCreate.Value = reconstructed.Value;
+
+                        var snapUnitValue = reconstructed.GetProperty(PropertyInt.StackUnitValue);
+                        if (snapUnitValue.HasValue)
+                        {
+                            itemToCreate.SetProperty(PropertyInt.StackUnitValue, snapUnitValue.Value);
+                        }
+                        else
+                        {
+                            itemToCreate.RemoveProperty(PropertyInt.StackUnitValue);
+                        }
+
+                        // Re-tag with listing id for downstream market logic.
+                        itemToCreate.SetProperty(PropertyInt.MarketListingId, marketListingIdPreAdd.Value);
+                    }
+                }
+
+                // Remove MarketListingId before we send/create the item in the player's inventory.
+                // `WorldObject.GetNameForClient()` appends a time-remaining suffix when this property is present.
+                itemToCreate.RemoveProperty(PropertyInt.MarketListingId);
             }
 
             if (TryCreateInInventoryWithNetworking(itemToCreate))
@@ -154,11 +198,11 @@ partial class Player
                 // then restore original value.
                 ACE.Database.Models.Shard.PlayerMarketListing listing = null;
 
-                var marketListingId = itemToCreate.GetProperty(PropertyInt.MarketListingId);
-                // Prefer direct lookup by listing id when tagged.
-                if (marketListingId.HasValue && marketListingId.Value > 0)
+                // Prefer direct lookup by listing id when tagged. Note: we may have removed the property
+                // before creating the inventory item to prevent name suffix injection.
+                if (marketListingIdSafe.HasValue && marketListingIdSafe.Value > 0)
                 {
-                    listing = MarketServiceLocator.PlayerMarketRepository.GetListingById(marketListingId.Value);
+                    listing = MarketServiceLocator.PlayerMarketRepository.GetListingById(marketListingIdSafe.Value);
                 }
 
                 // Fallback: for older market items that are not tagged with MarketListingId.
@@ -237,8 +281,13 @@ partial class Player
                         itemToCreate.SetProperty(PropertyInt.StackUnitValue, originalUnitValue);
                         itemToCreate.SetStackSize(purchasedStackSize);
                     }
+                    else
+                    {
+                        // Non-stackables should not retain the market display StackUnitValue (used to show listing price).
+                        itemToCreate.RemoveProperty(PropertyInt.StackUnitValue);
+                    }
 
-                     // This is vendor/listing metadata; do not keep it on the purchased item.
+                     // This is vendor/listing metadata; ensure we don't keep it on the purchased item.
                      itemToCreate.RemoveProperty(PropertyInt.MarketListingId);
                 }
 
