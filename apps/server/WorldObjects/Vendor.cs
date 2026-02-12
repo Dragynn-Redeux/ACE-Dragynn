@@ -543,7 +543,10 @@ public class Vendor : Creature
             if (stackSize > 1)
             {
                 item.SetProperty(PropertyInt.StackUnitValue, listing.ListedPrice);
-                item.SetStackSize(stackSize);
+                item.SetStackSize(1);
+
+                var listName = stackSize.ToString() + " " + item.Name + "s";
+                item.SetProperty(PropertyString.Name, listName);
             }
 
             item.SetProperty(PropertyInt.MarketListingId, listing.Id);
@@ -1104,6 +1107,13 @@ public class Vendor : Creature
             RestockRandomItems();
         }
 
+        if (IsMarketVendor && action == VendorType.Open)
+        {
+            // Force a fresh per-player snapshot on each open so new/expired listings are reflected.
+            // The snapshot (GUIDs) then stays stable for the remainder of the open vendor session.
+            _marketSessionsByPlayerGuid.Remove(player.Guid.Full);
+        }
+
         player.Session.Network.EnqueueSend(new GameEventApproachVendor(player.Session, this, altCurrencySpent));
 
         var rotateTime = Rotate(player); // vendor rotates to player
@@ -1287,6 +1297,7 @@ public class Vendor : Creature
                 var marketListingId = uniqueItemForSale.GetProperty(PropertyInt.MarketListingId);
                 if (marketListingId.HasValue && marketListingId.Value > 0)
                 {
+
                     var listing = MarketServiceLocator.PlayerMarketRepository.GetListingById(marketListingId.Value);
                     if (listing == null)
                     {
@@ -1322,7 +1333,34 @@ public class Vendor : Creature
         {
             foreach (var uniqueItem in uniqueItems)
             {
-                itemsToReceive.Add(uniqueItem.WeenieClassId, uniqueItem.StackSize ?? 1);
+                var qty = uniqueItem.StackSize ?? 1;
+
+                // Market vendor display items may be forced to StackSize=1 and have quantity embedded in the name.
+                // For capacity validation, use the original listing snapshot quantity when available.
+                if (IsMarketVendor)
+                {
+                    var listingId = uniqueItem.GetProperty(PropertyInt.MarketListingId);
+                    if (listingId.HasValue && listingId.Value > 0)
+                    {
+                        var listing = MarketServiceLocator.PlayerMarketRepository.GetListingById(listingId.Value);
+                        if (listing == null)
+                        {
+                            player.HandleStaleVendorPurchaseByGuid(this, uniqueItem.Guid);
+                            return false;
+                        }
+
+                        if (!string.IsNullOrWhiteSpace(listing.ItemSnapshotJson))
+                        {
+                            var reconstructed = MarketListingSnapshotSerializer.TryRecreateWorldObjectFromSnapshot(listing.ItemSnapshotJson);
+                            if (reconstructed?.StackSize is > 1)
+                            {
+                                qty = reconstructed.StackSize.Value;
+                            }
+                        }
+                    }
+                }
+
+                itemsToReceive.Add(uniqueItem.WeenieClassId, qty);
 
                 if (itemsToReceive.PlayerExceedsLimits)
                 {
