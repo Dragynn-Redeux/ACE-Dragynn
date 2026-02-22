@@ -485,7 +485,7 @@ public class EmoteManager
                         UnknownChances = 21
                     };
 
-                    var treasure = LootGenerationFactory.CreateRandomLootObjects_New(profile, treasureType);
+                    var treasure = LootGenerationFactory.CreateRandomLootObjects_New(profile, treasureType, null);
                     if (treasure != null)
                     {
                         player.TryCreateForGive(WorldObject, treasure);

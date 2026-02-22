@@ -1021,7 +1021,17 @@ partial class Creature
                 _deathTreasureTier = Tier.Value;
             }
 
-            var items = LootGenerationFactory.CreateRandomLootObjects(DeathTreasure);
+            LootGenerationContext context = null;
+
+            if (UnstableLoot)
+            {
+                context = new LootGenerationContext
+                {
+                    UnstableLoot = true
+                };
+            }
+
+            var items = LootGenerationFactory.CreateRandomLootObjects(DeathTreasure, context);
 
             for (var i = items.Count - 1; i >= 0; i--)
             {

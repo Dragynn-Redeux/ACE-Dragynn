@@ -60,7 +60,7 @@ public class CreateInventoryRandomObjects
             }
         }
 
-        var items = LootGenerationFactory.CreateRandomObjectsOfType(weenieType, numItems);
+        var items = LootGenerationFactory.CreateRandomObjectsOfType(weenieType, numItems, null);
 
         var stuck = new List<WorldObject>();
 

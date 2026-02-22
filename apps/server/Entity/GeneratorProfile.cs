@@ -709,7 +709,7 @@ public class GeneratorProfile
             }
 
             // _log.Debug("{GeneratorName}.TreasureGenerator(): found death treasure {BiotaWcid}", Generator.Name, Biota.WeenieClassId);
-            var generatedLoot = LootGenerationFactory.CreateRandomLootObjects(deathTreasure);
+            var generatedLoot = LootGenerationFactory.CreateRandomLootObjects(deathTreasure, null);
 
             if ((RegenLocationType & RegenLocationType.Contain) == 0) // If we're not a container make sure we respect our generate limit.
             {

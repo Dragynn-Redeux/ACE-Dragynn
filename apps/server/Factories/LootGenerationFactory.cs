@@ -224,11 +224,11 @@ public static partial class LootGenerationFactory
         }
     }
 
-    public static List<WorldObject> CreateRandomLootObjects(TreasureDeath profile)
+    public static List<WorldObject> CreateRandomLootObjects(TreasureDeath profile, LootGenerationContext context)
     {
         if (!PropertyManager.GetBool("legacy_loot_system").Item)
         {
-            return CreateRandomLootObjects_New(profile);
+            return CreateRandomLootObjects_New(profile, context);
         }
 
         // stopwatch.Value.Restart();
@@ -373,7 +373,7 @@ public static partial class LootGenerationFactory
         }
     }
 
-    public static List<WorldObject> CreateRandomLootObjects_New(TreasureDeath profile)
+    public static List<WorldObject> CreateRandomLootObjects_New(TreasureDeath profile,LootGenerationContext context)
     {
         // stopwatch.Value.Restart();
 
@@ -392,7 +392,7 @@ public static partial class LootGenerationFactory
 
                 for (var i = 0; i < numItems; i++)
                 {
-                    lootWorldObject = CreateRandomLootObjects_New(profile, TreasureItemCategory.Item);
+                    lootWorldObject = CreateRandomLootObjects_New(profile, TreasureItemCategory.Item, context);
 
                     if (lootWorldObject != null)
                     {
@@ -411,7 +411,7 @@ public static partial class LootGenerationFactory
                     // If we roll this bracket we are guaranteed at least ItemMinAmount of items, with an extra roll for each additional item under itemMaxAmount.
                     for (var i = 0; i < profile.ItemMinAmount; i++)
                     {
-                        lootWorldObject = CreateRandomLootObjects_New(profile, TreasureItemCategory.Item);
+                        lootWorldObject = CreateRandomLootObjects_New(profile, TreasureItemCategory.Item, context);
 
                         if (lootWorldObject != null)
                         {
@@ -424,7 +424,7 @@ public static partial class LootGenerationFactory
                         itemChance = ThreadSafeRandom.NextInterval(profile.LootQualityMod);
                         if (itemChance < profile.ItemChance / 100.0)
                         {
-                            lootWorldObject = CreateRandomLootObjects_New(profile, TreasureItemCategory.Item);
+                            lootWorldObject = CreateRandomLootObjects_New(profile, TreasureItemCategory.Item, context);
 
                             //Console.WriteLine($"Success! Item: {lootWorldObject.Name}");
 
@@ -443,7 +443,7 @@ public static partial class LootGenerationFactory
 
                 for (var i = 0; i < numItems; i++)
                 {
-                    lootWorldObject = CreateRandomLootObjects_New(profile, TreasureItemCategory.MagicItem);
+                    lootWorldObject = CreateRandomLootObjects_New(profile, TreasureItemCategory.MagicItem, context);
 
                     if (lootWorldObject != null)
                     {
@@ -460,7 +460,7 @@ public static partial class LootGenerationFactory
                     // If we roll this bracket we are guaranteed at least MagicItemMinAmount of items, with an extra roll for each additional item under MagicItemMaxAmount.
                     for (var i = 0; i < profile.MagicItemMinAmount; i++)
                     {
-                        lootWorldObject = CreateRandomLootObjects_New(profile, TreasureItemCategory.MagicItem);
+                        lootWorldObject = CreateRandomLootObjects_New(profile, TreasureItemCategory.MagicItem, context);
 
                         if (lootWorldObject != null)
                         {
@@ -473,7 +473,7 @@ public static partial class LootGenerationFactory
                         itemChance = ThreadSafeRandom.NextInterval(profile.LootQualityMod);
                         if (itemChance < profile.MagicItemChance / 100.0)
                         {
-                            lootWorldObject = CreateRandomLootObjects_New(profile, TreasureItemCategory.MagicItem);
+                            lootWorldObject = CreateRandomLootObjects_New(profile, TreasureItemCategory.MagicItem, context);
 
                             //Console.WriteLine($"Success! Item: {lootWorldObject.Name}");
 
@@ -492,7 +492,7 @@ public static partial class LootGenerationFactory
 
                 for (var i = 0; i < numItems; i++)
                 {
-                    lootWorldObject = CreateRandomLootObjects_New(profile, TreasureItemCategory.MundaneItem);
+                    lootWorldObject = CreateRandomLootObjects_New(profile, TreasureItemCategory.MundaneItem, context);
 
                     if (lootWorldObject != null)
                     {
@@ -520,7 +520,7 @@ public static partial class LootGenerationFactory
                 {
                     for (var i = 0; i < profile.MundaneItemMinAmount; i++)
                     {
-                        lootWorldObject = CreateRandomLootObjects_New(profile, TreasureItemCategory.MundaneItem);
+                        lootWorldObject = CreateRandomLootObjects_New(profile, TreasureItemCategory.MundaneItem, context);
 
                         //Console.WriteLine($"Success! Item: {lootWorldObject.Name}");
 
@@ -535,7 +535,7 @@ public static partial class LootGenerationFactory
                         itemChance = ThreadSafeRandom.NextInterval(profile.LootQualityMod);
                         if (itemChance < profile.MundaneItemChance / 100.0)
                         {
-                            lootWorldObject = CreateRandomLootObjects_New(profile, TreasureItemCategory.MundaneItem);
+                            lootWorldObject = CreateRandomLootObjects_New(profile, TreasureItemCategory.MundaneItem, context);
 
                             if (lootWorldObject != null)
                             {
@@ -1439,7 +1439,7 @@ public static partial class LootGenerationFactory
         }
     }
 
-    public static List<WorldObject> CreateRandomObjectsOfType(WeenieType type, int count)
+    public static List<WorldObject> CreateRandomObjectsOfType(WeenieType type, int count, LootGenerationContext context)
     {
         var weenies = DatabaseManager.World.GetRandomWeeniesOfType((int)type, count);
 
@@ -2358,10 +2358,10 @@ public static partial class LootGenerationFactory
             UnknownChances = 21
         };
 
-        return CreateRandomLootObjects_New(treasureDeath, category);
+        return CreateRandomLootObjects_New(treasureDeath, category, null);
     }
 
-    public static WorldObject CreateRandomLootObjects_New(TreasureDeath treasureDeath, TreasureItemCategory category)
+   public static WorldObject CreateRandomLootObjects_New(TreasureDeath treasureDeath, TreasureItemCategory category, LootGenerationContext context)
     {
         var treasureRoll = RollWcid(treasureDeath, category);
 
@@ -2371,7 +2371,20 @@ public static partial class LootGenerationFactory
         }
 
         var wo = CreateAndMutateWcid(treasureDeath, treasureRoll, category == TreasureItemCategory.MagicItem);
-
+        if (wo != null && context?.UnstableLoot == true &&
+            (
+                wo.ItemType == ItemType.Armor ||
+                wo.ItemType == ItemType.MeleeWeapon ||
+                wo.ItemType == ItemType.MissileWeapon ||
+                wo.ItemType == ItemType.Caster ||
+                wo.ItemType == ItemType.Jewelry ||
+                wo.ItemType == ItemType.Clothing))
+        {
+            wo.SetProperty(PropertyBool.IsUnstable, true);
+            wo.SetProperty(PropertyDataId.IconOverlay, 0x06004D21);
+            wo.SetProperty(PropertyInt.Lifespan, 72000);
+            
+        }
         return wo;
     }
 
