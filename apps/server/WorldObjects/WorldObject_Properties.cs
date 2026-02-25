@@ -1417,7 +1417,16 @@ partial class WorldObject
 
     public string GetNameWithMaterial(int? stackSize = null)
     {
+        if (GetProperty(PropertyBool.IsUnstable) == true)
+        {
+            return Name;
+        }
         var name = stackSize != null && stackSize != 1 ? GetPluralName() : Name;
+            // If the name already contains "Unstable" (anywhere), don't prepend material
+            if (name.IndexOf("Unstable", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return name;
+            }
 
         if (MaterialType == null || WeenieClassId is 1053900)
         {
@@ -1431,18 +1440,23 @@ partial class WorldObject
             name = name.Replace(material, "");
         }
 
-        var result = $"{material} {name}";
-
-        return GetProperty(PropertyBool.IsUnstable) == true
-            ? $"Unstable {material} {name}"
-            : $"{material} {name}";
-            }
+        return $"{material} {name}";
+    }
 
     public string NameWithMaterialAndElement => GetNameWithMaterialAndElement();
 
     public string GetNameWithMaterialAndElement(int? stackSize = null)
     {
+        if (GetProperty(PropertyBool.IsUnstable) == true)
+        {
+            return Name;
+        }
         var name = stackSize != null && stackSize != 1 ? GetPluralName() : Name;
+            // If the name already contains "Unstable" (anywhere), don't prepend material
+            if (name.IndexOf("Unstable", StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                return name;
+            }
 
         if (MaterialType == null)
         {

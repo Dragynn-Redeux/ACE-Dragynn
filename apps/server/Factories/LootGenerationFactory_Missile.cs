@@ -2,6 +2,7 @@ using System.Linq;
 using ACE.Common;
 using ACE.Database.Models.World;
 using ACE.Entity.Enum;
+using ACE.Entity.Enum.Properties;
 using ACE.Server.Factories.Entity;
 using ACE.Server.Factories.Enum;
 using ACE.Server.Factories.Tables;
@@ -116,7 +117,11 @@ public static partial class LootGenerationFactory
 
             MutateColor(wo);
 
-            wo.Name = wo.NameWithMaterialAndElement == null ? wo.Name : wo.NameWithMaterial;
+            // Don't overwrite explicit unstable naming applied later
+            if (wo.GetProperty(PropertyBool.IsUnstable) != true)
+            {
+                wo.Name = wo.NameWithMaterialAndElement == null ? wo.Name : wo.NameWithMaterial;
+            }
         }
 
         // Wield Difficulty

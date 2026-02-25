@@ -2383,7 +2383,75 @@ public static partial class LootGenerationFactory
             wo.SetProperty(PropertyBool.IsUnstable, true);
             wo.SetProperty(PropertyDataId.IconOverlay, 0x06004D21);
             wo.SetProperty(PropertyInt.Lifespan, 72000);
-            
+            var baseName = wo.GetProperty(PropertyString.Name);
+            var material = wo.MaterialType != null
+                ? RecipeManager.GetMaterialName(wo.MaterialType.Value)
+                : null;
+
+            var element = "";
+
+            switch (wo.W_DamageType)
+            {
+                case DamageType.Fire: element = "Fire"; break;
+                case DamageType.Cold: element = "Frost"; break;
+                case DamageType.Acid: element = "Acid"; break;
+                case DamageType.Electric: element = "Lightning"; break;
+                case DamageType.Slash: element = "Slashing"; break;
+                case DamageType.Pierce: element = "Piercing"; break;
+                case DamageType.Bludgeon: element = "Blunt"; break;
+            }
+
+            // Remove material and element from baseName if they were already prepended (e.g., by MutateMissileWeapon)
+            // Use case-insensitive removal to handle all variants
+               System.Console.WriteLine($"[UNSTABLE] baseName before: '{baseName}', material: '{material}', element: '{element}'");
+            if (!string.IsNullOrEmpty(material))
+            {
+                var idx = baseName.IndexOf(material, StringComparison.OrdinalIgnoreCase);
+                if (idx >= 0)
+                {
+                       System.Console.WriteLine($"[UNSTABLE] Found material at index {idx}, stripping");
+                    baseName = (baseName.Substring(0, idx) + baseName.Substring(idx + material.Length)).Trim();
+                }
+                   else
+                   {
+                       System.Console.WriteLine($"[UNSTABLE] Material '{material}' NOT found in '{baseName}'");
+                   }
+            }
+
+            if (!string.IsNullOrEmpty(element))
+            {
+                var idx = baseName.IndexOf(element, StringComparison.OrdinalIgnoreCase);
+                if (idx >= 0)
+                {
+                       System.Console.WriteLine($"[UNSTABLE] Found element at index {idx}, stripping");
+                    baseName = (baseName.Substring(0, idx) + baseName.Substring(idx + element.Length)).Trim();
+                }
+                   else
+                   {
+                       System.Console.WriteLine($"[UNSTABLE] Element '{element}' NOT found in '{baseName}'");
+                   }
+            }
+
+            string finalName;
+
+            if (!string.IsNullOrEmpty(material))
+            {
+                if (!string.IsNullOrEmpty(element))
+                {
+                    finalName = $"Unstable {material} {element} {baseName}";
+                }
+                else
+                {
+                    finalName = $"Unstable {material} {baseName}";
+                }
+            }
+            else
+            {
+                finalName = $"Unstable {baseName}";
+            }
+               System.Console.WriteLine($"[UNSTABLE] finalName: '{finalName}', setting to wo.Name");
+
+            wo.SetProperty(PropertyString.Name, finalName);
         }
         return wo;
     }

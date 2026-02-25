@@ -200,7 +200,15 @@ public class Hook : Container
         PhysicsTableId = item.PhysicsTableId;
         SoundTableId = item.SoundTableId;
         ObjScale = item.ObjScale;
-        Name = item.NameWithMaterial;
+        // Prefer the item's explicit Name when it's unstable to preserve order
+        if (item.GetProperty(PropertyBool.IsUnstable) == true)
+        {
+            Name = item.Name;
+        }
+        else
+        {
+            Name = item.NameWithMaterial;
+        }
 
         if (MotionTableId != 0)
         {
