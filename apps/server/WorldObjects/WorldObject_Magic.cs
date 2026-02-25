@@ -1124,8 +1124,14 @@ partial class WorldObject
             tryBoost = Convert.ToInt32(tryBoost * archetypeSpellDamageMod);
         }
 
-        // LEVEL SCALING - Reduces harms against enemies, and restoration for players
+        // LEVEL SCALING - Reduces harms against enemies, and restoration for players.
+        // Also scales up healing on higher level player targets when both players are Shrouded (excluding self heals).
         var scalar = LevelScaling.GetPlayerBoostSpellScalar(player, targetCreature);
+        if (tryBoost > 0 && player != null && targetPlayer != null && targetPlayer != player)
+        {
+            scalar *= LevelScaling.GetPlayerBoostHealScalarShroudedUpward(player, targetPlayer);
+        }
+
         tryBoost = (int)(tryBoost * scalar);
 
         SigilTrinketSpellDamageReduction = 1.0f;

@@ -10,6 +10,7 @@ using ACE.Database.Entity;
 using ACE.Database.Models.Shard;
 using ACE.Entity.Enum;
 using ACE.Entity.Enum.Properties;
+using MySqlConnector;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage;
@@ -95,6 +96,64 @@ public class ShardDatabase
                 return false;
             }
         }
+    }
+
+    public virtual (long pyrealWealth, long trophyWealth) GetBankWealthAggregate(uint bankAccountId)
+    {
+        if (bankAccountId == 0)
+        {
+            return (0, 0);
+        }
+
+        using var context = new ShardDbContext();
+
+        var conn = context.Database.GetDbConnection();
+        if (conn.State != System.Data.ConnectionState.Open)
+        {
+            conn.Open();
+        }
+
+        using var cmd = conn.CreateCommand();
+
+        cmd.CommandText = @"
+SELECT
+  COALESCE(SUM(CASE
+    WHEN b.weenie_Type = 14 THEN COALESCE(v.value, 0)
+    WHEN b.weenie_Class_Id = 20630 THEN COALESCE(ss.value, 1) * 100000
+    WHEN b.weenie_Class_Id = 20629 THEN COALESCE(ss.value, 1) * 50000
+    WHEN b.weenie_Class_Id = 20628 THEN COALESCE(ss.value, 1) * 10000
+    WHEN b.weenie_Class_Id = 20627 THEN COALESCE(ss.value, 1) * 5000
+    WHEN b.weenie_Class_Id = 20626 THEN COALESCE(ss.value, 1) * 1000
+    WHEN b.weenie_Class_Id = 20625 THEN COALESCE(ss.value, 1) * 500
+    WHEN b.weenie_Class_Id = 20624 THEN COALESCE(ss.value, 1) * 100
+    ELSE 0
+  END), 0) AS pyreal_wealth,
+  COALESCE(SUM(CASE
+    WHEN tq.value IS NULL OR tq.value <= 0 THEN 0
+    ELSE (tq.value * tq.value * 100)
+  END), 0) AS trophy_wealth
+FROM biota b
+INNER JOIN biota_properties_i_i_d bank
+  ON bank.object_Id = b.id AND bank.type = 9007 AND bank.value = @acct
+LEFT JOIN biota_properties_int v
+  ON v.object_Id = b.id AND v.type = 19
+LEFT JOIN biota_properties_int ss
+  ON ss.object_Id = b.id AND ss.type = 12
+LEFT JOIN biota_properties_int tq
+  ON tq.object_Id = b.id AND tq.type = 467;
+";
+
+        cmd.Parameters.Add(new MySqlParameter("@acct", bankAccountId));
+
+        using var reader = cmd.ExecuteReader();
+        if (!reader.Read())
+        {
+            return (0, 0);
+        }
+
+        var pyreal = reader.IsDBNull(0) ? 0 : reader.GetInt64(0);
+        var trophy = reader.IsDBNull(1) ? 0 : reader.GetInt64(1);
+        return (pyreal, trophy);
     }
 
     /// <summary>
@@ -1532,5 +1591,43 @@ public class ShardDatabase
             .GroupBy(a => a.SessionIp).Count();
 
         return count;
+    }
+
+    public virtual void UpsertAccountWealthSnapshot(
+        uint accountId,
+        uint? characterId,
+        long rawPyrealCurrency,
+        long trophyValue,
+        DateTime updatedAtUtc
+    )
+    {
+        if (accountId == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            using var context = new ShardDbContext();
+
+            // Requires UNIQUE KEY on account_id.
+            context.Database.ExecuteSqlInterpolated(
+                $@"INSERT INTO account_wealth_snapshot
+                    (account_id, character_id, pyreal_wealth, trophy_wealth, total_wealth, updated_at_utc, row_version)
+                  VALUES
+                    ({accountId}, {characterId}, {rawPyrealCurrency}, {trophyValue}, {rawPyrealCurrency + trophyValue}, {updatedAtUtc}, 0)
+                  ON DUPLICATE KEY UPDATE
+                    character_id = VALUES(character_id),
+                    pyreal_wealth = VALUES(pyreal_wealth),
+                    trophy_wealth = VALUES(trophy_wealth),
+                    total_wealth = VALUES(total_wealth),
+                    updated_at_utc = VALUES(updated_at_utc),
+                    row_version = row_version + 1"
+            );
+        }
+        catch (Exception ex)
+        {
+            _log.Error(ex, "Exception in UpsertAccountWealthSnapshot saving wealth snapshot data to DB.");
+        }
     }
 }

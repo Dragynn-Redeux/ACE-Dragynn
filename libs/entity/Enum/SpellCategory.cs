@@ -804,4 +804,5 @@ public enum SpellCategory : uint
     VitalityMend = 806,
     VigorMend = 807,
     ClarityMend = 808,
+    RoadRunBuff = 809,
 }

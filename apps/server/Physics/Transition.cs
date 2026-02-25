@@ -180,9 +180,8 @@ public class Transition
         var newCell = ObjCell.EmptyCell; // null check?
         ObjCell.find_cell_list(CellArray, ref newCell, SpherePath);
 
-        for (var i = 0; i < CellArray.Cells.Count; i++)
+        foreach (var cell in CellArray.Cells.Values)
         {
-            var cell = CellArray.Cells.Values.ElementAt(i);
             if (cell == null || cell.Equals(currCell))
             {
                 continue;

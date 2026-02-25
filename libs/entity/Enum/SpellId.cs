@@ -6514,6 +6514,9 @@ public enum SpellId : uint
     ClarityMendOther5,
     ClarityMendOther6,
     ClarityMendOther7,
+    OlthoiQueenSpit,
+    OlthoiQueenAcidSpray,
+    RoadRunBuff,
 
     NumSpells = 8192,
 

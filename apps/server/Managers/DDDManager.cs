@@ -65,17 +65,29 @@ public static class DDDManager
             Iterations[datDatabaseType].TryAdd((uint)i, new());
         }
 
-        var precacheCompressedDATFiles = ConfigManager.Config.DDD.PrecacheCompressedDATFiles;
-
         var fileCount = 0;
+        var worldThreadCount = (int)Math.Max(Environment.ProcessorCount * ConfigManager.Config.Server.Threading.WorldThreadCountMultiplier, 1);
+        var initParallelOptions = new ParallelOptions
+        {
+            MaxDegreeOfParallelism = Math.Max(1, Environment.ProcessorCount - worldThreadCount)
+        };
         Parallel.ForEach(
             datDatabase.AllFiles,
+            initParallelOptions,
             file =>
             {
                 var fileName = file.Value.ObjectId;
                 var fileIter = file.Value.Iteration;
 
                 Iterations[datDatabaseType].TryAdd(fileIter, new());
+
+                if (datDatabaseType == DatDatabaseType.Cell)
+                {
+                    Iterations[datDatabaseType][fileIter].Add(fileName);
+                    Interlocked.Increment(ref fileCount);
+                    DatFileSizes[datDatabaseType].TryAdd(fileName, ((int)file.Value.FileSize, 0));
+                    return;
+                }
 
                 var datFile = datDatabase.GetReaderForFile(fileName);
                 var uncompressedFileSize = datFile.Buffer.Length;
@@ -88,7 +100,7 @@ public static class DDDManager
                 Interlocked.Increment(ref fileCount);
                 DatFileSizes[datDatabaseType].TryAdd(fileName, (uncompressedFileSize, fileSizeToSend));
 
-                if (useCompressedFile && precacheCompressedDATFiles)
+                if (useCompressedFile)
                 {
                     CompressedDatFilesCache[datDatabaseType]
                         .TryAdd(fileName, PrependUncompressedFileSize(compressedDatFile, (uint)uncompressedFileSize));
@@ -96,7 +108,7 @@ public static class DDDManager
             }
         );
         _log.Information(
-            $"Iterations for {datDatabaseType} initialized. Iterations.Count={Iterations[datDatabaseType].Count} | FileCount={fileCount} | DatFileSizes.Count={DatFileSizes[datDatabaseType].Count}{(precacheCompressedDATFiles ? " | precached Compressed files" : "")}"
+            $"Iterations for {datDatabaseType} initialized. Iterations.Count={Iterations[datDatabaseType].Count} | FileCount={fileCount} | DatFileSizes.Count={DatFileSizes[datDatabaseType].Count} | CompressedFilesCache.Count={CompressedDatFilesCache[datDatabaseType].Count}"
         );
     }
 
@@ -109,7 +121,7 @@ public static class DDDManager
     {
         using (var input = new MemoryStream(data))
         using (var output = new MemoryStream())
-        using (var compressor = new ZLibStream(output, CompressionLevel.SmallestSize))
+        using (var compressor = new ZLibStream(output, CompressionLevel.Fastest))
         {
             input.CopyTo(compressor);
             compressor.Close();

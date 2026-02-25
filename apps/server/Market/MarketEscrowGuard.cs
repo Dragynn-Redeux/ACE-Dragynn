@@ -6,6 +6,30 @@ namespace ACE.Server.Market;
 
 internal static class MarketEscrowGuard
 {
+    public static bool IsActiveListingBiotaId(uint biotaId)
+    {
+        if (biotaId == 0)
+        {
+            return false;
+        }
+
+        try
+        {
+            using var context = new ACE.Database.Models.Shard.ShardDbContext();
+            var nowUtc = DateTime.UtcNow;
+            return context.PlayerMarketListings.Any(l =>
+                l.ItemBiotaId == biotaId
+                && !l.IsSold
+                && !l.IsCancelled
+                && l.ReturnedAtUtc == null
+                && l.ExpiresAtUtc > nowUtc);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     public static bool ShouldPreserveBiotaOnDestroy(WorldObject obj)
     {
         if (obj?.Biota == null)
@@ -22,17 +46,7 @@ internal static class MarketEscrowGuard
         try
         {
             var biotaId = obj.Biota.Id;
-            using var context = new ACE.Database.Models.Shard.ShardDbContext();
-
-            // If any active listing references this biota, preserve it.
-            // Active = not sold, not cancelled, not returned, and not expired.
-            var nowUtc = DateTime.UtcNow;
-            return context.PlayerMarketListings.Any(l =>
-                l.ItemBiotaId == biotaId
-                && !l.IsSold
-                && !l.IsCancelled
-                && l.ReturnedAtUtc == null
-                && l.ExpiresAtUtc > nowUtc);
+            return IsActiveListingBiotaId((uint)biotaId);
         }
         catch
         {

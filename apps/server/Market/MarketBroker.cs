@@ -583,13 +583,20 @@ public static class MarketBroker
             return;
         }
 
-        var breakdown = GetTradeNoteBreakdown(total);
+        var tradeNoteTotal = (total / 100) * 100;
+        var pyrealRemainder = total % 100;
+
+        var breakdown = GetTradeNoteBreakdown(tradeNoteTotal);
 
         // Pre-validate capacity for the full payout (no partial claims).
         var itemsToReceive = new ItemsToReceive(player);
         foreach (var (wcid, amount) in breakdown)
         {
             itemsToReceive.Add(wcid, amount);
+        }
+        if (pyrealRemainder > 0)
+        {
+            itemsToReceive.Add((uint)WeenieClassName.W_COINSTACK_CLASS, pyrealRemainder);
         }
         if (itemsToReceive.PlayerExceedsLimits)
         {
@@ -630,6 +637,13 @@ public static class MarketBroker
                 created.Add(stack);
                 remaining -= toSet;
             }
+        }
+
+        if (pyrealRemainder > 0)
+        {
+            var pyreals = WorldObjectFactory.CreateNewWorldObject((uint)WeenieClassName.W_COINSTACK_CLASS);
+            pyreals.SetStackSize(pyrealRemainder);
+            created.Add(pyreals);
         }
 
         foreach (var stack in created)
@@ -704,8 +718,6 @@ public static class MarketBroker
             }
         }
 
-        // Anything not divisible by 100 can't be represented by trade notes.
-        // Keep behavior predictable by rounding down (payout records should be multiples of 100).
         return result;
     }
 

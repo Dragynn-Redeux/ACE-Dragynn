@@ -8,13 +8,13 @@ using ACE.Database;
 using ACE.Database.Models.Shard;
 using ACE.DatLoader;
 using ACE.Entity.Enum;
-using ACE.Server.Managers;
 using ACE.Server.Network.Enum;
 using ACE.Server.Network.GameEvent.Events;
 using ACE.Server.Network.GameMessages;
 using ACE.Server.Network.GameMessages.Messages;
 using ACE.Server.Network.Managers;
 using ACE.Server.WorldObjects;
+using ACE.Server.Managers;
 using Serilog;
 
 namespace ACE.Server.Network;
@@ -261,6 +261,8 @@ public class Session
         {
             Player.SaveCharacterToDatabase();
         }
+
+        AccountWealthTracker.Update(Player);
 
         if (logOffRequestTime == DateTime.MinValue)
         {

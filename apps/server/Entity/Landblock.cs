@@ -597,6 +597,15 @@ public class Landblock : IActor
 
         foreach (var wo in worldObjects.Values)
         {
+            // Gate: skip objects that will definitely return false from UpdateObjectPhysics()
+            // (sleeping monsters, static scenery, idle non-animating objects).
+            // Avoids virtual dispatch + guard-chain evaluation for the ~90% of objects
+            // that never do physics work on a given tick. Resolves the 2019 TODO.
+            if (!wo.NeedsPhysicsUpdate)
+            {
+                continue;
+            }
+
             // set to TRUE if object changes landblock
             var landblockUpdate = wo.UpdateObjectPhysics();
 
