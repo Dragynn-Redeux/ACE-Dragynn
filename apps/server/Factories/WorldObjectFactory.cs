@@ -165,6 +165,10 @@ public static class WorldObjectFactory
                 return new BezelTool(weenie, guid);
             case WeenieType.DungeonModder:
                 return new DungeonModder(weenie, guid);
+            case WeenieType.StabilizationDevice:
+                return new StabilizationDevice(weenie, guid);
+            case WeenieType.ResonanceForge:
+                return new ResonanceForge(weenie, guid);
             default:
                 return new GenericObject(weenie, guid);
         }
@@ -306,6 +310,10 @@ public static class WorldObjectFactory
                 return new BezelTool(biota);
             case WeenieType.DungeonModder:
                 return new DungeonModder(biota);
+            case WeenieType.StabilizationDevice:
+                return new StabilizationDevice(biota);
+            case WeenieType.ResonanceForge:
+                return new ResonanceForge(biota);
             default:
                 return new GenericObject(biota);
         }
