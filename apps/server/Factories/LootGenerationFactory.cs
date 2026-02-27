@@ -2383,6 +2383,7 @@ public static partial class LootGenerationFactory
             wo.SetProperty(PropertyBool.IsUnstable, true);
             wo.SetProperty(PropertyDataId.IconOverlay, 0x06004D21);
             wo.SetProperty(PropertyInt.Lifespan, 72000);
+            wo.SetProperty(PropertyBool.IsSellable, false);
             
         }
         return wo;
