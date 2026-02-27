@@ -2380,6 +2380,8 @@ public static partial class LootGenerationFactory
                 wo.ItemType == ItemType.Jewelry ||
                 wo.ItemType == ItemType.Clothing))
         {
+            TryApplyUnstableWeaponSubtype(wo, treasureRoll);
+
             wo.SetProperty(PropertyBool.IsUnstable, true);
             wo.SetProperty(PropertyDataId.IconOverlay, 0x06004D21);
             wo.SetProperty(PropertyInt.Lifespan, 72000);
@@ -2387,6 +2389,79 @@ public static partial class LootGenerationFactory
             
         }
         return wo;
+    }
+
+    private static void TryApplyUnstableWeaponSubtype(WorldObject wo, TreasureRoll treasureRoll)
+    {
+        if (wo.ItemType is not ItemType.Weapon and not ItemType.MeleeWeapon and not ItemType.MissileWeapon and not ItemType.Caster)
+        {
+            return;
+        }
+
+        if (wo.WeaponSubtype != null)
+        {
+            return;
+        }
+
+        LootTables.WeaponSubtype? unstableWeaponSubtype = treasureRoll?.WeaponType switch
+        {
+            TreasureWeaponType.Unarmed => LootTables.WeaponSubtype.Ua,
+
+            TreasureWeaponType.Axe => LootTables.WeaponSubtype.AxeSmall,
+            TreasureWeaponType.Dagger or TreasureWeaponType.DaggerMS => LootTables.WeaponSubtype.DaggerSmall,
+            TreasureWeaponType.Mace or TreasureWeaponType.MaceJitte => LootTables.WeaponSubtype.MaceMedium,
+            TreasureWeaponType.Spear => LootTables.WeaponSubtype.SpearSmall,
+            TreasureWeaponType.Staff => LootTables.WeaponSubtype.StaffMedium,
+            TreasureWeaponType.Sword or TreasureWeaponType.SwordMS => LootTables.WeaponSubtype.SwordSmall,
+
+            TreasureWeaponType.TwoHandedAxe => LootTables.WeaponSubtype.TwohandAxe,
+            TreasureWeaponType.TwoHandedMace => LootTables.WeaponSubtype.TwohandMace,
+            TreasureWeaponType.TwoHandedSpear => LootTables.WeaponSubtype.TwohandSpear,
+            TreasureWeaponType.TwoHandedSword => LootTables.WeaponSubtype.TwohandSword,
+
+            TreasureWeaponType.Bow => LootTables.WeaponSubtype.BowLarge,
+            TreasureWeaponType.BowShort => LootTables.WeaponSubtype.BowSmall,
+            TreasureWeaponType.Crossbow => LootTables.WeaponSubtype.CrossbowLarge,
+            TreasureWeaponType.CrossbowLight => LootTables.WeaponSubtype.CrossbowSmall,
+            TreasureWeaponType.Atlatl => LootTables.WeaponSubtype.AtlatlLarge,
+            TreasureWeaponType.AtlatlRegular => LootTables.WeaponSubtype.AtlatlSmall,
+            TreasureWeaponType.Thrown => GetThrownWeaponsSubType(wo) switch
+            {
+                0 => LootTables.WeaponSubtype.ThrownAxe,
+                1 => LootTables.WeaponSubtype.ThrownClub,
+                2 => LootTables.WeaponSubtype.ThrownDagger,
+                3 => LootTables.WeaponSubtype.ThrownDart,
+                4 => LootTables.WeaponSubtype.ThrownJavelin,
+                5 => LootTables.WeaponSubtype.ThrownShuriken,
+                _ => LootTables.WeaponSubtype.ThrownDart,
+            },
+
+            TreasureWeaponType.Caster => LootTables.WeaponSubtype.Caster,
+            _ => null,
+        };
+
+        if (unstableWeaponSubtype != null)
+        {
+            wo.WeaponSubtype = (int)unstableWeaponSubtype.Value;
+            return;
+        }
+
+        var sourceWeenie = DatabaseManager.World.GetWeenie(wo.WeenieClassId);
+        var sourceWeaponSubtype = sourceWeenie?.WeeniePropertiesInt
+            .FirstOrDefault(property => property.Type == (ushort)PropertyInt.WeaponSubtype)
+            ?.Value;
+
+        if (sourceWeaponSubtype != null)
+        {
+            wo.WeaponSubtype = sourceWeaponSubtype;
+            return;
+        }
+
+        _log.Warning(
+            "CreateRandomLootObjects_New() - Missing WeaponSubtype for unstable weapon item {Name} ({Wcid}), TreasureWeaponType={WeaponType}.",
+            wo.Name,
+            wo.WeenieClassId,
+            treasureRoll?.WeaponType);
     }
 
     public static WorldObject CreateAndMutateWcid(

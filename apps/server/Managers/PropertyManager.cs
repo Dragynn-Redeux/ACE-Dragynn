@@ -808,6 +808,7 @@ public static class DefaultPropertyManager
         ("debug_crafting_system", new Property<bool>(false, "enable this to see crafting system console logging")),
         ("debug_loot_quality_system", new Property<bool>(false, "enable this to see loot quality system console logging")),
         ("debug_level_scaling_system", new Property<bool>(false, "enable this to see level scaling system console logging")),
+        ("debug_stabilization", new Property<bool>(false, "enable this to see stabilization system console logging")),
         ("banking_system_logging", new Property<bool>(true, "enable this to see banking system console logging")),
         ("bypass_crafting_checks", new Property<bool>(false, "enable this to allow players to succeed at crafting recipes without needing the skill.")),
         ("create_corpse_on_player_death", new Property<bool>(true, "disable this to prevent players from creating a corpse on death.")),

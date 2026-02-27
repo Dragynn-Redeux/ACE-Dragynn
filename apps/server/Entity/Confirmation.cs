@@ -2,7 +2,6 @@ using System;
 using ACE.Entity;
 using ACE.Entity.Enum;
 using ACE.Server.Managers;
-using ACE.Server.Network.GameMessages.Messages;
 using ACE.Server.WorldObjects;
 using Serilog;
 
