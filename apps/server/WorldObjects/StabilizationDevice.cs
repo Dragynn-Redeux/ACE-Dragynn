@@ -84,6 +84,22 @@ public class StabilizationDevice : WorldObject
             return;
         }
 
+        if (target.Lifespan == null)
+        {
+            if (debugStabilization)
+            {
+                _log.Information("[DEBUG][Stabilization] Target is already stabilized");
+            }
+            player.Session.Network.EnqueueSend(
+                new GameMessageSystemChat(
+                    "This item is already stabilized and cannot be stabilized again.",
+                    ChatMessageType.Broadcast
+                )
+            );
+            player.SendUseDoneEvent();
+            return;
+        }
+
         if (!confirmed)
         {
             if (
