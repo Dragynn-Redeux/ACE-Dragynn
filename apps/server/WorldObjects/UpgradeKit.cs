@@ -216,7 +216,9 @@ public class UpgradeKit : Stackable
             // Armor
             if (target.WeenieType is WeenieType.Clothing || target.ItemType == ItemType.Armor)
             {
-                if (target.ArmorStyle == null)
+                // Allow clothing without physical armor (ArmorLevel = 0 or null) to pass through even if ArmorStyle is null
+                // Only enforce ArmorStyle requirement for items with actual physical armor (ArmorLevel > 0)
+                if (target.ArmorStyle == null && target.ArmorLevel != null && target.ArmorLevel > 0)
                 {
                     _log.Error(
                         "MutateQuestItem() - ArmorStyle is null for ({target}). Armor upgrade aborted.", target);

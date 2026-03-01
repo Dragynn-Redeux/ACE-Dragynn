@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using ACE.Entity;
 using ACE.Entity.Enum;
 using ACE.Entity.Enum.Properties;
@@ -12,6 +13,38 @@ namespace ACE.Server.WorldObjects;
 
 public class StabilizationDevice : WorldObject
 {
+    private static readonly PropertyInt[] DebugIntProperties =
+    {
+        PropertyInt.WieldDifficulty,
+        PropertyInt.Damage,
+        PropertyInt.ArmorLevel,
+        PropertyInt.WardLevel,
+        PropertyInt.ItemMaxMana,
+        PropertyInt.ItemCurMana,
+        PropertyInt.GearDamage,
+        PropertyInt.GearDamageResist,
+        PropertyInt.GearCritDamage,
+        PropertyInt.GearCritResist,
+        PropertyInt.GearMaxHealth,
+        PropertyInt.GearMaxStamina,
+        PropertyInt.GearMaxMana,
+        PropertyInt.Bonded,
+        PropertyInt.Lifespan
+    };
+
+    private static readonly PropertyFloat[] DebugFloatProperties =
+    {
+        PropertyFloat.DamageMod,
+        PropertyFloat.ElementalDamageMod,
+        PropertyFloat.WeaponRestorationSpellsMod,
+        PropertyFloat.WeaponOffense,
+        PropertyFloat.WeaponPhysicalDefense,
+        PropertyFloat.WeaponMagicalDefense,
+        PropertyFloat.WeaponLifeMagicMod,
+        PropertyFloat.WeaponWarMagicMod,
+        PropertyFloat.ManaRate
+    };
+
     /// <summary>
     /// A new biota be created taking all of its values from weenie.
     /// </summary>
@@ -139,18 +172,28 @@ public class StabilizationDevice : WorldObject
             player,
             () =>
             {
-                // Remove Lifespan property (remove decay timer)
-                if (target.Lifespan != null)
-                {
-                    target.RemoveProperty(PropertyInt.Lifespan);
-                }
+                // Preserve Lifespan in case upgrade fails; only clear it on success
+                var originalLifespan = target.Lifespan;
+                var beforeSnapshot = debugStabilization ? CaptureSnapshot(target) : default;
 
                 // Scale item to player tier (bypasses UpgradeKit stack count validation)
                 if (!UpgradeKit.UpgradeItem(player, target))
                 {
+                    // Restore Lifespan if upgrade failed and it was accidentally removed
+                    if (originalLifespan.HasValue && target.Lifespan == null)
+                    {
+                        target.SetProperty(PropertyInt.Lifespan, originalLifespan.Value);
+                    }
+
                     if (debugStabilization)
                     {
-                        _log.Information("[DEBUG][Stabilization] UpgradeItem failed");
+                        var afterFailedUpgradeSnapshot = CaptureSnapshot(target);
+                        _log.Information(
+                            "[DEBUG][Stabilization] UpgradeItem failed target={Target} guid={Guid} delta={Delta}",
+                            target.Name,
+                            target.Guid,
+                            BuildDeltaSummary(beforeSnapshot, afterFailedUpgradeSnapshot)
+                        );
                     }
                     player.Session.Network.EnqueueSend(
                         new GameMessageSystemChat(
@@ -161,7 +204,8 @@ public class StabilizationDevice : WorldObject
                     return;
                 }
 
-                // Make account bound
+                // Success: clear timer and mark bound
+                target.RemoveProperty(PropertyInt.Lifespan);
                 target.SetProperty(PropertyInt.Bonded, 1);
 
                 // Broadcast updated state (IsUnstable flag remains for forge)
@@ -169,8 +213,13 @@ public class StabilizationDevice : WorldObject
 
                 if (debugStabilization)
                 {
-                    _log.Information("[DEBUG][Stabilization] Stabilization successful for {Target}",
-                        target.Name);
+                    var afterSnapshot = CaptureSnapshot(target);
+                    _log.Information(
+                        "[DEBUG][Stabilization] Stabilization successful target={Target} guid={Guid} delta={Delta}",
+                        target.Name,
+                        target.Guid,
+                        BuildDeltaSummary(beforeSnapshot, afterSnapshot)
+                    );
                 }
                 
                 player.Session.Network.EnqueueSend(
@@ -198,5 +247,74 @@ public class StabilizationDevice : WorldObject
         actionChain.EnqueueChain();
 
         player.NextUseTime = DateTime.UtcNow.AddSeconds(animTime);
+    }
+
+    private readonly record struct StabilizationSnapshot(
+        Dictionary<PropertyInt, int?> Ints,
+        Dictionary<PropertyFloat, double?> Floats,
+        int SpellCount
+    );
+
+    private static StabilizationSnapshot CaptureSnapshot(WorldObject target)
+    {
+        var ints = new Dictionary<PropertyInt, int?>(DebugIntProperties.Length);
+        foreach (var property in DebugIntProperties)
+        {
+            ints[property] = target.GetProperty(property);
+        }
+
+        var floats = new Dictionary<PropertyFloat, double?>(DebugFloatProperties.Length);
+        foreach (var property in DebugFloatProperties)
+        {
+            floats[property] = target.GetProperty(property);
+        }
+
+        var spellCount = target.Biota.PropertiesSpellBook?.Count ?? 0;
+
+        return new StabilizationSnapshot(ints, floats, spellCount);
+    }
+
+    private static string BuildDeltaSummary(StabilizationSnapshot before, StabilizationSnapshot after)
+    {
+        var changes = new List<string>();
+
+        foreach (var property in DebugIntProperties)
+        {
+            var beforeValue = before.Ints[property];
+            var afterValue = after.Ints[property];
+
+            if (beforeValue != afterValue)
+            {
+                changes.Add($"{property}:{FormatInt(beforeValue)}->{FormatInt(afterValue)}");
+            }
+        }
+
+        foreach (var property in DebugFloatProperties)
+        {
+            var beforeValue = before.Floats[property];
+            var afterValue = after.Floats[property];
+
+            if (beforeValue != afterValue)
+            {
+                changes.Add($"{property}:{FormatDouble(beforeValue)}->{FormatDouble(afterValue)}");
+            }
+        }
+
+        if (before.SpellCount != after.SpellCount)
+        {
+            changes.Add($"SpellCount:{before.SpellCount}->{after.SpellCount}");
+        }
+
+        return changes.Count > 0 ? string.Join(", ", changes) : "no tracked changes";
+    }
+
+    private static string FormatInt(int? value)
+    {
+        return value?.ToString() ?? "null";
+    }
+
+    private static string FormatDouble(double? value)
+    {
+        return value?.ToString("0.###") ?? "null";
     }
 }

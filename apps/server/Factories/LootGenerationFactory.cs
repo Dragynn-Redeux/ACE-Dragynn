@@ -2381,6 +2381,7 @@ public static partial class LootGenerationFactory
                 wo.ItemType == ItemType.Clothing))
         {
             TryApplyUnstableWeaponSubtype(wo, treasureRoll);
+            TryApplyUnstableArmorStyle(wo);
 
             wo.SetProperty(PropertyBool.IsUnstable, true);
             wo.SetProperty(PropertyDataId.IconOverlay, 0x06004D21);
@@ -2418,6 +2419,7 @@ public static partial class LootGenerationFactory
             TreasureWeaponType.TwoHandedMace => LootTables.WeaponSubtype.TwohandMace,
             TreasureWeaponType.TwoHandedSpear => LootTables.WeaponSubtype.TwohandSpear,
             TreasureWeaponType.TwoHandedSword => LootTables.WeaponSubtype.TwohandSword,
+            TreasureWeaponType.TwoHandedWeapon => null, // Cannot infer specific subtype without size information
 
             TreasureWeaponType.Bow => LootTables.WeaponSubtype.BowLarge,
             TreasureWeaponType.BowShort => LootTables.WeaponSubtype.BowSmall,
@@ -2462,6 +2464,37 @@ public static partial class LootGenerationFactory
             wo.Name,
             wo.WeenieClassId,
             treasureRoll?.WeaponType);
+    }
+
+    private static void TryApplyUnstableArmorStyle(WorldObject wo)
+    {
+        if (wo.ItemType is not ItemType.Armor and not ItemType.Clothing)
+        {
+            return;
+        }
+
+        if (wo.ArmorStyle != null)
+        {
+            return;
+        }
+
+        var sourceWeenie = DatabaseManager.World.GetWeenie(wo.WeenieClassId);
+        var sourceArmorStyle = sourceWeenie?.WeeniePropertiesInt
+            .FirstOrDefault(p => p.Type == (ushort)PropertyInt.ArmorStyle)?.Value;
+
+        if (sourceArmorStyle.HasValue)
+        {
+            wo.SetProperty(PropertyInt.ArmorStyle, sourceArmorStyle.Value);
+            return;
+        }
+
+        // No armor style found; log warning but don't fail. Clothing items often have null ArmorStyle intentionally.
+        if (wo.ArmorLevel != null)
+        {
+            _log.Warning(
+                "Missing ArmorStyle for unstable armor item {Name} ({Wcid}).",
+                wo.Name, wo.WeenieClassId);
+        }
     }
 
     public static WorldObject CreateAndMutateWcid(
