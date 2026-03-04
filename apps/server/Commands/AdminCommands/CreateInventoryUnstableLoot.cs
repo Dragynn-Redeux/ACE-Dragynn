@@ -9,6 +9,7 @@ using ACE.Server.Factories.Enum;
 using ACE.Server.Managers;
 using ACE.Server.Network;
 using ACE.Server.Network.GameMessages.Messages;
+using ACE.Server.WorldObjects;
 
 namespace ACE.Server.Commands.AdminCommands;
 
@@ -39,7 +40,7 @@ public class CreateInventoryUnstableLoot
         {
             session.Network.EnqueueSend(
                 new GameMessageSystemChat(
-                    "Invalid type. Valid values: armor, clothing, melee, missile, caster, jewelry.",
+                    "Invalid type. Valid values: armor, clothing, melee, missile, caster, jewelry, sigil, sigilwarrior, sigilrogue, sigilcaster.",
                     ChatMessageType.Broadcast
                 )
             );
@@ -128,7 +129,7 @@ public class CreateInventoryUnstableLoot
                     continue;
                 }
 
-                if (!IsEligibleItemType(item.ItemType) || item.GetProperty(PropertyBool.IsUnstable) != true)
+                if (!(IsEligibleItemType(item.ItemType) || item is SigilTrinket) || item.GetProperty(PropertyBool.IsUnstable) != true)
                 {
                     item.Destroy();
                     failed++;
@@ -253,6 +254,19 @@ public class CreateInventoryUnstableLoot
 
             case "jewelry":
                 forceItemType = TreasureItemType_Orig.Jewelry;
+                return true;
+
+            case "sigil":
+            case "sigilwarrior":
+                forceItemType = TreasureItemType_Orig.SigilTrinketWarrior;
+                return true;
+
+            case "sigilrogue":
+                forceItemType = TreasureItemType_Orig.SigilTrinketRogue;
+                return true;
+
+            case "sigilcaster":
+                forceItemType = TreasureItemType_Orig.SigilTrinketCaster;
                 return true;
 
             default:
