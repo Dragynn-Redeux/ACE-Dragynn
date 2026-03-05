@@ -628,7 +628,17 @@ partial class Player
             {
                 foreach (var maxVital in maxVitals)
                 {
-                    var playerVital = Vitals[maxVital];
+                    if (!Vitals.TryGetValue(maxVital, out var playerVital))
+                    {
+                        _log.Warning(
+                            "{Name}.HandleMaxVitalUpdate: vital key {MaxVital} ({MaxVitalValue}) not found in Vitals dictionary for spell {SpellId}",
+                            Name,
+                            maxVital,
+                            (int)maxVital,
+                            spell.Id
+                        );
+                        continue;
+                    }
 
                     Session.Network.EnqueueSend(
                         new GameMessagePrivateUpdateAttribute2ndLevel(this, playerVital.ToEnum(), playerVital.Current)

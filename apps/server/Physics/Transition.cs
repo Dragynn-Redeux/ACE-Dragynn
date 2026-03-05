@@ -180,7 +180,9 @@ public class Transition
         var newCell = ObjCell.EmptyCell; // null check?
         ObjCell.find_cell_list(CellArray, ref newCell, SpherePath);
 
-        foreach (var cell in CellArray.Cells.Values)
+        // If we use CellArray.Cells.Values directly, an InvalidOperationException is thrown if the
+        // dictionary is modified during FindCollisions. Take a snapshot to avoid this.
+        foreach (var cell in CellArray.Cells.Values.ToList())
         {
             if (cell == null || cell.Equals(currCell))
             {

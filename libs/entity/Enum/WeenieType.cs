@@ -87,6 +87,8 @@ public enum WeenieType : uint
     SpellPurge,
     BezelTool,
     DungeonModder,
+    TrophySolvent,
+    TrophyEssence,
     StabilizationDevice,
     ResonanceForge
 }

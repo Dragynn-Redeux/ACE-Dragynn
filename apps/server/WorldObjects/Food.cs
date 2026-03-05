@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using ACE.Entity;
 using ACE.Entity.Enum;
 using ACE.Entity.Enum.Properties;
@@ -31,7 +32,31 @@ public class Food : Stackable
     private void SetEphemeralValues()
     {
         ObjectDescriptionFlags |= ObjectDescriptionFlag.Food;
+
+        if ((Spell2 == null || Spell2 == 0) && CooldownId == null)
+        {
+            CooldownDuration = 300;
+            if (ItemType == ItemType.Food)
+            {
+                CooldownId = 10076;
+            }
+            else if (ItemType == ItemType.Misc)
+            {
+                CooldownId = 10077;
+            }
+        }
     }
+
+    // WCID ranges for Long-effect essence foods and potions (no cooldown, spell-only buff).
+    // Short-effect items share the same WCID base but have CooldownId set.
+    private const uint LongEssenceBaseFoodWcidMin = 1053937u;
+    private const uint LongEssenceBaseFoodWcidMax = 1053951u;
+    private const uint LongEssenceFoodWcidMin   = 1054600u;
+    private const uint LongEssenceFoodWcidMax   = 1054731u;
+    private const uint LongEssenceBasePotionWcidMin = 1053957u;
+    private const uint LongEssenceBasePotionWcidMax = 1053971u;
+    private const uint LongEssencePotionWcidMin = 1054732u;
+    private const uint LongEssencePotionWcidMax = 1054959u;
 
     /// <summary>
     /// This is raised by Player.HandleActionUseItem.<para />
@@ -97,9 +122,19 @@ public class Food : Stackable
             BoostVital(player);
         }
 
+        if (SpellDID != null || Spell2 != null)
+        {
+            TryDispelPreviousLongEssenceBuff(player);
+        }
+
         if (SpellDID != null)
         {
             CastSpell(player);
+        }
+
+        if (Spell2 != null && Spell2 != 0)
+        {
+            CastAddedSpell(player);
         }
 
         var soundEvent = new GameMessageSound(player.Guid, GetUseSound(), 1.0f);
@@ -161,6 +196,52 @@ public class Food : Stackable
         }
     }
 
+    /// <summary>
+    /// Before applying a Long-effect essence buff, dispels any previously active Long buff
+    /// of the same category (cooking or alchemy) so only one can be active at a time.
+    /// Short-effect items (CooldownId set) are excluded.
+    /// </summary>
+    private void TryDispelPreviousLongEssenceBuff(Player player)
+    {
+        if (CooldownId != null && CooldownId != 0)
+        {
+            return;
+        }
+        
+        HashSet<uint> spellIds;
+        if ((WeenieClassId >= LongEssenceFoodWcidMin && WeenieClassId <= LongEssenceFoodWcidMax) ||
+            (WeenieClassId >= LongEssenceBaseFoodWcidMin && WeenieClassId <= LongEssenceBaseFoodWcidMax))
+            
+        {
+            spellIds = TrophyEssence.AllCookFoodSpellIds;
+        }
+        else if ((WeenieClassId >= LongEssencePotionWcidMin && WeenieClassId <= LongEssencePotionWcidMax) ||
+                 (WeenieClassId >= LongEssenceBasePotionWcidMin && WeenieClassId <= LongEssenceBasePotionWcidMax))
+        {
+            spellIds = TrophyEssence.AllAlchPotionSpellIds;
+        }
+        else
+        {
+            return;
+        }
+
+        var all = player.Biota.PropertiesEnchantmentRegistry.Clone(player.BiotaDatabaseLock);
+        var toDispel = new List<PropertiesEnchantmentRegistry>();
+
+        foreach (var enchantment in all)
+        {
+            if (spellIds.Contains((uint)enchantment.SpellId))
+            {
+                toDispel.Add(enchantment);
+            }
+        }
+
+        if (toDispel.Count > 0)
+        {
+            player.EnchantmentManager.Dispel(toDispel);
+        }
+    }
+
     public void CastSpell(Player player)
     {
         var spell = new Spell(SpellDID.Value);
@@ -186,6 +267,31 @@ public class Food : Stackable
         // should be 'You cast', instead of 'Item cast'
         // omitting the item caster here, so player is also used for enchantment registry caster,
         // which could prevent some scenarios with spamming enchantments from multiple food sources to protect against dispels
+        player.TryCastSpell(spell, player, this, tryResist: false);
+    }
+
+    public void CastAddedSpell(Player player)
+    {
+        var spell = new Spell(Spell2.Value);
+
+        if (spell.NotFound)
+        {
+            if (spell._spellBase != null)
+            {
+                player.Session.Network.EnqueueSend(
+                    new GameMessageSystemChat($"{spell.Name} spell not implemented, yet!", ChatMessageType.System)
+                );
+            }
+            else
+            {
+                player.Session.Network.EnqueueSend(
+                    new GameMessageSystemChat($"Invalid added spell id {Spell2 ?? 0}", ChatMessageType.System)
+                );
+            }
+
+            return;
+        }
+
         player.TryCastSpell(spell, player, this, tryResist: false);
     }
 

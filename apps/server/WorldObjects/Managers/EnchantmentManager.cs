@@ -1424,6 +1424,14 @@ public class EnchantmentManager
     }
 
     /// <summary>
+    /// Returns the additive ward level modifier, ie. Ward Protection potions
+    /// </summary>
+    public virtual int GetWardAdditiveMod()
+    {
+        return GetAdditiveMod(PropertyInt.WardLevel);
+    }
+
+    /// <summary>
     /// Gets the additive armor level vs type modifier, ie. banes
     /// </summary>
     public virtual float GetArmorModVsType(DamageType damageType)

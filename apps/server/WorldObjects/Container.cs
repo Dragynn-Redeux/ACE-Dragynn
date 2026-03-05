@@ -215,8 +215,8 @@ public partial class Container : WorldObject
         foreach (var container in sideContainers)
         {
             ((Container)container).SortWorldObjectsIntoInventory(worldObjects); // This will set the InventoryLoaded flag for this sideContainer
-            EncumbranceVal += container.EncumbranceVal; // This value includes the containers burden itself + all child items
-            Value += container.Value; // This value includes the containers value itself + all child items
+            EncumbranceVal += container.EncumbranceVal ?? 0; // This value includes the containers burden itself + all child items
+            Value += container.Value ?? 0; // This value includes the containers value itself + all child items
         }
 
         OnInitialInventoryLoadCompleted();
@@ -652,8 +652,11 @@ public partial class Container : WorldObject
                     {
                         if (sidePack.TryAddToInventory(worldObject, out container, placementPosition, true))
                         {
-                            EncumbranceVal += (worldObject.EncumbranceVal ?? 0);
-                            Value += (worldObject.Value ?? 0);
+                            if (this is not Player playerOwner || playerOwner.Session == null)
+                            {
+                                EncumbranceVal += (worldObject.EncumbranceVal ?? 0);
+                                Value += (worldObject.Value ?? 0);
+                            }
 
                             return true;
                         }

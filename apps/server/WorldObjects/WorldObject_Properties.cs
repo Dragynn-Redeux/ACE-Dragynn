@@ -9553,4 +9553,68 @@ partial class WorldObject
             }
         }
     }
+
+    public int? TrophyEssenceSpellId
+    {
+        get => GetProperty(PropertyInt.TrophyEssenceSpellId);
+        set
+        {
+            if (!value.HasValue)
+            {
+                RemoveProperty(PropertyInt.TrophyEssenceSpellId);
+            }
+            else
+            {
+                SetProperty(PropertyInt.TrophyEssenceSpellId, value.Value);
+            }
+        }
+    }
+
+    public int? TrophyEssenceSkill
+    {
+        get => GetProperty(PropertyInt.TrophyEssenceSkill);
+        set
+        {
+            if (!value.HasValue)
+            {
+                RemoveProperty(PropertyInt.TrophyEssenceSkill);
+            }
+            else
+            {
+                SetProperty(PropertyInt.TrophyEssenceSkill, value.Value);
+            }
+        }
+    }
+
+    public uint? Spell2
+    {
+        get => GetProperty(PropertyDataId.Spell2);
+        set
+        {
+            if (!value.HasValue)
+            {
+                RemoveProperty(PropertyDataId.Spell2);
+            }
+            else
+            {
+                SetProperty(PropertyDataId.Spell2, value.Value);
+            }
+        }
+    }
+
+    public int? TrophyEssenceEffectType
+    {
+        get => GetProperty(PropertyInt.TrophyEssenceEffectType);
+        set
+        {
+            if (!value.HasValue)
+            {
+                RemoveProperty(PropertyInt.TrophyEssenceEffectType);
+            }
+            else
+            {
+                SetProperty(PropertyInt.TrophyEssenceEffectType, value.Value);
+            }
+        }
+    }
 }

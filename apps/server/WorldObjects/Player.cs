@@ -186,6 +186,7 @@ public partial class Player : Creature, IPlayer
 
         SetEphemeralValues();
 
+        EncumbranceVal = 0;
         SortBiotasIntoInventory(inventory);
         AddBiotasToEquippedObjects(wieldedItems);
 
