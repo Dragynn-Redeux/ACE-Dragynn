@@ -942,6 +942,11 @@ public partial class Container : WorldObject
         if (!IsOpen)
         {
             Open(player);
+
+            if (ForgeStagingService.IsForgeTarget(this))
+            {
+                ForgeStagingService.PromptAutoStageIfNeeded(player, this);
+            }
         }
         else
         {

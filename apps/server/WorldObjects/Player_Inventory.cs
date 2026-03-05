@@ -5182,6 +5182,16 @@ partial class Player
             return;
         }
 
+        if (target is Container forgeTarget && ForgeStagingService.IsForgeTarget(forgeTarget))
+        {
+            if (TryStageItemInForge(forgeTarget, item, itemFoundInContainer, itemRootOwner, itemWasEquipped, amount))
+            {
+                ForgeStagingService.PromptAutoStageIfNeeded(this, forgeTarget);
+            }
+
+            return;
+        }
+
         if (target is Creature brokerCreature && MarketBroker.IsMarketBroker(brokerCreature))
         {
             // Market Broker uses "Refuse" semantics (examine) for any listable item so the player keeps the item.
@@ -5385,6 +5395,150 @@ partial class Player
             );
             Session.Network.EnqueueSend(new GameEventInventoryServerSaveFailed(Session, item.Guid.Full));
         }
+    }
+
+    public int TryStageAllUnstableItemsToForge(Container forgeTarget)
+    {
+        if (forgeTarget == null || !ForgeStagingService.IsForgeTarget(forgeTarget))
+        {
+            return 0;
+        }
+
+        var candidates = GetAllPossessions()
+            .Where(i =>
+                i != null
+                && i.GetProperty(PropertyBool.IsUnstable) == true
+                && i.ContainerId != forgeTarget.Guid.Full
+                && (!i.WielderId.HasValue || i.WielderId.Value != Guid.Full)
+            )
+            .ToList();
+
+        var staged = 0;
+
+        foreach (var candidate in candidates)
+        {
+            var item = FindObject(
+                candidate.Guid.Full,
+                SearchLocations.MyInventory | SearchLocations.MyEquippedItems,
+                out var itemFoundInContainer,
+                out var itemRootOwner,
+                out var itemWasEquipped
+            );
+
+            if (item == null)
+            {
+                continue;
+            }
+
+            var amount = item.StackSize ?? 1;
+            if (TryStageItemInForge(forgeTarget, item, itemFoundInContainer, itemRootOwner, itemWasEquipped, amount, false))
+            {
+                staged++;
+            }
+        }
+
+        if (staged > 0)
+        {
+            Session.Network.EnqueueSend(
+                new GameMessageSystemChat(
+                    $"Moved {staged:N0} unstable item(s) into the {forgeTarget.Name}.",
+                    ChatMessageType.Broadcast
+                )
+            );
+        }
+
+        return staged;
+    }
+
+    private bool TryStageItemInForge(
+        Container forgeTarget,
+        WorldObject item,
+        Container itemFoundInContainer,
+        Container itemRootOwner,
+        bool itemWasEquipped,
+        int amount,
+        bool sendFeedback = true
+    )
+    {
+        if (forgeTarget == null || item == null)
+        {
+            return false;
+        }
+
+        if (item.GetProperty(PropertyBool.IsUnstable) != true)
+        {
+            if (sendFeedback)
+            {
+                Session.Network.EnqueueSend(new GameEventInventoryServerSaveFailed(Session, item.Guid.Full));
+                SendTransientError("Only unstable items can be placed in this forge.");
+            }
+
+            return false;
+        }
+
+        if (itemWasEquipped)
+        {
+            if (sendFeedback)
+            {
+                Session.Network.EnqueueSend(new GameEventInventoryServerSaveFailed(Session, item.Guid.Full));
+                SendTransientError("You must first unequip that item.");
+            }
+
+            return false;
+        }
+
+        if (amount <= 0)
+        {
+            return false;
+        }
+
+        if (!RemoveItemForGive(item, itemFoundInContainer, itemWasEquipped, itemRootOwner, amount, out var itemToStage))
+        {
+            return false;
+        }
+
+        if (itemToStage == null)
+        {
+            return false;
+        }
+
+        if (!forgeTarget.TryAddToInventory(itemToStage, 0, true, false))
+        {
+            // Return to player if staging failed to avoid item loss.
+            if (!TryCreateInInventoryWithNetworking(itemToStage))
+            {
+                itemToStage.Destroy();
+            }
+
+            if (sendFeedback)
+            {
+                Session.Network.EnqueueSend(new GameEventInventoryServerSaveFailed(Session, item.Guid.Full));
+                SendTransientError("Unable to place that item in the forge.");
+            }
+
+            return false;
+        }
+
+        Session.Network.EnqueueSend(
+            new GameMessagePublicUpdateInstanceID(itemToStage, PropertyInstanceId.Container, forgeTarget.Guid),
+            new GameEventItemServerSaysContainId(Session, itemToStage, forgeTarget)
+        );
+
+        if (sendFeedback)
+        {
+            var stackSize = itemToStage.StackSize ?? 1;
+            var stackMsg = stackSize != 1 ? $"{stackSize:N0} " : string.Empty;
+            var itemName = itemToStage.GetNameWithMaterial(stackSize);
+
+            Session.Network.EnqueueSend(
+                new GameMessageSystemChat(
+                    $"You place {stackMsg}{itemName} in the {forgeTarget.Name}.",
+                    ChatMessageType.Broadcast
+                )
+            );
+        }
+
+        return true;
     }
 
     private void HandleIOUTurnIn(WorldObject target, WorldObject iouToTurnIn)
