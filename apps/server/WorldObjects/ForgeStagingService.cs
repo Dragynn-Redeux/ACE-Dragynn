@@ -20,7 +20,6 @@ public static class ForgeStagingService
 
     private const string FastPathHint =
         "Tip: Fast single-item mode is Item -> Forge. Click-forge mode is for all eligible or guided selection.";
-    private const string NotImplementedMessage = "The forge's second pass has not yet been implemented.";
     private const string SecondPassLockedMessage =
         "The forge's second pass remains sealed until phase one stability reaches 66%.";
 
@@ -122,6 +121,12 @@ public static class ForgeStagingService
         if (item == null)
         {
             reason = "That item is unavailable.";
+            return false;
+        }
+
+        if (DestabilizedLootForge.IsTerminallyDestabilized(item))
+        {
+            reason = "That item can no longer be altered.";
             return false;
         }
 
@@ -254,7 +259,8 @@ public static class ForgeStagingService
             .GetAllPossessions()
             .Where(i => i != null)
             .Where(i => i.ContainerId == player.Guid.Full)
-            .Where(i => i.GetProperty(PropertyBool.IsUnstable) == true || GetForgePassCount(i) >= 1);
+            .Where(i => i.GetProperty(PropertyBool.IsUnstable) == true)
+            .Where(i => !DestabilizedLootForge.IsTerminallyDestabilized(i));
     }
 
     private static bool TryProcessItem(Player player, WorldObject item, out string failureMessage)
@@ -270,8 +276,13 @@ public static class ForgeStagingService
         var forgePassCount = GetForgePassCount(item);
         if (forgePassCount >= 1)
         {
-            failureMessage = IsSecondPassUnlocked() ? NotImplementedMessage : SecondPassLockedMessage;
-            return false;
+            if (!IsSecondPassUnlocked())
+            {
+                failureMessage = SecondPassLockedMessage;
+                return false;
+            }
+
+            return DestabilizedLootForge.TryQueueFinalization(player, item, out failureMessage);
         }
 
         if (!IsEligibleForFirstPass(item, out failureMessage))
