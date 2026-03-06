@@ -16,6 +16,12 @@ namespace ACE.Server.WorldObjects;
 
 public class UpgradeKit : Stackable
 {
+    public enum UpgradeContext
+    {
+        Default,
+        Stabilization,
+    }
+
     /// <summary>
     /// A new biota be created taking all of its values from weenie.
     /// </summary>
@@ -171,7 +177,12 @@ public class UpgradeKit : Stackable
         player.NextUseTime = DateTime.UtcNow.AddSeconds(animTime);
     }
 
-    public static bool UpgradeItem(Player player, WorldObject target, int forcedNewWieldDifficulty = 0)
+    public static bool UpgradeItem(
+        Player player,
+        WorldObject target,
+        int forcedNewWieldDifficulty = 0,
+        UpgradeContext upgradeContext = UpgradeContext.Default
+    )
     {
         if (target.ItemType != ItemType.Jewelry)
         {
@@ -181,6 +192,12 @@ public class UpgradeKit : Stackable
             var newRequirement = forcedNewWieldDifficulty > 0
                 ? forcedNewWieldDifficulty
                 : GetMaxRequirementForPlayer(player, target);
+
+            if (upgradeContext == UpgradeContext.Stabilization)
+            {
+                // Stabilization should never reduce requirement/tier-driving baselines.
+                newRequirement = Math.Max(currentRequirement, newRequirement);
+            }
 
             var currentTier = GetTierIndexFromRequirement(target, currentRequirement);
             var newTier = GetTierIndexFromRequirement(target, newRequirement);
@@ -250,7 +267,7 @@ public class UpgradeKit : Stackable
             target.SetProperty(PropertyInt.WieldDifficulty, newRequirement);
 
             // Spells
-            ScaleUpSpells(target, currentTier, newTier);
+            ScaleUpSpells(target, currentTier, newTier, upgradeContext);
 
             // Item Mana
             ScaleUpItemMana(target, newTier);
@@ -261,6 +278,12 @@ public class UpgradeKit : Stackable
         {
             var currentRequiredLevel = target.WieldDifficulty ?? 1;
             var newRequiredLevel = GetRequiredLevelFromPlayerTier((player));
+
+            if (upgradeContext == UpgradeContext.Stabilization)
+            {
+                // Keep stabilization behavior non-regressive for required-level based items too.
+                newRequiredLevel = Math.Max(currentRequiredLevel, newRequiredLevel);
+            }
 
             var currentTier = Math.Clamp(LootGenerationFactory.GetTierFromRequiredLevel(currentRequiredLevel) - 1, 0, 7);
             var newTier = Math.Clamp(LootGenerationFactory.GetTierFromRequiredLevel(newRequiredLevel) - 1, 0, 7);
@@ -283,7 +306,7 @@ public class UpgradeKit : Stackable
             target.SetProperty(PropertyInt.WieldDifficulty, newRequiredLevel);
 
             // Spells
-            ScaleUpSpells(target, currentTier, newTier);
+            ScaleUpSpells(target, currentTier, newTier, upgradeContext);
 
             // Item Mana
             ScaleUpItemMana(target, newTier);
@@ -771,7 +794,7 @@ public class UpgradeKit : Stackable
         target.SetProperty(PropertyInt.ItemCurMana, totalMana);
     }
 
-    private static void ScaleUpSpells(WorldObject target, int currentTier, int newTier)
+    private static void ScaleUpSpells(WorldObject target, int currentTier, int newTier, UpgradeContext upgradeContext)
     {
         if (newTier is < 3 or > 7)
         {
@@ -783,12 +806,12 @@ public class UpgradeKit : Stackable
             return;
         }
 
-        ScaleUpSpellbookSpells(target, newTier);
+        ScaleUpSpellbookSpells(target, newTier, upgradeContext == UpgradeContext.Stabilization);
         ScaleUpDidSpell(target, newTier);
         ScaleUpProcSpell(target, newTier);
     }
 
-    private static void ScaleUpSpellbookSpells(WorldObject target, int newTier)
+    private static void ScaleUpSpellbookSpells(WorldObject target, int newTier, bool useStabilizationWeighting)
     {
         var spellBook = target.Biota.PropertiesSpellBook;
 
@@ -811,26 +834,9 @@ public class UpgradeKit : Stackable
             }
 
             var isCantrip = spellProgressionList.Count < 5;
-            var spellLevel = 0;
-
-            switch (newTier)
-            {
-                case 3:
-                    spellLevel = isCantrip ? 2 : 3;
-                    break;
-                case 4:
-                    spellLevel = isCantrip ? 2 : 4;
-                    break;
-                case 5:
-                    spellLevel = isCantrip ? 3 : 5;
-                    break;
-                case 6:
-                    spellLevel = isCantrip ? 3 : 6;
-                    break;
-                case 7:
-                    spellLevel = isCantrip ? 4 : 7;
-                    break;
-            }
+            var spellLevel = useStabilizationWeighting
+                ? StabilizationSpellProfile.GetWeightedSpellLevel(newTier, isCantrip)
+                : GetDeterministicSpellLevel(newTier, isCantrip);
 
             spellsToRemove.Add(spellId);
             spellsToAdd.Add((int)SpellLevelProgression.GetSpellAtLevel(minimumLevelSpellId, spellLevel, true, true));
@@ -851,6 +857,19 @@ public class UpgradeKit : Stackable
         {
             target.Biota.GetOrAddKnownSpell(spellId, target.BiotaDatabaseLock, out _);
         }
+    }
+
+    private static int GetDeterministicSpellLevel(int newTier, bool isCantrip)
+    {
+        return newTier switch
+        {
+            3 => isCantrip ? 2 : 3,
+            4 => isCantrip ? 2 : 4,
+            5 => isCantrip ? 3 : 5,
+            6 => isCantrip ? 3 : 6,
+            7 => isCantrip ? 4 : 7,
+            _ => isCantrip ? 2 : 3,
+        };
     }
 
     private static void ScaleUpDidSpell(WorldObject target, int newTier)

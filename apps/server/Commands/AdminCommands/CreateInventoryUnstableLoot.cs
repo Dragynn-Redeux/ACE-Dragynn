@@ -36,11 +36,11 @@ public class CreateInventoryUnstableLoot
     )]
     public static void Handle(Session session, params string[] parameters)
     {
-        if (!TryParseType(parameters[0], out var forceItemType, out var forceWeaponType))
+        if (!TryParseType(parameters[0], out var forceItemType, out var forceWeaponType, out var forceArmorType))
         {
             session.Network.EnqueueSend(
                 new GameMessageSystemChat(
-                    "Invalid type. Valid values: armor, clothing, melee, missile, caster, jewelry, sigil, sigilwarrior, sigilrogue, sigilcaster.",
+                    "Invalid type. Valid values: armor, armorrandom, armorstr, armorwarrior, armorcoord, armorrogue, armorcaster, robe, robes, clothing, melee, missile, caster, jewelry, sigil, sigilwarrior, sigilrogue, sigilcaster.",
                     ChatMessageType.Broadcast
                 )
             );
@@ -116,7 +116,7 @@ public class CreateInventoryUnstableLoot
 
             for (var attempt = 0; attempt < MaxAttemptsPerItem; attempt++)
             {
-                var profile = BuildProfile(tier, clampedQualityMod, forceItemType, forceWeaponType);
+                var profile = BuildProfile(tier, clampedQualityMod, forceItemType, forceWeaponType, forceArmorType);
                 var item = LootGenerationFactory.CreateRandomLootObjects_New(
                     profile,
                     TreasureItemCategory.MagicItem,
@@ -189,14 +189,15 @@ public class CreateInventoryUnstableLoot
         int tier,
         float qualityMod,
         TreasureItemType_Orig forceItemType,
-        TreasureWeaponType forceWeaponType)
+        TreasureWeaponType forceWeaponType,
+        TreasureArmorType forceArmorType)
     {
         return new TreasureDeathExtended
         {
             Tier = tier,
             LootQualityMod = qualityMod,
             ForceTreasureItemType = forceItemType,
-            ForceArmorType = TreasureArmorType.Undef,
+            ForceArmorType = forceArmorType,
             ForceWeaponType = forceWeaponType,
             ForceHeritage = TreasureHeritageGroup.Invalid,
 
@@ -222,15 +223,38 @@ public class CreateInventoryUnstableLoot
     private static bool TryParseType(
         string type,
         out TreasureItemType_Orig forceItemType,
-        out TreasureWeaponType forceWeaponType)
+        out TreasureWeaponType forceWeaponType,
+        out TreasureArmorType forceArmorType)
     {
         forceItemType = TreasureItemType_Orig.Undef;
         forceWeaponType = TreasureWeaponType.Undef;
+        forceArmorType = TreasureArmorType.Undef;
 
         switch (type.ToLowerInvariant())
         {
             case "armor":
+            case "armorrandom":
                 forceItemType = TreasureItemType_Orig.Armor;
+                return true;
+
+            case "armorstr":
+            case "armorwarrior":
+                forceItemType = TreasureItemType_Orig.ArmorWarrior;
+                return true;
+
+            case "armorcoord":
+            case "armorrogue":
+                forceItemType = TreasureItemType_Orig.ArmorRogue;
+                return true;
+
+            case "armorcaster":
+                forceItemType = TreasureItemType_Orig.ArmorCaster;
+                return true;
+
+            case "robe":
+            case "robes":
+                forceItemType = TreasureItemType_Orig.Armor;
+                forceArmorType = TreasureArmorType.Cloth;
                 return true;
 
             case "clothing":

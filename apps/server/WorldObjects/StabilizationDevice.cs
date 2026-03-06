@@ -113,7 +113,10 @@ public class StabilizationDevice : WorldObject
                 _log.Information("[DEBUG][Stabilization] Target is not unstable");
             }
             player.Session.Network.EnqueueSend(
-                new GameMessageSystemChat("This item is not unstable.", ChatMessageType.Broadcast)
+                new GameMessageSystemChat(
+                    "This item carries no unstable resonance for the device to stabilize.",
+                    ChatMessageType.Broadcast
+                )
             );
             player.SendUseDoneEvent();
             return;
@@ -181,7 +184,7 @@ public class StabilizationDevice : WorldObject
                 // Scale item to player tier (bypasses UpgradeKit stack count validation)
                 var upgradeSucceeded = target is SigilTrinket sigilTrinket
                     ? StabilizeSigilTrinketForPlayer(player, sigilTrinket)
-                    : UpgradeKit.UpgradeItem(player, target);
+                    : UpgradeKit.UpgradeItem(player, target, 0, UpgradeKit.UpgradeContext.Stabilization);
 
                 if (!upgradeSucceeded)
                 {

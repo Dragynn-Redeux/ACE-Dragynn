@@ -1,8 +1,6 @@
 using ACE.Entity;
 using ACE.Entity.Enum;
-using ACE.Entity.Enum.Properties;
 using ACE.Entity.Models;
-using ACE.Server.Network.GameMessages.Messages;
 
 namespace ACE.Server.WorldObjects;
 
@@ -41,37 +39,7 @@ public class ResonanceForge : WorldObject
             return;
         }
 
-        // PHASE 1: Stabilization (finalize by removing IsUnstable flag)
-        if (target.GetProperty(PropertyBool.IsUnstable) == true && target.Lifespan == null)
-        {
-            // Remove IsUnstable flag
-            target.RemoveProperty(PropertyBool.IsUnstable);
-
-            // Remove IconOverlay property
-            target.RemoveProperty(PropertyDataId.IconOverlay);
-
-            // Broadcast updated state
-            player.EnqueueBroadcast(new GameMessageUpdateObject(target));
-            player.Session.Network.EnqueueSend(
-                new GameMessageSystemChat(
-                    "(PH) The device hums and aligns it",
-                    ChatMessageType.Broadcast
-                )
-            );
-            player.SendUseDoneEvent();
-            return;
-        }
-
-        // PHASE 2 (future): Destabilization
-        // NOTE (future): if target has PropertyBool.IsDestabilized == true, block all crafting/recipe modifications for this item.
-
-        // Invalid target
-        player.Session.Network.EnqueueSend(
-            new GameMessageSystemChat(
-                "This item cannot be processed by the forge.",
-                ChatMessageType.Broadcast
-            )
-        );
+        ForgeStagingService.TryHandleDirectItemFastPath(player, source, target, false);
         player.SendUseDoneEvent();
     }
 }
