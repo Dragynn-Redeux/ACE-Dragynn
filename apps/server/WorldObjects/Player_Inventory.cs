@@ -1200,13 +1200,22 @@ partial class Player
             return false;
         }
 
-        if (itemRootOwner != this && containerRootOwner == this && !HasEnoughBurdenToAddToInventory(item))
+        if (itemRootOwner != this && containerRootOwner == this)
         {
-            Session.Network.EnqueueSend(
-                new GameEventCommunicationTransientString(Session, "You are too encumbered to carry that!")
-            );
-            Session.Network.EnqueueSend(new GameEventInventoryServerSaveFailed(Session, itemGuid));
-            return false;
+            var itemBurden = item.EncumbranceVal ?? 0;
+            if (container is Container { MerchandiseItemTypes: not null } specPack)
+            {
+                var mod = specPack.SpecializedPackBurdenMod ?? 0.5;
+                itemBurden = (int)(itemBurden * mod);
+            }
+            if (!HasEnoughBurdenToAddToInventory(itemBurden))
+            {
+                Session.Network.EnqueueSend(
+                    new GameEventCommunicationTransientString(Session, "You are too encumbered to carry that!")
+                );
+                Session.Network.EnqueueSend(new GameEventInventoryServerSaveFailed(Session, itemGuid));
+                return false;
+            }
         }
 
         if (container == null)
@@ -6116,10 +6125,8 @@ partial class Player
         return GetEquippedObjectsOfWCID(weenieClassId).Select(i => i.StackSize ?? 1).Sum();
     }
 
-    const float SpecializedPackBurdenMod = 0.25f;
-
     /// <summary>
-    /// Copies mutated properties from <paramref name="source"/> to <paramref name="dest"/> so that
+    /// Copies mutated properties
     /// a freshly-created split stack inherits any customizations applied on top of the base weenie
     /// (e.g., quality-prefixed names, assigned SpellDID, adjusted StackUnitValue).
     /// </summary>
@@ -6226,12 +6233,10 @@ partial class Player
         }
         foreach (var inventoryObject in Inventory.Values)
         {
-            if (inventoryObject is Container { MerchandiseItemTypes: not null })
+            if (inventoryObject is Container { MerchandiseItemTypes: not null } specPack)
             {
-                if (inventoryObject.EncumbranceVal != null)
-                {
-                    totalBurden += (int)(inventoryObject.EncumbranceVal * SpecializedPackBurdenMod);
-                }
+                var mod = specPack.SpecializedPackBurdenMod ?? 0.5;
+                totalBurden += (int)((inventoryObject.EncumbranceVal ?? 0) * mod);
             }
             else
             {

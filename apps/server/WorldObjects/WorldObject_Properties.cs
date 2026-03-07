@@ -3253,6 +3253,26 @@ partial class WorldObject
         }
     }
 
+    /// <summary>
+    /// When set on a specialized pack (one with MerchandiseItemTypes), multiplies the pack's contribution
+    /// to the player's burden. Defaults to 0.5 (50% burden) if not explicitly set.
+    /// </summary>
+    public double? SpecializedPackBurdenMod
+    {
+        get => GetProperty(PropertyFloat.SpecializedPackBurdenMod);
+        set
+        {
+            if (!value.HasValue)
+            {
+                RemoveProperty(PropertyFloat.SpecializedPackBurdenMod);
+            }
+            else
+            {
+                SetProperty(PropertyFloat.SpecializedPackBurdenMod, value.Value);
+            }
+        }
+    }
+
     public uint? PetOwner
     {
         get => GetProperty(PropertyInstanceId.PetOwner);
