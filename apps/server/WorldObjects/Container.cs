@@ -890,13 +890,17 @@ public partial class Container : WorldObject
         {
             if (((Container)container).TryRemoveFromInventory(objectGuid, out item))
             {
-                EncumbranceVal -= (item.EncumbranceVal ?? 0);
                 Value -= (item.Value ?? 0);
 
-                // SPECIALIZED PACKS: Called when dropping an item from a spec pack entirely, or when moving from this pack to another
+                // SPECIALIZED PACKS: RecalculateBurden recomputes EncumbranceVal from scratch, so the
+                // direct adjustment is only needed when the parent container is not a Player.
                 if (container.Container is Player containerPlayer)
                 {
                     containerPlayer.RecalculateBurden();
+                }
+                else
+                {
+                    EncumbranceVal -= (item.EncumbranceVal ?? 0);
                 }
 
                 return true;
