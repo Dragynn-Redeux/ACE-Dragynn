@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using ACE.Common;
 using ACE.Entity.Enum;
 using ACE.Entity.Enum.Properties;
@@ -9,22 +10,26 @@ namespace ACE.Server.WorldObjects;
 public static class DestabilizedLootEffects
 {
     public const double BaseDestabilizePercent = 0.20;
-    public const double ExceptionalChainChance = 0.001;
-    public const int MaxExceptionalExtraPackages = 3;
+    private const double MinimumAdditiveFloatValue = 0.001;
+    private const double MinimumWeaponModifierValue = 1.0;
+    private const int MinimumPositiveIntValue = 1;
 
-    private const double PositiveWeight = 0.40;
-    private const double MixedWeight = 0.40;
-
-    private static readonly double[] TierFactors = { 0.85, 0.95, 1.00, 1.08, 1.16, 1.24, 1.32 };
-
-    private static readonly PropertyFloat[] NumericFloatProperties =
+    private static readonly PropertyFloat[] MeleeFloatProperties =
     {
         PropertyFloat.WeaponOffense,
-        PropertyFloat.DamageMod,
         PropertyFloat.WeaponPhysicalDefense,
         PropertyFloat.WeaponMagicalDefense,
-        PropertyFloat.WeaponWarMagicMod,
-        PropertyFloat.WeaponLifeMagicMod,
+    };
+
+    private static readonly PropertyInt[] MeleeIntProperties =
+    {
+        PropertyInt.Damage,
+    };
+
+    private static readonly PropertyFloat[] ArmorOrClothingFloatProperties =
+    {
+        PropertyFloat.ArmorWarMagicMod,
+        PropertyFloat.ArmorLifeMagicMod,
         PropertyFloat.ArmorAttackMod,
         PropertyFloat.ArmorPhysicalDefMod,
         PropertyFloat.ArmorMagicDefMod,
@@ -38,36 +43,20 @@ public static class DestabilizedLootEffects
         PropertyFloat.ArmorStaminaRegenMod,
         PropertyFloat.ArmorHealthRegenMod,
         PropertyFloat.ManaConversionMod,
-        PropertyFloat.ElementalDamageMod,
     };
 
-    private static readonly PropertyInt[] NumericIntProperties =
+    private static readonly PropertyInt[] ArmorOrClothingIntProperties =
     {
-        PropertyInt.Damage,
         PropertyInt.ArmorLevel,
-        PropertyInt.ItemMaxMana,
-        PropertyInt.ElementalDamageBonus,
     };
 
-    private static readonly ImbuedEffectType[] ImbueEffects =
+    private static readonly PropertyFloat[] CasterFloatProperties =
     {
-        ImbuedEffectType.CriticalStrike,
-        ImbuedEffectType.CripplingBlow,
-        ImbuedEffectType.ArmorRending,
-        ImbuedEffectType.WardRending,
-        ImbuedEffectType.ColdRending,
-        ImbuedEffectType.PierceRending,
-        ImbuedEffectType.AcidRending,
-        ImbuedEffectType.SlashRending,
-        ImbuedEffectType.ElectricRending,
-        ImbuedEffectType.BludgeonRending,
-    };
-
-    private static readonly PropertyInt[] ConditionalTagProperties =
-    {
-        PropertyInt.GearReprisal,
-        PropertyInt.GearFamiliarity,
-        PropertyInt.GearBravado,
+        PropertyFloat.WeaponPhysicalDefense,
+        PropertyFloat.WeaponMagicalDefense,
+        PropertyFloat.WeaponWarMagicMod,
+        PropertyFloat.WeaponLifeMagicMod,
+        PropertyFloat.ManaConversionMod,
     };
 
     public static DestabilizedRollResult ApplyDestabilize(WorldObject item)
@@ -80,273 +69,234 @@ public static class DestabilizedLootEffects
             return result;
         }
 
-        var nonValueAppliedKeys = new HashSet<string>(StringComparer.Ordinal);
-        var extraCount = RollExceptionalExtraPackageCount();
-        var totalPackages = 1 + extraCount;
-
-        for (var packageIndex = 0; packageIndex < totalPackages; packageIndex++)
+        var family = GetEligibleFamily(item);
+        if (family == DestabilizeItemFamily.None)
         {
-            var polarity = RollPolarity();
-            if (!ApplyPackage(item, polarity, nonValueAppliedKeys, out var detail))
-            {
-                result.Success = false;
-                result.FailureReason = "The forge could not imprint a destabilized outcome on that item.";
-                return result;
-            }
+            result.Success = false;
+            result.FailureReason = "That item family is not supported by destabilize.";
+            return result;
+        }
 
-            result.AppliedPackageCount++;
-            result.PackageDetails.Add(detail);
+        foreach (var property in GetEligibleFloatCandidates(item, family))
+        {
+            if (TryApplyFloatRoll(item, property, out var detail))
+            {
+                result.PackageDetails.Add(detail);
+            }
+        }
+
+        foreach (var property in GetEligibleIntCandidates(item, family))
+        {
+            if (TryApplyIntRoll(item, property, out var detail))
+            {
+                result.PackageDetails.Add(detail);
+            }
+        }
+
+        if (result.PackageDetails.Count == 0)
+        {
+            result.Success = false;
+            result.FailureReason = "The forge found no destabilize-eligible affixes on that item.";
+            return result;
         }
 
         result.Success = true;
-        result.ExceptionalExtraPackageCount = extraCount;
+        result.AppliedPackageCount = result.PackageDetails.Count;
         return result;
     }
 
-    private static int RollExceptionalExtraPackageCount()
-    {
-        var extra = 0;
-        while (extra < MaxExceptionalExtraPackages && ThreadSafeRandom.Next(0.0f, 1.0f) < ExceptionalChainChance)
-        {
-            extra++;
-        }
-
-        return extra;
-    }
-
-    private static DestabilizePolarity RollPolarity()
-    {
-        var roll = ThreadSafeRandom.Next(0.0f, 1.0f);
-        if (roll < PositiveWeight)
-        {
-            return DestabilizePolarity.NetPositive;
-        }
-
-        if (roll < PositiveWeight + MixedWeight)
-        {
-            return DestabilizePolarity.MixedTradeoff;
-        }
-
-        return DestabilizePolarity.NetNegative;
-    }
-
-    private static bool ApplyPackage(
-        WorldObject item,
-        DestabilizePolarity polarity,
-        HashSet<string> nonValueAppliedKeys,
-        out string detail
-    )
+    private static bool TryApplyFloatRoll(WorldObject item, PropertyFloat property, out string detail)
     {
         detail = null;
 
-        switch (polarity)
-        {
-            case DestabilizePolarity.NetPositive:
-                return ApplyNetPositive(item, nonValueAppliedKeys, out detail);
-            case DestabilizePolarity.MixedTradeoff:
-                return ApplyMixedTradeoff(item, nonValueAppliedKeys, out detail);
-            default:
-                return ApplyNumericComponent(item, isPositive: false, out detail);
-        }
-    }
+        var current = item.GetProperty(property) ?? 0.0;
+        var deltaPercent = RollDeltaPercent();
+        var next = current * (1 + deltaPercent);
+        next = Math.Max(GetMinimumFloatValue(property), next);
 
-    private static bool ApplyNetPositive(WorldObject item, HashSet<string> nonValueAppliedKeys, out string detail)
-    {
-        detail = null;
-
-        // Keep non-value outcomes in rotation without dominating value-based property rolls.
-        var tryNonValue = ThreadSafeRandom.Next(0.0f, 1.0f) < 0.30f;
-        if (tryNonValue && TryApplyNonValueComponent(item, nonValueAppliedKeys, out detail))
-        {
-            return true;
-        }
-
-        return ApplyNumericComponent(item, isPositive: true, out detail);
-    }
-
-    private static bool ApplyMixedTradeoff(WorldObject item, HashSet<string> nonValueAppliedKeys, out string detail)
-    {
-        detail = null;
-
-        var positiveDetail = string.Empty;
-        var positiveFromNonValue = ThreadSafeRandom.Next(0.0f, 1.0f) < 0.30f
-            && TryApplyNonValueComponent(item, nonValueAppliedKeys, out positiveDetail);
-
-        if (!positiveFromNonValue && !ApplyNumericComponent(item, isPositive: true, out positiveDetail))
+        if (AreNearlyEqual(current, next))
         {
             return false;
         }
 
-        if (!ApplyNumericComponent(item, isPositive: false, out var negativeDetail))
-        {
-            return false;
-        }
-
-        detail = $"Mixed: {positiveDetail}; {negativeDetail}";
+        item.SetProperty(property, (float)next);
+        detail = FormatFloatDetail(property, current, next, next - current);
         return true;
     }
 
-    private static bool ApplyNumericComponent(WorldObject item, bool isPositive, out string detail)
+    private static bool TryApplyIntRoll(WorldObject item, PropertyInt property, out string detail)
     {
         detail = null;
 
-        var tierFactor = GetTierFactor(item);
-        var floatCandidates = GetExistingFloatCandidates(item);
-        var intCandidates = GetExistingIntCandidates(item);
+        var current = item.GetProperty(property) ?? 0;
+        var deltaPercent = RollDeltaPercent();
+        var next = (int)Math.Round(current * (1 + deltaPercent));
+        next = Math.Max(GetMinimumIntValue(property), next);
 
-        if (floatCandidates.Count == 0 && intCandidates.Count == 0)
+        if (next == current)
         {
             return false;
         }
 
-        var useFloat = floatCandidates.Count > 0 && (intCandidates.Count == 0 || ThreadSafeRandom.Next(0, 2) == 0);
-        if (useFloat)
-        {
-            var prop = floatCandidates[ThreadSafeRandom.Next(0, floatCandidates.Count)];
-            var current = item.GetProperty(prop) ?? 0.0;
-            var magnitude = current * BaseDestabilizePercent * tierFactor;
-            var signedDelta = isPositive ? magnitude : -magnitude;
-            var next = current + signedDelta;
-            item.SetProperty(prop, (float)next);
-            detail = $"{(isPositive ? "+" : "-")} {prop}";
-            return true;
-        }
-
-        var intProp = intCandidates[ThreadSafeRandom.Next(0, intCandidates.Count)];
-        var intCurrent = item.GetProperty(intProp) ?? 0;
-        var rawDelta = Math.Abs(intCurrent) * BaseDestabilizePercent * tierFactor;
-        var intDelta = Math.Max(1, (int)Math.Round(rawDelta));
-        var intNext = isPositive ? intCurrent + intDelta : intCurrent - intDelta;
-        item.SetProperty(intProp, intNext);
-        detail = $"{(isPositive ? "+" : "-")} {intProp}";
+        item.SetProperty(property, next);
+        detail = FormatIntDetail(property, current, next, next - current);
         return true;
     }
 
-    private static bool TryApplyNonValueComponent(WorldObject item, HashSet<string> nonValueAppliedKeys, out string detail)
+    private static double RollDeltaPercent()
     {
-        detail = null;
-
-        if (IsImbueEligible(item) && TryApplyImbue(item, nonValueAppliedKeys, out detail))
-        {
-            return true;
-        }
-
-        return TryApplyConditionalTag(item, nonValueAppliedKeys, out detail);
+        return ThreadSafeRandom.Next((float)-BaseDestabilizePercent, (float)BaseDestabilizePercent);
     }
 
-    private static bool TryApplyImbue(WorldObject item, HashSet<string> nonValueAppliedKeys, out string detail)
+    private static DestabilizeItemFamily GetEligibleFamily(WorldObject item)
     {
-        detail = null;
-
-        const int rerollAttempts = 20;
-        var existing = item.GetProperty(PropertyInt.ImbuedEffect) ?? 0;
-        for (var i = 0; i < rerollAttempts; i++)
+        if (item == null)
         {
-            var effect = ImbueEffects[ThreadSafeRandom.Next(0, ImbueEffects.Length)];
-            var effectBit = (int)effect;
-            var key = $"imbue:{effectBit}";
-
-            if (nonValueAppliedKeys.Contains(key) || (existing & effectBit) == effectBit)
-            {
-                continue;
-            }
-
-            item.SetProperty(PropertyInt.ImbuedEffect, existing | effectBit);
-            nonValueAppliedKeys.Add(key);
-            detail = $"Tag: {effect}";
-            return true;
+            return DestabilizeItemFamily.None;
         }
 
-        return false;
+        var itemType = item.ItemType;
+        if (itemType.HasFlag(ItemType.Caster))
+        {
+            return DestabilizeItemFamily.Caster;
+        }
+
+        if (itemType.HasFlag(ItemType.MeleeWeapon))
+        {
+            return DestabilizeItemFamily.MeleeWeapon;
+        }
+
+        if (itemType == ItemType.Armor || itemType == ItemType.Clothing || item.WeenieType == WeenieType.Clothing)
+        {
+            return DestabilizeItemFamily.ArmorOrClothing;
+        }
+
+        return DestabilizeItemFamily.None;
     }
 
-    private static bool TryApplyConditionalTag(WorldObject item, HashSet<string> nonValueAppliedKeys, out string detail)
-    {
-        detail = null;
-
-        const int rerollAttempts = 20;
-        for (var i = 0; i < rerollAttempts; i++)
-        {
-            var property = ConditionalTagProperties[ThreadSafeRandom.Next(0, ConditionalTagProperties.Length)];
-            var key = $"cond:{property}";
-            if (nonValueAppliedKeys.Contains(key) || (item.GetProperty(property) ?? 0) > 0)
-            {
-                continue;
-            }
-
-            item.SetProperty(property, 1);
-            nonValueAppliedKeys.Add(key);
-            detail = $"Tag: {property}";
-            return true;
-        }
-
-        return false;
-    }
-
-    private static bool IsImbueEligible(WorldObject item)
-    {
-        var itemType = item.GetProperty(PropertyInt.ItemType);
-        if (!itemType.HasValue)
-        {
-            return false;
-        }
-
-        var typedItem = (ItemType)itemType.Value;
-        return typedItem.HasFlag(ItemType.MeleeWeapon)
-            || typedItem.HasFlag(ItemType.MissileWeapon)
-            || typedItem.HasFlag(ItemType.Caster);
-    }
-
-    private static double GetTierFactor(WorldObject item)
-    {
-        var tier = item.Tier ?? 1;
-        if (tier < 1)
-        {
-            tier = 1;
-        }
-
-        if (tier > TierFactors.Length)
-        {
-            tier = TierFactors.Length;
-        }
-
-        return TierFactors[tier - 1];
-    }
-
-    private static List<PropertyFloat> GetExistingFloatCandidates(WorldObject item)
+    private static List<PropertyFloat> GetEligibleFloatCandidates(WorldObject item, DestabilizeItemFamily family)
     {
         var results = new List<PropertyFloat>();
-        foreach (var property in NumericFloatProperties)
+        foreach (var property in GetAllowedFloatProperties(family))
         {
-            if (item.GetProperty(property).HasValue)
+            var current = item.GetProperty(property) ?? 0.0;
+            if (!IsEligibleFloatValue(property, current))
             {
-                results.Add(property);
+                continue;
             }
+
+            results.Add(property);
         }
 
         return results;
     }
 
-    private static List<PropertyInt> GetExistingIntCandidates(WorldObject item)
+    private static List<PropertyInt> GetEligibleIntCandidates(WorldObject item, DestabilizeItemFamily family)
     {
         var results = new List<PropertyInt>();
-        foreach (var property in NumericIntProperties)
+        foreach (var property in GetAllowedIntProperties(family))
         {
-            if (item.GetProperty(property).HasValue)
+            var current = item.GetProperty(property) ?? 0;
+            if (current <= 0)
             {
-                results.Add(property);
+                continue;
             }
+
+            results.Add(property);
         }
 
         return results;
+    }
+
+    private static IReadOnlyList<PropertyFloat> GetAllowedFloatProperties(DestabilizeItemFamily family)
+    {
+        return family switch
+        {
+            DestabilizeItemFamily.MeleeWeapon => MeleeFloatProperties,
+            DestabilizeItemFamily.ArmorOrClothing => ArmorOrClothingFloatProperties,
+            DestabilizeItemFamily.Caster => CasterFloatProperties,
+            _ => Array.Empty<PropertyFloat>(),
+        };
+    }
+
+    private static IReadOnlyList<PropertyInt> GetAllowedIntProperties(DestabilizeItemFamily family)
+    {
+        return family switch
+        {
+            DestabilizeItemFamily.MeleeWeapon => MeleeIntProperties,
+            DestabilizeItemFamily.ArmorOrClothing => ArmorOrClothingIntProperties,
+            _ => Array.Empty<PropertyInt>(),
+        };
+    }
+
+    private static bool IsEligibleFloatValue(PropertyFloat property, double value)
+    {
+        return property switch
+        {
+            PropertyFloat.WeaponOffense or PropertyFloat.WeaponPhysicalDefense or PropertyFloat.WeaponMagicalDefense
+                => value > 1.001,
+            _ => value >= MinimumAdditiveFloatValue,
+        };
+    }
+
+    private static double GetMinimumFloatValue(PropertyFloat property)
+    {
+        return property switch
+        {
+            PropertyFloat.WeaponOffense or PropertyFloat.WeaponPhysicalDefense or PropertyFloat.WeaponMagicalDefense
+                => MinimumWeaponModifierValue,
+            _ => MinimumAdditiveFloatValue,
+        };
+    }
+
+    private static int GetMinimumIntValue(PropertyInt property)
+    {
+        return property switch
+        {
+            PropertyInt.Damage or PropertyInt.ArmorLevel => MinimumPositiveIntValue,
+            _ => 0,
+        };
+    }
+
+    private static bool AreNearlyEqual(double left, double right)
+    {
+        return Math.Abs(left - right) < 0.0001;
+    }
+
+    private static string FormatFloatDetail(PropertyFloat property, double oldValue, double newValue, double delta)
+    {
+        return $"{GetDeltaPrefix(delta)} {property}: {FormatNumber(oldValue)} -> {FormatNumber(newValue)} ({FormatSignedNumber(delta)})";
+    }
+
+    private static string FormatIntDetail(PropertyInt property, int oldValue, int newValue, int delta)
+    {
+        return $"{GetDeltaPrefix(delta)} {property}: {oldValue} -> {newValue} ({FormatSignedNumber(delta)})";
+    }
+
+    private static string GetDeltaPrefix(double delta)
+    {
+        return delta >= 0 ? "+" : "-";
+    }
+
+    private static string FormatNumber(double value)
+    {
+        return value.ToString("0.####", CultureInfo.InvariantCulture);
+    }
+
+    private static string FormatSignedNumber(double value)
+    {
+        return value >= 0
+            ? $"+{FormatNumber(value)}"
+            : $"-{FormatNumber(Math.Abs(value))}";
     }
 }
 
-public enum DestabilizePolarity
+public enum DestabilizeItemFamily
 {
-    NetPositive,
-    MixedTradeoff,
-    NetNegative,
+    None,
+    MeleeWeapon,
+    ArmorOrClothing,
+    Caster,
 }
 
 public sealed class DestabilizedRollResult

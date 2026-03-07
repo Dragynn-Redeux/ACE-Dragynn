@@ -1380,16 +1380,15 @@ partial class Player
     {
         //Console.WriteLine($"\n\n{Name}.HandleActionPutItemInContainer({itemGuid:X8}, {containerGuid:X8}, {placement})");
 
-        var targetContainer =
-            FindObject(
-                containerGuid,
-                SearchLocations.MyInventory | SearchLocations.Landblock | SearchLocations.LastUsedContainer,
-                out _,
-                out _,
-                out _
-            ) as Container;
+        var target = FindObject(
+            containerGuid,
+            SearchLocations.MyInventory | SearchLocations.Landblock | SearchLocations.LastUsedContainer,
+            out _,
+            out _,
+            out _
+        );
 
-        if (targetContainer != null && ForgeStagingService.IsForgeTarget(targetContainer))
+        if (ForgeStagingService.IsForgeTarget(target))
         {
             var sourceItem = FindObject(
                 itemGuid,
@@ -1401,7 +1400,9 @@ partial class Player
 
             if (sourceItem != null)
             {
-                ForgeStagingService.TryHandleDirectItemFastPath(this, targetContainer, sourceItem, sourceItemWasEquipped);
+                ForgeStagingService.TryHandleDirectItemFastPath(this, target, sourceItem, sourceItemWasEquipped);
+                Session.Network.EnqueueSend(new GameEventInventoryServerSaveFailed(Session, itemGuid));
+                SendUseDoneEvent();
 
                 return;
             }
@@ -5209,12 +5210,14 @@ partial class Player
             return;
         }
 
-        if (target is Container forgeTarget && ForgeStagingService.IsForgeTarget(forgeTarget))
+        if (ForgeStagingService.IsForgeTarget(target))
         {
-            if (!ForgeStagingService.TryHandleDirectItemFastPath(this, forgeTarget, item, itemWasEquipped))
-            {
-                Session.Network.EnqueueSend(new GameEventInventoryServerSaveFailed(Session, item.Guid.Full));
-            }
+            ForgeStagingService.TryHandleDirectItemFastPath(this, target, item, itemWasEquipped);
+
+            // Forge drag/drop is a use interaction, not a persisted move into the container.
+            Session.Network.EnqueueSend(new GameEventInventoryServerSaveFailed(Session, item.Guid.Full));
+
+            SendUseDoneEvent();
 
             return;
         }

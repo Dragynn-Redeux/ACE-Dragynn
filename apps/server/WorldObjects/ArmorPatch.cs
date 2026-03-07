@@ -80,6 +80,11 @@ public class ArmorPatch : Stackable
             return;
         }
 
+        if (DestabilizedLootForge.TryBlockFurtherAlteration(player, target))
+        {
+            return;
+        }
+
         if (source.ArmorPatchAmount.HasValue)
         {
             var amountToAdd = source.ArmorPatchAmount.Value;

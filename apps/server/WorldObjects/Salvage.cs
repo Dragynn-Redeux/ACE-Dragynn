@@ -54,6 +54,11 @@ public class Salvage : WorldObject
             return;
         }
 
+        if (DestabilizedLootForge.TryBlockFurtherAlteration(player, target))
+        {
+            return;
+        }
+
         var combineSalvage = false;
 
         if (target is { WeenieType: WeenieType.Salvage })

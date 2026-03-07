@@ -79,6 +79,8 @@ public static class ForgeStagingService
             return false;
         }
 
+        var preProcessForgePass = GetForgePassCount(item);
+
         if (!TryProcessItem(player, item, out var failureMessage))
         {
             if (!string.IsNullOrWhiteSpace(failureMessage))
@@ -87,6 +89,12 @@ public static class ForgeStagingService
             }
 
             return false;
+        }
+
+        if (preProcessForgePass >= 1)
+        {
+            // Second-pass finalization flow has its own confirmation and messaging.
+            return true;
         }
 
         player.Session.Network.EnqueueSend(
