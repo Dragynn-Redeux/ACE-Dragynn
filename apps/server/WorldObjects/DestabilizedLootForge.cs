@@ -265,7 +265,7 @@ public static class DestabilizedLootForge
 
         player.Session.Network.EnqueueSend(
             new GameMessageSystemChat(
-                $"{SuccessMessagePlaceholder} {item.NameWithMaterial}. ({rollResult.AppliedPackageCount} change(s) applied.)",
+                $"{SuccessMessagePlaceholder} {item.NameWithMaterial}, altering {rollResult.AppliedPackageCount} {(rollResult.AppliedPackageCount == 1 ? "property" : "properties")}.",
                 ChatMessageType.Broadcast
             )
         );

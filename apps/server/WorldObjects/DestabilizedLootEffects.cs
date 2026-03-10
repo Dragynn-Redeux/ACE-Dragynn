@@ -295,7 +295,36 @@ public static class DestabilizedLootEffects
 
     private static string FormatPropertyName(Enum property)
     {
-        var source = property.ToString();
+        return property switch
+        {
+            PropertyFloat.WeaponOffense => "Attack Bonus",
+            PropertyFloat.WeaponPhysicalDefense => "Physical Defense",
+            PropertyFloat.WeaponMagicalDefense => "Magic Defense",
+            PropertyFloat.WeaponWarMagicMod => "War Magic Bonus",
+            PropertyFloat.WeaponLifeMagicMod => "Life Magic Bonus",
+            PropertyFloat.ManaConversionMod => "Mana Conversion Bonus",
+            PropertyFloat.ArmorWarMagicMod => "War Magic Bonus",
+            PropertyFloat.ArmorLifeMagicMod => "Life Magic Bonus",
+            PropertyFloat.ArmorAttackMod => "Attack Bonus",
+            PropertyFloat.ArmorPhysicalDefMod => "Physical Defense Bonus",
+            PropertyFloat.ArmorMagicDefMod => "Magic Defense Bonus",
+            PropertyFloat.ArmorShieldMod => "Shield Bonus",
+            PropertyFloat.ArmorTwohandedCombatMod => "Two-Handed Combat Bonus",
+            PropertyFloat.ArmorDualWieldMod => "Dual Wield Bonus",
+            PropertyFloat.ArmorPerceptionMod => "Perception Bonus",
+            PropertyFloat.ArmorDeceptionMod => "Deception Bonus",
+            PropertyFloat.ArmorThieveryMod => "Thievery Bonus",
+            PropertyFloat.ArmorManaRegenMod => "Mana Regen Bonus",
+            PropertyFloat.ArmorStaminaRegenMod => "Stamina Regen Bonus",
+            PropertyFloat.ArmorHealthRegenMod => "Health Regen Bonus",
+            PropertyInt.Damage => "Damage",
+            PropertyInt.ArmorLevel => "Armor Level",
+            _ => SplitPascalCase(property.ToString()),
+        };
+    }
+
+    private static string SplitPascalCase(string source)
+    {
         var builder = new StringBuilder(source.Length + 8);
 
         for (var index = 0; index < source.Length; index++)
