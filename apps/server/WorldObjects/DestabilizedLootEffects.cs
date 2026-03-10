@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Text;
 using ACE.Common;
 using ACE.Entity.Enum;
 using ACE.Entity.Enum.Properties;
@@ -265,29 +266,55 @@ public static class DestabilizedLootEffects
 
     private static string FormatFloatDetail(PropertyFloat property, double oldValue, double newValue, double delta)
     {
-        return $"{GetDeltaPrefix(delta)} {property}: {FormatNumber(oldValue)} -> {FormatNumber(newValue)} ({FormatSignedNumber(delta)})";
+        return $"{FormatPropertyName(property)} changed from {FormatFloatNumber(oldValue)} to {FormatFloatNumber(newValue)} ({FormatSignedFloatNumber(delta)}).";
     }
 
     private static string FormatIntDetail(PropertyInt property, int oldValue, int newValue, int delta)
     {
-        return $"{GetDeltaPrefix(delta)} {property}: {oldValue} -> {newValue} ({FormatSignedNumber(delta)})";
+        return $"{FormatPropertyName(property)} changed from {oldValue} to {newValue} ({FormatSignedIntNumber(delta)}).";
     }
 
-    private static string GetDeltaPrefix(double delta)
+    private static string FormatFloatNumber(double value)
     {
-        return delta >= 0 ? "+" : "-";
+        return value.ToString("0.00", CultureInfo.InvariantCulture);
     }
 
-    private static string FormatNumber(double value)
-    {
-        return value.ToString("0.####", CultureInfo.InvariantCulture);
-    }
-
-    private static string FormatSignedNumber(double value)
+    private static string FormatSignedFloatNumber(double value)
     {
         return value >= 0
-            ? $"+{FormatNumber(value)}"
-            : $"-{FormatNumber(Math.Abs(value))}";
+            ? $"+{FormatFloatNumber(value)}"
+            : $"-{FormatFloatNumber(Math.Abs(value))}";
+    }
+
+    private static string FormatSignedIntNumber(int value)
+    {
+        return value >= 0
+            ? $"+{value}"
+            : value.ToString(CultureInfo.InvariantCulture);
+    }
+
+    private static string FormatPropertyName(Enum property)
+    {
+        var source = property.ToString();
+        var builder = new StringBuilder(source.Length + 8);
+
+        for (var index = 0; index < source.Length; index++)
+        {
+            var current = source[index];
+
+            if (index > 0 && char.IsUpper(current))
+            {
+                var previous = source[index - 1];
+                if (!char.IsUpper(previous))
+                {
+                    builder.Append(' ');
+                }
+            }
+
+            builder.Append(current);
+        }
+
+        return builder.ToString();
     }
 }
 

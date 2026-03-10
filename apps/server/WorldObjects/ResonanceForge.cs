@@ -26,6 +26,16 @@ public class ResonanceForge : WorldObject
 
     private static void SetEphemeralValues() { }
 
+    public override void ActOnUse(WorldObject activator)
+    {
+        if (activator is not Player player)
+        {
+            return;
+        }
+
+        ForgeStagingService.HandleClickUse(player, this);
+    }
+
     public override void HandleActionUseOnTarget(Player player, WorldObject target)
     {
         UseObjectOnTarget(player, this, target);

@@ -21,16 +21,17 @@ public static class DestabilizedLootForge
     private const string RequiredIngredientName = "Pulsing Resonance Fragment";
 
     private const string ConfirmMessagePlaceholder =
-        "[PLACEHOLDER] Finalize destabilize on this item? This cannot be undone. "
+        "Destabilize this item? This cannot be undone. "
+        + "The item will become ineligible for further tinkers. "
         + "Requires 1x Pulsing Resonance Fragment from your inventory; it will be consumed on success.";
     private const string SuccessMessagePlaceholder =
-        "[PLACEHOLDER] The forge tears resonance patterns into your item.";
+        "The forge destabilizes the resonance within your";
     private const string FailureMessagePlaceholder =
-        "[PLACEHOLDER] The forge rejects the destabilize attempt.";
+        "The forge rejects the destabilization attempt.";
     private const string ExceptionalMessagePlaceholder =
-        "[PLACEHOLDER] Exceptional resonance cascade detected.";
+        "Exceptional resonance cascade detected.";
     private const string MissingIngredientMessagePlaceholder =
-        "[PLACEHOLDER] Missing required catalyst: 1x Pulsing Resonance Fragment in inventory.";
+        "You need 1 Pulsing Resonance Fragment in your inventory to finalize destabilization.";
     private const string LockedAlterationMessage =
         "That item is retained and cannot be altered.";
 
@@ -41,7 +42,22 @@ public static class DestabilizedLootForge
 
     private static bool DebugDestabilization => PropertyManager.GetBool("debug_stabilization").Item;
 
-    public static bool TryQueueFinalization(Player player, WorldObject item, out string failureMessage)
+    public static int GetAvailableIngredientCount(Player player)
+    {
+        return player?.GetNumInventoryItemsOfWCID(RequiredIngredientWcid) ?? 0;
+    }
+
+    public static int GetRequiredIngredientCountForItems(int itemCount)
+    {
+        return Math.Max(0, itemCount) * RequiredIngredientAmount;
+    }
+
+    public static string GetRequiredIngredientName()
+    {
+        return RequiredIngredientName;
+    }
+
+    public static bool TryQueueFinalization(Player player, WorldObject item, out string failureMessage, Action onResolved = null)
     {
         failureMessage = null;
 
@@ -90,17 +106,63 @@ public static class DestabilizedLootForge
                     {
                         DebugLog(player, item, "confirmation declined or timed out");
                         player.SendTransientError("Destabilize cancelled.");
+                        onResolved?.Invoke();
                         return;
                     }
 
                     DebugLog(player, item, "confirmation accepted");
 
                     ExecuteFinalization(player, item.Guid);
+                    onResolved?.Invoke();
                 }
             ),
             ConfirmMessagePlaceholder
         );
 
+        return true;
+    }
+
+    public static bool TryFinalizeImmediately(Player player, WorldObject item, out string failureMessage, Action onResolved = null)
+    {
+        failureMessage = null;
+
+        if (player == null || item == null)
+        {
+            DebugLog(
+                player,
+                item,
+                $"immediate finalize rejected: unavailable input playerPresent={player != null} itemPresent={item != null}"
+            );
+            failureMessage = "That item is unavailable.";
+            return false;
+        }
+
+        if (IsTerminallyDestabilized(item))
+        {
+            DebugLog(player, item, "immediate finalize rejected: item already terminally destabilized");
+            failureMessage = "That item is already terminally destabilized.";
+            return false;
+        }
+
+        if (!HasRequiredIngredient(player))
+        {
+            DebugLog(
+                player,
+                item,
+                $"immediate finalize rejected: missing ingredient {RequiredIngredientName} inventoryCount={player.GetNumInventoryItemsOfWCID(RequiredIngredientWcid)} required={RequiredIngredientAmount}"
+            );
+            SendMissingIngredientNotice(player);
+            return false;
+        }
+
+        DebugLog(
+            player,
+            item,
+            $"immediate finalize accepted: executing without additional confirmation ingredientCount={player.GetNumInventoryItemsOfWCID(RequiredIngredientWcid)}"
+        );
+
+        ExecuteFinalization(player, item.Guid);
+        onResolved?.Invoke();
         return true;
     }
 
@@ -180,10 +242,13 @@ public static class DestabilizedLootForge
 
         var previousForgePassCount = item.GetProperty(ForgePassCountProperty) ?? 1;
         var previousBonded = item.Bonded;
+        var previousAllowedWielder = item.AllowedWielder;
         var previousNumTimesTinkered = item.NumTimesTinkered;
         item.SetProperty(TerminalDestabilizedLockProperty, true);
         item.SetProperty(ForgePassCountProperty, previousForgePassCount + 1);
         item.Bonded = BondedStatus.Bonded;
+        item.AllowedWielder = player.Guid.Full;
+        item.CraftsmanName = player.Name;
         // Reuse existing tinker gate behavior by forcing the item to its max tinker count.
         if (item.Workmanship.HasValue)
         {
@@ -193,17 +258,27 @@ public static class DestabilizedLootForge
         DebugLog(
             player,
             item,
-            $"commit complete: terminalLock=true forgePassCount={previousForgePassCount}->{item.GetProperty(ForgePassCountProperty)} bonded={previousBonded}->{item.Bonded} tinkers={previousNumTimesTinkered}->{item.NumTimesTinkered} changes={rollResult.AppliedPackageCount} exceptionalExtras={rollResult.ExceptionalExtraPackageCount}"
+            $"commit complete: terminalLock=true forgePassCount={previousForgePassCount}->{item.GetProperty(ForgePassCountProperty)} bonded={previousBonded}->{item.Bonded} allowedWielder={previousAllowedWielder}->{item.AllowedWielder} tinkers={previousNumTimesTinkered}->{item.NumTimesTinkered} changes={rollResult.AppliedPackageCount} exceptionalExtras={rollResult.ExceptionalExtraPackageCount}"
         );
 
         player.EnqueueBroadcast(new GameMessageUpdateObject(item));
 
         player.Session.Network.EnqueueSend(
             new GameMessageSystemChat(
-                $"{SuccessMessagePlaceholder} ({rollResult.AppliedPackageCount} change(s) applied.)",
+                $"{SuccessMessagePlaceholder} {item.NameWithMaterial}. ({rollResult.AppliedPackageCount} change(s) applied.)",
                 ChatMessageType.Broadcast
             )
         );
+
+        foreach (var packageDetail in rollResult.PackageDetails)
+        {
+            player.Session.Network.EnqueueSend(
+                new GameMessageSystemChat(
+                    packageDetail,
+                    ChatMessageType.Broadcast
+                )
+            );
+        }
 
         if (rollResult.ExceptionalExtraPackageCount > 0)
         {
@@ -225,7 +300,7 @@ public static class DestabilizedLootForge
     {
         player.Session.Network.EnqueueSend(
             new GameMessageSystemChat(
-                $"You need {RequiredIngredientAmount} {RequiredIngredientName} in your inventory to finalize destabilization.",
+                MissingIngredientMessagePlaceholder,
                 ChatMessageType.Craft
             )
         );

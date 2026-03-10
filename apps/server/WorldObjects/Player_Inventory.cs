@@ -1389,34 +1389,6 @@ partial class Player
     {
         //Console.WriteLine($"\n\n{Name}.HandleActionPutItemInContainer({itemGuid:X8}, {containerGuid:X8}, {placement})");
 
-        var target = FindObject(
-            containerGuid,
-            SearchLocations.MyInventory | SearchLocations.Landblock | SearchLocations.LastUsedContainer,
-            out _,
-            out _,
-            out _
-        );
-
-        if (ForgeStagingService.IsForgeTarget(target))
-        {
-            var sourceItem = FindObject(
-                itemGuid,
-                SearchLocations.LocationsICanMove,
-                out _,
-                out _,
-                out var sourceItemWasEquipped
-            );
-
-            if (sourceItem != null)
-            {
-                ForgeStagingService.TryHandleDirectItemFastPath(this, target, sourceItem, sourceItemWasEquipped);
-                Session.Network.EnqueueSend(new GameEventInventoryServerSaveFailed(Session, itemGuid));
-                SendUseDoneEvent();
-
-                return;
-            }
-        }
-
         if (
             !HandleActionPutItemInContainer_Verify(
                 itemGuid,

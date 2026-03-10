@@ -213,9 +213,11 @@ public class StabilizationDevice : WorldObject
                     return;
                 }
 
-                // Success: clear timer and mark bound
+                // Success: clear timer and mark bound to the current character for wield checks.
                 target.RemoveProperty(PropertyInt.Lifespan);
                 target.SetProperty(PropertyInt.Bonded, 1);
+                target.AllowedWielder = player.Guid.Full;
+                target.CraftsmanName = player.Name;
 
                 // Broadcast updated state (IsUnstable flag remains for forge)
                 player.EnqueueBroadcast(new GameMessageUpdateObject(target));
@@ -233,7 +235,7 @@ public class StabilizationDevice : WorldObject
                 
                 player.Session.Network.EnqueueSend(
                     new GameMessageSystemChat(
-                        $"You use the {source.Name} to stabilize {target.Name}. The decay timer has been removed and the item's power has been enhanced.",
+                        $"The forge stabilizes the resonance within your {target.NameWithMaterial}.",
                         ChatMessageType.Craft
                     )
                 );
