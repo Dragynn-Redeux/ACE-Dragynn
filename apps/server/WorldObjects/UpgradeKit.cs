@@ -278,11 +278,16 @@ public class UpgradeKit : Stackable
             var currentRequiredLevel = target.WieldDifficulty ?? 1;
             var newRequiredLevel = GetRequiredLevelFromPlayerTier((player));
 
+<<<<<<< HEAD
             if (upgradeContext == UpgradeContext.Stabilization)
             {
                 // Keep stabilization behavior non-regressive for required-level based items too.
                 newRequiredLevel = Math.Max(currentRequiredLevel, newRequiredLevel);
             }
+=======
+            var currentTier = Math.Clamp(LootGenerationFactory.GetTierFromRequiredLevel(currentRequiredLevel) - 1, 0, 7);
+            var newTier = Math.Clamp(LootGenerationFactory.GetTierFromRequiredLevel(newRequiredLevel) - 1, 0, 7);
+>>>>>>> e7b4413b0 (fix: correct quest item mana rates and upgrade scaling)
 
             var currentTier = Math.Clamp(LootGenerationFactory.GetTierFromRequiredLevel(currentRequiredLevel) - 1, 0, 7);
             var newTier = Math.Clamp(LootGenerationFactory.GetTierFromRequiredLevel(newRequiredLevel) - 1, 0, 7);
@@ -718,6 +723,7 @@ public class UpgradeKit : Stackable
 
         var currentRoll = currentBaseStat - currentBaseLevelFromTier;
         var rollPercentile = (float)currentRoll / currentRange;
+        rollPercentile = Math.Clamp(rollPercentile, 0.0f, 1.0f);
 
         var newTierRange =
             (jewelryBaseWardLevelPerTier[newTier + 1] * necklaceMultiplier)
@@ -746,6 +752,7 @@ public class UpgradeKit : Stackable
         var currentRoll = currentBaseStat - currentBaseLevelFromTier;
 
         var rollPercentile = (float)currentRoll / currentRange;
+        rollPercentile = Math.Clamp(rollPercentile, 0.0f, 1.0f);
 
         var newTierRange = jewelryBaseRatingPerTier[newTier];
         var amountAboveMinimum = newTierRange * rollPercentile;
