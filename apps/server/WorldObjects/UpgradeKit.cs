@@ -17,6 +17,7 @@ namespace ACE.Server.WorldObjects;
 
 public class UpgradeKit : Stackable
 {
+
     /// <summary>
     /// A new biota be created taking all of its values from weenie.
     /// </summary>
@@ -690,6 +691,7 @@ public class UpgradeKit : Stackable
 
         var currentRoll = currentBaseStat - currentBaseLevelFromTier;
         var rollPercentile = (float)currentRoll / currentRange;
+        rollPercentile = Math.Clamp(rollPercentile, 0.0f, 1.0f);
 
         var newTierRange =
             (jewelryBaseWardLevelPerTier[newTier + 1] * necklaceMultiplier)
@@ -718,6 +720,7 @@ public class UpgradeKit : Stackable
         var currentRoll = currentBaseStat - currentBaseLevelFromTier;
 
         var rollPercentile = (float)currentRoll / currentRange;
+        rollPercentile = Math.Clamp(rollPercentile, 0.0f, 1.0f);
 
         var newTierRange = jewelryBaseRatingPerTier[newTier];
         var amountAboveMinimum = newTierRange * rollPercentile;
@@ -862,7 +865,6 @@ public class UpgradeKit : Stackable
         }
 
         int[] averageRatingValuesPerTier = [1, 2, 3, 4, 5, 6, 8, 10];
-
         var multiplier = (float)averageRatingValuesPerTier[newTier] / averageRatingValuesPerTier[currentTier];
 
         foreach (var itemRating in ratingList)
