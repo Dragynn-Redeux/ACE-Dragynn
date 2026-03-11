@@ -22,6 +22,7 @@ namespace ACE.Server.Network.Structure;
 public class AppraiseInfo
 {
     private const uint EnchantmentMask = 0x80000000;
+    private const PropertyBool TerminalDestabilizedLockProperty = (PropertyBool)10012;
 
     public IdentifyResponseFlags Flags;
 
@@ -971,6 +972,8 @@ public class AppraiseInfo
 
         SetDamagePenaltyUseText();
 
+        SetDestabilizedUseText(wo);
+
         SetJewelcraftingUseText(wo);
 
         SetSalvageBagUseText(wo);
@@ -1442,6 +1445,17 @@ public class AppraiseInfo
             _extraPropertiesText += finalText + "\n";
         }
 
+        _hasExtraPropertiesText = true;
+    }
+
+    private void SetDestabilizedUseText(WorldObject wo)
+    {
+        if (wo.GetProperty(TerminalDestabilizedLockProperty) != true)
+        {
+            return;
+        }
+
+        _extraPropertiesText += "Destabilized\n";
         _hasExtraPropertiesText = true;
     }
 

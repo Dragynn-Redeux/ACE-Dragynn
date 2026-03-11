@@ -185,7 +185,10 @@ partial class Player
             {
                 continue;
             }
-
+            if (item.GetProperty(PropertyBool.IsUnstable) == true)
+            {
+                continue;
+            }
             // random chance of receiving a jewelcrafting gem in salvage, higher based on gem count and tier
 
             if (item.GemType != null)

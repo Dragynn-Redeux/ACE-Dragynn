@@ -23,7 +23,10 @@ public partial class Creature : Container
     {
         get => Stamina.Current == 0;
     }
-
+    public bool UnstableLoot
+    {
+        get => GetProperty(PropertyBool.UnstableLoot) ?? false;
+    }
     protected QuestManager _questManager;
 
     public QuestManager QuestManager
