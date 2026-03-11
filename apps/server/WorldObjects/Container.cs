@@ -943,6 +943,12 @@ public partial class Container : WorldObject
             return; // Do nothing else if container is owned by something.
         }
 
+        if (ForgeStagingService.IsForgeTarget(this))
+        {
+            ForgeStagingService.HandleClickUse(player, this);
+            return;
+        }
+
         if (!IsOpen)
         {
             Open(player);

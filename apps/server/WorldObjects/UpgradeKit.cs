@@ -17,6 +17,11 @@ namespace ACE.Server.WorldObjects;
 
 public class UpgradeKit : Stackable
 {
+    public enum UpgradeContext
+    {
+        Default,
+        Stabilization,
+    }
 
     /// <summary>
     /// A new biota be created taking all of its values from weenie.
@@ -172,19 +177,30 @@ public class UpgradeKit : Stackable
         player.NextUseTime = DateTime.UtcNow.AddSeconds(animTime);
     }
 
-    public static bool UpgradeItem(Player player, WorldObject target, int forcedNewWieldDifficulty = 0)
+    public static bool UpgradeItem(
+        Player player,
+        WorldObject target,
+        int forcedNewWieldDifficulty = 0,
+        UpgradeContext upgradeContext = UpgradeContext.Default
+    )
     {
-        var usesRequiredLevelPath = UsesRequiredLevelTiering(target);
-        var currentRequirement = target.WieldDifficulty ?? (usesRequiredLevelPath ? 1 : 50);
-        var newRequirement = forcedNewWieldDifficulty > 0 && target.ItemType != ItemType.Jewelry
-            ? forcedNewWieldDifficulty
-            : GetMaxRequirementForPlayer(player, target);
-
-        var currentTier = GetTierIndexFromRequirement(target, currentRequirement);
-        var newTier = GetTierIndexFromRequirement(target, newRequirement);
-
         if (target.ItemType != ItemType.Jewelry)
         {
+            var usesRequiredLevelPath = UsesRequiredLevelTiering(target);
+
+            var currentRequirement = target.WieldDifficulty ?? (usesRequiredLevelPath ? 1 : 50);
+            var newRequirement = forcedNewWieldDifficulty > 0
+                ? forcedNewWieldDifficulty
+                : GetMaxRequirementForPlayer(player, target);
+
+            if (upgradeContext == UpgradeContext.Stabilization)
+            {
+                // Stabilization should never reduce requirement/tier-driving baselines.
+                newRequirement = Math.Max(currentRequirement, newRequirement);
+            }
+
+            var currentTier = GetTierIndexFromRequirement(target, currentRequirement);
+            var newTier = GetTierIndexFromRequirement(target, newRequirement);
             // Weapons
             if (target.ItemType is ItemType.Weapon or ItemType.MissileWeapon or ItemType.MeleeWeapon or ItemType.Caster)
             {
@@ -250,7 +266,7 @@ public class UpgradeKit : Stackable
             target.SetProperty(PropertyInt.WieldDifficulty, newRequirement);
 
             // Spells
-            ScaleUpSpells(target, currentTier, newTier);
+            ScaleUpSpells(target, currentTier, newTier, upgradeContext);
 
             // Item Mana
             ScaleUpItemMana(target, newTier);
@@ -259,6 +275,17 @@ public class UpgradeKit : Stackable
         // Jewelry
         else
         {
+            var currentRequiredLevel = target.WieldDifficulty ?? 1;
+            var newRequiredLevel = GetRequiredLevelFromPlayerTier((player));
+
+            if (upgradeContext == UpgradeContext.Stabilization)
+            {
+                // Keep stabilization behavior non-regressive for required-level based items too.
+                newRequiredLevel = Math.Max(currentRequiredLevel, newRequiredLevel);
+            }
+
+            var currentTier = Math.Clamp(LootGenerationFactory.GetTierFromRequiredLevel(currentRequiredLevel) - 1, 0, 7);
+            var newTier = Math.Clamp(LootGenerationFactory.GetTierFromRequiredLevel(newRequiredLevel) - 1, 0, 7);
             ScaleUpJewelryWardLevel(target, currentTier, newTier);
             ScaleUpJewelryRating(PropertyInt.GearMaxHealth, target, currentTier, newTier);
             ScaleUpJewelryRating(PropertyInt.GearMaxStamina, target, currentTier, newTier);
@@ -274,10 +301,10 @@ public class UpgradeKit : Stackable
             ScaleUpSpecialRatings(target, currentTier, newTier);
 
             // Level Requirement
-            target.SetProperty(PropertyInt.WieldDifficulty, newRequirement);
+            target.SetProperty(PropertyInt.WieldDifficulty, newRequiredLevel);
 
             // Spells
-            ScaleUpSpells(target, currentTier, newTier);
+            ScaleUpSpells(target, currentTier, newTier, upgradeContext);
 
             // Item Mana
             ScaleUpItemMana(target, newTier);
@@ -756,7 +783,7 @@ public class UpgradeKit : Stackable
         target.SetProperty(PropertyInt.ItemCurMana, totalMana);
     }
 
-    private static void ScaleUpSpells(WorldObject target, int currentTier, int newTier)
+    private static void ScaleUpSpells(WorldObject target, int currentTier, int newTier, UpgradeContext upgradeContext)
     {
         if (newTier is < 3 or > 7)
         {
@@ -768,12 +795,15 @@ public class UpgradeKit : Stackable
             return;
         }
 
-        ScaleUpSpellbookSpells(target, newTier);
+        var useUnstableSpellWeighting =
+            upgradeContext == UpgradeContext.Stabilization && target.GetProperty(PropertyBool.IsUnstable) == true;
+
+        ScaleUpSpellbookSpells(target, newTier, useUnstableSpellWeighting);
         ScaleUpDidSpell(target, newTier);
         ScaleUpProcSpell(target, newTier);
     }
 
-    private static void ScaleUpSpellbookSpells(WorldObject target, int newTier)
+    private static void ScaleUpSpellbookSpells(WorldObject target, int newTier, bool useStabilizationWeighting)
     {
         var spellBook = target.Biota.PropertiesSpellBook;
 
@@ -796,9 +826,11 @@ public class UpgradeKit : Stackable
             }
 
             var isCantrip = spellProgressionList.Count < 5;
-            var spellLevel = isCantrip
-                ? CantripChance.GetQuestCantripLevelForTier(newTier)
-                : Math.Clamp(newTier, 3, 7);
+            var spellLevel = useStabilizationWeighting
+                ? StabilizationSpellProfile.GetWeightedSpellLevel(newTier, isCantrip)
+                : isCantrip
+                    ? CantripChance.GetQuestCantripLevelForTier(newTier)
+                    : Math.Clamp(newTier, 3, 7);
 
             spellsToRemove.Add(spellId);
             spellsToAdd.Add((int)SpellLevelProgression.GetSpellAtLevel(minimumLevelSpellId, spellLevel, true, true));

@@ -169,6 +169,10 @@ public static class WorldObjectFactory
                 return new TrophySolvent(weenie, guid);
             case WeenieType.TrophyEssence:
                 return new TrophyEssence(weenie, guid);
+            case WeenieType.StabilizationDevice:
+                return new StabilizationDevice(weenie, guid);
+            case WeenieType.ResonanceForge:
+                return new ResonanceForge(weenie, guid);
             default:
                 return new GenericObject(weenie, guid);
         }
@@ -314,6 +318,10 @@ public static class WorldObjectFactory
                 return new TrophySolvent(biota);
             case WeenieType.TrophyEssence:
                 return new TrophyEssence(biota);
+            case WeenieType.StabilizationDevice:
+                return new StabilizationDevice(biota);
+            case WeenieType.ResonanceForge:
+                return new ResonanceForge(biota);
             default:
                 return new GenericObject(biota);
         }

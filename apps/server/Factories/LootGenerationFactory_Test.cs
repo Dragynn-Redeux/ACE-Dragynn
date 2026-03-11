@@ -68,7 +68,7 @@ public static class LootGenerationFactory_Test
         {
             if (deathTreasure != null)
             {
-                corpseContainer = LootGenerationFactory.CreateRandomLootObjects(deathTreasure);
+                corpseContainer = LootGenerationFactory.CreateRandomLootObjects(deathTreasure, null);
 
                 if (corpseContainer.Count < ls.MinItemsCreated)
                 {

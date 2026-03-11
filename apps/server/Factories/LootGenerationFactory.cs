@@ -224,11 +224,11 @@ public static partial class LootGenerationFactory
         }
     }
 
-    public static List<WorldObject> CreateRandomLootObjects(TreasureDeath profile)
+    public static List<WorldObject> CreateRandomLootObjects(TreasureDeath profile, LootGenerationContext context)
     {
         if (!PropertyManager.GetBool("legacy_loot_system").Item)
         {
-            return CreateRandomLootObjects_New(profile);
+            return CreateRandomLootObjects_New(profile, context);
         }
 
         // stopwatch.Value.Restart();
@@ -373,7 +373,7 @@ public static partial class LootGenerationFactory
         }
     }
 
-    public static List<WorldObject> CreateRandomLootObjects_New(TreasureDeath profile)
+    public static List<WorldObject> CreateRandomLootObjects_New(TreasureDeath profile,LootGenerationContext context)
     {
         // stopwatch.Value.Restart();
 
@@ -392,7 +392,7 @@ public static partial class LootGenerationFactory
 
                 for (var i = 0; i < numItems; i++)
                 {
-                    lootWorldObject = CreateRandomLootObjects_New(profile, TreasureItemCategory.Item);
+                    lootWorldObject = CreateRandomLootObjects_New(profile, TreasureItemCategory.Item, context);
 
                     if (lootWorldObject != null)
                     {
@@ -411,7 +411,7 @@ public static partial class LootGenerationFactory
                     // If we roll this bracket we are guaranteed at least ItemMinAmount of items, with an extra roll for each additional item under itemMaxAmount.
                     for (var i = 0; i < profile.ItemMinAmount; i++)
                     {
-                        lootWorldObject = CreateRandomLootObjects_New(profile, TreasureItemCategory.Item);
+                        lootWorldObject = CreateRandomLootObjects_New(profile, TreasureItemCategory.Item, context);
 
                         if (lootWorldObject != null)
                         {
@@ -424,7 +424,7 @@ public static partial class LootGenerationFactory
                         itemChance = ThreadSafeRandom.NextInterval(profile.LootQualityMod);
                         if (itemChance < profile.ItemChance / 100.0)
                         {
-                            lootWorldObject = CreateRandomLootObjects_New(profile, TreasureItemCategory.Item);
+                            lootWorldObject = CreateRandomLootObjects_New(profile, TreasureItemCategory.Item, context);
 
                             //Console.WriteLine($"Success! Item: {lootWorldObject.Name}");
 
@@ -443,7 +443,7 @@ public static partial class LootGenerationFactory
 
                 for (var i = 0; i < numItems; i++)
                 {
-                    lootWorldObject = CreateRandomLootObjects_New(profile, TreasureItemCategory.MagicItem);
+                    lootWorldObject = CreateRandomLootObjects_New(profile, TreasureItemCategory.MagicItem, context);
 
                     if (lootWorldObject != null)
                     {
@@ -460,7 +460,7 @@ public static partial class LootGenerationFactory
                     // If we roll this bracket we are guaranteed at least MagicItemMinAmount of items, with an extra roll for each additional item under MagicItemMaxAmount.
                     for (var i = 0; i < profile.MagicItemMinAmount; i++)
                     {
-                        lootWorldObject = CreateRandomLootObjects_New(profile, TreasureItemCategory.MagicItem);
+                        lootWorldObject = CreateRandomLootObjects_New(profile, TreasureItemCategory.MagicItem, context);
 
                         if (lootWorldObject != null)
                         {
@@ -473,7 +473,7 @@ public static partial class LootGenerationFactory
                         itemChance = ThreadSafeRandom.NextInterval(profile.LootQualityMod);
                         if (itemChance < profile.MagicItemChance / 100.0)
                         {
-                            lootWorldObject = CreateRandomLootObjects_New(profile, TreasureItemCategory.MagicItem);
+                            lootWorldObject = CreateRandomLootObjects_New(profile, TreasureItemCategory.MagicItem, context);
 
                             //Console.WriteLine($"Success! Item: {lootWorldObject.Name}");
 
@@ -492,7 +492,7 @@ public static partial class LootGenerationFactory
 
                 for (var i = 0; i < numItems; i++)
                 {
-                    lootWorldObject = CreateRandomLootObjects_New(profile, TreasureItemCategory.MundaneItem);
+                    lootWorldObject = CreateRandomLootObjects_New(profile, TreasureItemCategory.MundaneItem, context);
 
                     if (lootWorldObject != null)
                     {
@@ -520,7 +520,7 @@ public static partial class LootGenerationFactory
                 {
                     for (var i = 0; i < profile.MundaneItemMinAmount; i++)
                     {
-                        lootWorldObject = CreateRandomLootObjects_New(profile, TreasureItemCategory.MundaneItem);
+                        lootWorldObject = CreateRandomLootObjects_New(profile, TreasureItemCategory.MundaneItem, context);
 
                         //Console.WriteLine($"Success! Item: {lootWorldObject.Name}");
 
@@ -535,7 +535,7 @@ public static partial class LootGenerationFactory
                         itemChance = ThreadSafeRandom.NextInterval(profile.LootQualityMod);
                         if (itemChance < profile.MundaneItemChance / 100.0)
                         {
-                            lootWorldObject = CreateRandomLootObjects_New(profile, TreasureItemCategory.MundaneItem);
+                            lootWorldObject = CreateRandomLootObjects_New(profile, TreasureItemCategory.MundaneItem, context);
 
                             if (lootWorldObject != null)
                             {
@@ -1439,7 +1439,7 @@ public static partial class LootGenerationFactory
         }
     }
 
-    public static List<WorldObject> CreateRandomObjectsOfType(WeenieType type, int count)
+    public static List<WorldObject> CreateRandomObjectsOfType(WeenieType type, int count, LootGenerationContext context)
     {
         var weenies = DatabaseManager.World.GetRandomWeeniesOfType((int)type, count);
 
@@ -2358,10 +2358,10 @@ public static partial class LootGenerationFactory
             UnknownChances = 21
         };
 
-        return CreateRandomLootObjects_New(treasureDeath, category);
+        return CreateRandomLootObjects_New(treasureDeath, category, null);
     }
 
-    public static WorldObject CreateRandomLootObjects_New(TreasureDeath treasureDeath, TreasureItemCategory category)
+   public static WorldObject CreateRandomLootObjects_New(TreasureDeath treasureDeath, TreasureItemCategory category, LootGenerationContext context)
     {
         var treasureRoll = RollWcid(treasureDeath, category);
 
@@ -2371,8 +2371,130 @@ public static partial class LootGenerationFactory
         }
 
         var wo = CreateAndMutateWcid(treasureDeath, treasureRoll, category == TreasureItemCategory.MagicItem);
+        if (wo != null && context?.UnstableLoot == true &&
+            (
+                wo.ItemType == ItemType.Armor ||
+                wo.ItemType == ItemType.MeleeWeapon ||
+                wo.ItemType == ItemType.MissileWeapon ||
+                wo.ItemType == ItemType.Caster ||
+                wo.ItemType == ItemType.Jewelry ||
+                wo.ItemType == ItemType.Clothing))
+        {
+            TryApplyUnstableWeaponSubtype(wo, treasureRoll);
+            TryApplyUnstableArmorStyle(wo);
 
+            wo.SetProperty(PropertyBool.IsUnstable, true);
+            wo.SetProperty(PropertyDataId.IconOverlay, 0x06004D21);
+            wo.SetProperty(PropertyInt.Lifespan, 72000);
+            wo.SetProperty(PropertyBool.IsSellable, false);
+            
+        }
         return wo;
+    }
+
+    private static void TryApplyUnstableWeaponSubtype(WorldObject wo, TreasureRoll treasureRoll)
+    {
+        if (wo.ItemType is not ItemType.Weapon and not ItemType.MeleeWeapon and not ItemType.MissileWeapon and not ItemType.Caster)
+        {
+            return;
+        }
+
+        if (wo.WeaponSubtype != null)
+        {
+            return;
+        }
+
+        LootTables.WeaponSubtype? unstableWeaponSubtype = treasureRoll?.WeaponType switch
+        {
+            TreasureWeaponType.Unarmed => LootTables.WeaponSubtype.Ua,
+
+            TreasureWeaponType.Axe => LootTables.WeaponSubtype.AxeSmall,
+            TreasureWeaponType.Dagger or TreasureWeaponType.DaggerMS => LootTables.WeaponSubtype.DaggerSmall,
+            TreasureWeaponType.Mace or TreasureWeaponType.MaceJitte => LootTables.WeaponSubtype.MaceMedium,
+            TreasureWeaponType.Spear => LootTables.WeaponSubtype.SpearSmall,
+            TreasureWeaponType.Staff => LootTables.WeaponSubtype.StaffMedium,
+            TreasureWeaponType.Sword or TreasureWeaponType.SwordMS => LootTables.WeaponSubtype.SwordSmall,
+
+            TreasureWeaponType.TwoHandedAxe => LootTables.WeaponSubtype.TwohandAxe,
+            TreasureWeaponType.TwoHandedMace => LootTables.WeaponSubtype.TwohandMace,
+            TreasureWeaponType.TwoHandedSpear => LootTables.WeaponSubtype.TwohandSpear,
+            TreasureWeaponType.TwoHandedSword => LootTables.WeaponSubtype.TwohandSword,
+            TreasureWeaponType.TwoHandedWeapon => null, // Cannot infer specific subtype without size information
+
+            TreasureWeaponType.Bow => LootTables.WeaponSubtype.BowLarge,
+            TreasureWeaponType.BowShort => LootTables.WeaponSubtype.BowSmall,
+            TreasureWeaponType.Crossbow => LootTables.WeaponSubtype.CrossbowLarge,
+            TreasureWeaponType.CrossbowLight => LootTables.WeaponSubtype.CrossbowSmall,
+            TreasureWeaponType.Atlatl => LootTables.WeaponSubtype.AtlatlLarge,
+            TreasureWeaponType.AtlatlRegular => LootTables.WeaponSubtype.AtlatlSmall,
+            TreasureWeaponType.Thrown => GetThrownWeaponsSubType(wo) switch
+            {
+                0 => LootTables.WeaponSubtype.ThrownAxe,
+                1 => LootTables.WeaponSubtype.ThrownClub,
+                2 => LootTables.WeaponSubtype.ThrownDagger,
+                3 => LootTables.WeaponSubtype.ThrownDart,
+                4 => LootTables.WeaponSubtype.ThrownJavelin,
+                5 => LootTables.WeaponSubtype.ThrownShuriken,
+                _ => LootTables.WeaponSubtype.ThrownDart,
+            },
+
+            TreasureWeaponType.Caster => LootTables.WeaponSubtype.Caster,
+            _ => null,
+        };
+
+        if (unstableWeaponSubtype != null)
+        {
+            wo.WeaponSubtype = (int)unstableWeaponSubtype.Value;
+            return;
+        }
+
+        var sourceWeenie = DatabaseManager.World.GetWeenie(wo.WeenieClassId);
+        var sourceWeaponSubtype = sourceWeenie?.WeeniePropertiesInt
+            .FirstOrDefault(property => property.Type == (ushort)PropertyInt.WeaponSubtype)
+            ?.Value;
+
+        if (sourceWeaponSubtype != null)
+        {
+            wo.WeaponSubtype = sourceWeaponSubtype;
+            return;
+        }
+
+        _log.Warning(
+            "CreateRandomLootObjects_New() - Missing WeaponSubtype for unstable weapon item {Name} ({Wcid}), TreasureWeaponType={WeaponType}.",
+            wo.Name,
+            wo.WeenieClassId,
+            treasureRoll?.WeaponType);
+    }
+
+    private static void TryApplyUnstableArmorStyle(WorldObject wo)
+    {
+        if (wo.ItemType is not ItemType.Armor and not ItemType.Clothing)
+        {
+            return;
+        }
+
+        if (wo.ArmorStyle != null)
+        {
+            return;
+        }
+
+        var sourceWeenie = DatabaseManager.World.GetWeenie(wo.WeenieClassId);
+        var sourceArmorStyle = sourceWeenie?.WeeniePropertiesInt
+            .FirstOrDefault(p => p.Type == (ushort)PropertyInt.ArmorStyle)?.Value;
+
+        if (sourceArmorStyle.HasValue)
+        {
+            wo.SetProperty(PropertyInt.ArmorStyle, sourceArmorStyle.Value);
+            return;
+        }
+
+        // No armor style found; log warning but don't fail. Clothing items often have null ArmorStyle intentionally.
+        if (wo.ArmorLevel != null)
+        {
+            _log.Warning(
+                "Missing ArmorStyle for unstable armor item {Name} ({Wcid}).",
+                wo.Name, wo.WeenieClassId);
+        }
     }
 
     public static WorldObject CreateAndMutateWcid(
