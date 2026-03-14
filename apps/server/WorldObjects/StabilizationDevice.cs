@@ -235,7 +235,7 @@ public class StabilizationDevice : WorldObject
                 
                 player.Session.Network.EnqueueSend(
                     new GameMessageSystemChat(
-                        $"The forge stabilizes the resonance within your {target.NameWithMaterial}.",
+                        $"The forge stabilizes the resonance within your {target.NameWithMaterial}, awakening power in harmony with your own.",
                         ChatMessageType.Craft
                     )
                 );
