@@ -266,6 +266,11 @@ public static class DestabilizedLootEffects
 
     private static string FormatFloatDetail(PropertyFloat property, double oldValue, double newValue, double delta)
     {
+        if (UsesPercentPackageDetail(property))
+        {
+            return $"{FormatPropertyName(property)} changed from {FormatPercentNumber(oldValue)} to {FormatPercentNumber(newValue)} ({FormatSignedPercentNumber(delta)}).";
+        }
+
         return $"{FormatPropertyName(property)} changed from {FormatFloatNumber(oldValue)} to {FormatFloatNumber(newValue)} ({FormatSignedFloatNumber(delta)}).";
     }
 
@@ -279,6 +284,11 @@ public static class DestabilizedLootEffects
         return value.ToString("0.00", CultureInfo.InvariantCulture);
     }
 
+    private static string FormatPercentNumber(double value)
+    {
+        return (value * 100).ToString("0.00", CultureInfo.InvariantCulture) + "%";
+    }
+
     private static string FormatSignedFloatNumber(double value)
     {
         return value >= 0
@@ -286,11 +296,27 @@ public static class DestabilizedLootEffects
             : $"-{FormatFloatNumber(Math.Abs(value))}";
     }
 
+    private static string FormatSignedPercentNumber(double value)
+    {
+        return value >= 0
+            ? $"+{FormatPercentNumber(value)}"
+            : $"-{FormatPercentNumber(Math.Abs(value))}";
+    }
+
     private static string FormatSignedIntNumber(int value)
     {
         return value >= 0
             ? $"+{value}"
             : value.ToString(CultureInfo.InvariantCulture);
+    }
+
+    private static bool UsesPercentPackageDetail(PropertyFloat property)
+    {
+        return property switch
+        {
+            PropertyFloat.WeaponOffense or PropertyFloat.WeaponPhysicalDefense or PropertyFloat.WeaponMagicalDefense => false,
+            _ => true,
+        };
     }
 
     private static string FormatPropertyName(Enum property)
