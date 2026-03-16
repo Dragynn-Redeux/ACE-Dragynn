@@ -215,8 +215,8 @@ public partial class Container : WorldObject
         foreach (var container in sideContainers)
         {
             ((Container)container).SortWorldObjectsIntoInventory(worldObjects); // This will set the InventoryLoaded flag for this sideContainer
-            EncumbranceVal += container.EncumbranceVal; // This value includes the containers burden itself + all child items
-            Value += container.Value; // This value includes the containers value itself + all child items
+            EncumbranceVal += container.EncumbranceVal ?? 0; // This value includes the containers burden itself + all child items
+            Value += container.Value ?? 0; // This value includes the containers value itself + all child items
         }
 
         OnInitialInventoryLoadCompleted();
@@ -652,8 +652,11 @@ public partial class Container : WorldObject
                     {
                         if (sidePack.TryAddToInventory(worldObject, out container, placementPosition, true))
                         {
-                            EncumbranceVal += (worldObject.EncumbranceVal ?? 0);
-                            Value += (worldObject.Value ?? 0);
+                            if (this is not Player playerOwner || playerOwner.Session == null)
+                            {
+                                EncumbranceVal += (worldObject.EncumbranceVal ?? 0);
+                                Value += (worldObject.Value ?? 0);
+                            }
 
                             return true;
                         }
@@ -887,13 +890,17 @@ public partial class Container : WorldObject
         {
             if (((Container)container).TryRemoveFromInventory(objectGuid, out item))
             {
-                EncumbranceVal -= (item.EncumbranceVal ?? 0);
                 Value -= (item.Value ?? 0);
 
-                // SPECIALIZED PACKS: Called when dropping an item from a spec pack entirely, or when moving from this pack to another
+                // SPECIALIZED PACKS: RecalculateBurden recomputes EncumbranceVal from scratch, so the
+                // direct adjustment is only needed when the parent container is not a Player.
                 if (container.Container is Player containerPlayer)
                 {
                     containerPlayer.RecalculateBurden();
+                }
+                else
+                {
+                    EncumbranceVal -= (item.EncumbranceVal ?? 0);
                 }
 
                 return true;

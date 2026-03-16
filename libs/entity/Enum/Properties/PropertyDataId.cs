@@ -205,6 +205,9 @@ public enum PropertyDataId : ushort
     SpellToExtract = 65,
 
     [ServerOnly]
+    Spell2 = 66,
+
+    [ServerOnly]
     PCAPRecordedWeenieHeader = 8001,
 
     [ServerOnly]

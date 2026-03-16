@@ -215,6 +215,7 @@ public static class VendorBaseItems
         (0, false, HeritageAny, 1054000, 0, 0.0, -1), // Pearl of Spell Transference
         (0, false, HeritageAny, 1054005, 0, 0.0, -1), // Pearl of Spell Purging
         (0, false, HeritageAny, 1053979, 0, 0.0, -1), // Bezel (spellcrafting)
+        (0, false, HeritageAny, 1053983, 0, 0.0, -1), // Alkahest Salt (cooking/alchemy)
     ];
 
     // <(tier, onlyThisTier, heritage, wcid, paletteTemplate, shade, stackSize)>
@@ -540,25 +541,41 @@ public static class VendorBaseItems
     public static readonly List<(int, bool, int, uint, int, double, int)> ButcherItems = [];
 
     // <(tier, onlyThisTier, heritage, wcid, paletteTemplate, shade, stackSize)>
-    public static readonly List<(int, bool, int, uint, int, double, int)> GrocerItems = [];
+    public static readonly List<(int, bool, int, uint, int, double, int)> GrocerItems =
+    [
+        (0, false, HeritageAny, 1053937, 0, 0.0, -1), // gristly steak
+        (2, false, HeritageAny, 1053941, 0, 0.0, -1), // steak
+        (4, false, HeritageAny, 1053945, 0, 0.0, -1), // tender steak
+        (6, false, HeritageAny, 1053949, 0, 0.0, -1), // choice steak
+        
+        (0, false, HeritageAny, 1053938, 0, 0.0, -1), // gristly pepper steak
+        (2, false, HeritageAny, 1053942, 0, 0.0, -1), // pepper steak
+        (4, false, HeritageAny, 1053946, 0, 0.0, -1), // tender pepper steak
+        (6, false, HeritageAny, 1053950, 0, 0.0, -1), // choice pepper steak
+        
+        (0, false, HeritageAny, 1053939, 0, 0.0, -1), // gristly brined steak
+        (2, false, HeritageAny, 1053943, 0, 0.0, -1), // brined steak
+        (4, false, HeritageAny, 1053947, 0, 0.0, -1), // tender brined steak
+        (6, false, HeritageAny, 1053951, 0, 0.0, -1), // choice brined steak
+    ];
 
     // <(tier, onlyThisTier, heritage, wcid, paletteTemplate, shade, stackSize)>
     public static readonly List<(int, bool, int, uint, int, double, int)> HealerItems =
     [
         (0, false, HeritageAny, 1053958, 0, 0.0, -1), // health draught
         (2, false, HeritageAny, 1053962, 0, 0.0, -1), // health potion
-        (3, false, HeritageAny, 1053966, 0, 0.0, -1), // health tonic
-        (4, false, HeritageAny, 1053970, 0, 0.0, -1), // health tincture
+        (4, false, HeritageAny, 1053966, 0, 0.0, -1), // health tonic
+        (6, false, HeritageAny, 1053970, 0, 0.0, -1), // health tincture
         //{ (5, ??, 0, 0.0, -1) },     // health elixir?
         (0, false, HeritageAny, 1053959, 0, 0.0, -1), // stamina draught
         (2, false, HeritageAny, 1053963, 0, 0.0, -1), // stamina potion
-        (3, false, HeritageAny, 1053967, 0, 0.0, -1), // stamina tonic
-        (4, false, HeritageAny, 1053971, 0, 0.0, -1), // stamina tincture
+        (4, false, HeritageAny, 1053967, 0, 0.0, -1), // stamina tonic
+        (6, false, HeritageAny, 1053971, 0, 0.0, -1), // stamina tincture
         //{ (5, ??, 0, 0.0, -1) },     // stamina elixir?
         (0, false, HeritageAny, 1053957, 0, 0.0, -1), // mana draught
         (2, false, HeritageAny, 1053961, 0, 0.0, -1), // mana potion
-        (3, false, HeritageAny, 1053965, 0, 0.0, -1), // mana tonic
-        (4, false, HeritageAny, 1053969, 0, 0.0, -1), // mana tincture
+        (4, false, HeritageAny, 1053965, 0, 0.0, -1), // mana tonic
+        (6, false, HeritageAny, 1053969, 0, 0.0, -1), // mana tincture
         //{ (5, ??, 0, 0.0, -1) },     // mana elixir?
         (0, false, HeritageAny, 628, 0, 0.0, -1), // Crude Healing Kit
         (2, false, HeritageAny, 629, 0, 0.0, -1), // Plain Healing Kit

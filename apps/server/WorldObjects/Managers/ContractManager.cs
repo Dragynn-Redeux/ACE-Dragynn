@@ -9,11 +9,14 @@ using ACE.Entity.Enum;
 using ACE.Server.Network.GameEvent.Events;
 using ACE.Server.Network.GameMessages.Messages;
 using ACE.Server.Network.Structure;
+using Serilog;
 
 namespace ACE.Server.WorldObjects.Managers;
 
 public class ContractManager
 {
+    private static readonly ILogger _log = Log.ForContext(typeof(ContractManager));
+
     public Player Player { get; }
 
     private const int MaxContracts = 100;
@@ -51,6 +54,12 @@ public class ContractManager
         foreach (var contract in contracts)
         {
             var datContract = GetContractFromDat(contract.ContractId);
+
+            if (datContract == null)
+            {
+                _log.Warning("ContractManager.RefreshMonitoredQuestFlags: Contract {ContractId} not found in DAT file for player {PlayerName}", contract.ContractId, Player.Name);
+                continue;
+            }
 
             if (!MonitoredQuestFlags.ContainsKey(contract.ContractId))
             {
@@ -184,6 +193,12 @@ public class ContractManager
 
             Player.CharacterChangesDetected = true;
             Player.Session.Network.EnqueueSend(new GameEventSendClientContractTracker(Player.Session, contract));
+            Player.Session.Network.EnqueueSend(
+                new GameMessageSystemChat(
+                    $"You have received a new task: {datContract.ContractName}.",
+                    ChatMessageType.System
+                )
+            );
 
             RefreshMonitoredQuestFlags();
         }
@@ -278,7 +293,7 @@ public class ContractManager
         {
             if (contracts.Value.Contains(questName.ToLower()))
             {
-                Update(contracts.Key);
+                Update(contracts.Key, questName);
             }
         }
     }
@@ -317,25 +332,14 @@ public class ContractManager
                         );
                     }
 
-                    // Bestow the contract
-                    var success = Add(contract.ContractId);
-
-                    if (success)
-                    {
-                        // Send message to player
-                        Player.Session.Network.EnqueueSend(
-                            new GameMessageSystemChat(
-                                $"You have received a new task: {contract.ContractName}!",
-                                ChatMessageType.Broadcast
-                            )
-                        );
-                    }
+                    // Bestow the contract (Add() already sends the "given the task" message)
+                    Add(contract.ContractId);
                 }
             }
         }
     }
 
-    private void Update(uint contractId)
+    private void Update(uint contractId, string triggeringQuestName = null)
     {
         if (Debug)
         {
@@ -347,6 +351,22 @@ public class ContractManager
         if (contract != null)
         {
             Player.Session.Network.EnqueueSend(new GameEventSendClientContractTracker(Player.Session, contract));
+
+            if (triggeringQuestName != null)
+            {
+                var datContract = GetContractFromDat(contractId);
+                if (datContract != null &&
+                    !string.IsNullOrWhiteSpace(datContract.QuestflagFinished) &&
+                    datContract.QuestflagFinished.Equals(triggeringQuestName, StringComparison.OrdinalIgnoreCase))
+                {
+                    Player.Session.Network.EnqueueSend(
+                        new GameMessageSystemChat(
+                            $"You have completed the task: {datContract.ContractName}.",
+                            ChatMessageType.System
+                        )
+                    );
+                }
+            }
         }
     }
 }

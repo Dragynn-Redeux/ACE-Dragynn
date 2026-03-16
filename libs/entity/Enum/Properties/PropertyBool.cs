@@ -256,6 +256,8 @@ public enum PropertyBool : ushort
     PatrolEnabled = 174,
     [ServerOnly]
     PatrolForceWalk = 175,
+    [ServerOnly]
+    SignalCrossLB = 176,
 
     /* custom */
     [ServerOnly]
@@ -301,7 +303,6 @@ public enum PropertyBool : ushort
 
     [ServerOnly]
     VendorSellsSpecialItems = 9014,
-
 }
 
 public static class PropertyBoolExtensions

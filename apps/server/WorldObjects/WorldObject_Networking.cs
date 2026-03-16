@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -1736,28 +1737,62 @@ partial class WorldObject
     }
 
     /// <summary>
+    /// Per-WeenieClassId cache of resolved PropertiesTextureMap entries derived from
+    /// WeeniePropertiesSurfaceMap (0x08 DID pairs) + portal.dat Surface reads.
+    /// Populated on first serialization of each creature type; never invalidated
+    /// (weenie surface data is static for the server lifetime).
+    /// Empty list is the sentinel for "this weenie has no surface maps".
+    /// </summary>
+    private static readonly ConcurrentDictionary<uint, IReadOnlyList<PropertiesTextureMap>> _resolvedSurfaceMapCache = new();
+
+    /// <summary>
     /// Applies weenie_properties_surface_map entries (0x08 -> 0x08)
     /// by translating them into PropertiesTextureMap entries on the ObjDesc.
-    /// This depends on custom surface-loading logic from portal.dat and is
-    /// intentionally isolated here.
+    /// Results are cached per WeenieClassId so the DB + DAT reads only happen
+    /// once per creature type instead of on every SerializeCreateObject call.
     /// </summary>
     private void ApplySurfaceMapsToObjDesc(ACE.Entity.ObjDesc objDesc)
     {
-        var db = DatabaseManager.World;
-        var weenie = db.GetWeenie(WeenieClassId);
+        var resolvedMaps = _resolvedSurfaceMapCache.GetOrAdd(WeenieClassId, BuildResolvedSurfaceMaps);
 
-        if (weenie == null ||
-            weenie.WeeniePropertiesSurfaceMap == null ||
-            weenie.WeeniePropertiesSurfaceMap.Count == 0)
+        if (resolvedMaps.Count == 0)
         {
             return;
         }
 
+        foreach (var tm in resolvedMaps)
+        {
+            // remove any existing mapping for this (PartIndex, OldTexture)
+            objDesc.TextureChanges.RemoveAll(
+                t => t.PartIndex == tm.PartIndex && t.OldTexture == tm.OldTexture);
+
+            objDesc.AddTextureChange(new PropertiesTextureMap
+            {
+                PartIndex = tm.PartIndex,
+                OldTexture = tm.OldTexture,
+                NewTexture = tm.NewTexture,
+            });
+        }
+    }
+
+    /// <summary>
+    /// Called at most once per WeenieClassId to resolve WeeniePropertiesSurfaceMap
+    /// entries into concrete PropertiesTextureMap swaps via portal.dat Surface reads.
+    /// </summary>
+    private IReadOnlyList<PropertiesTextureMap> BuildResolvedSurfaceMaps(uint weenieClassId)
+    {
+        var weenie = DatabaseManager.World.GetWeenie(weenieClassId);
+
+        if (weenie?.WeeniePropertiesSurfaceMap == null || weenie.WeeniePropertiesSurfaceMap.Count == 0)
+        {
+            return Array.Empty<PropertiesTextureMap>();
+        }
+
+        var result = new List<PropertiesTextureMap>();
+
         foreach (var map in weenie.WeeniePropertiesSurfaceMap)
         {
-            var partIndex = (byte)map.Index;
-
-            var textureMaps = ResolveSurfaceSwapToTextureMaps(partIndex, map.OldId, map.NewId);
+            var textureMaps = ResolveSurfaceSwapToTextureMaps((byte)map.Index, map.OldId, map.NewId);
             if (textureMaps == null)
             {
                 continue;
@@ -1765,18 +1800,11 @@ partial class WorldObject
 
             foreach (var tm in textureMaps)
             {
-                // remove any existing mapping for this (PartIndex, OldTexture)
-                objDesc.TextureChanges.RemoveAll(
-                    t => t.PartIndex == tm.PartIndex && t.OldTexture == tm.OldTexture);
-
-                objDesc.AddTextureChange(new PropertiesTextureMap
-                {
-                    PartIndex = tm.PartIndex,
-                    OldTexture = tm.OldTexture,
-                    NewTexture = tm.NewTexture,
-                });
+                result.Add(tm);
             }
         }
+
+        return result.Count > 0 ? result.AsReadOnly() : Array.Empty<PropertiesTextureMap>();
     }
 
     /// <summary>

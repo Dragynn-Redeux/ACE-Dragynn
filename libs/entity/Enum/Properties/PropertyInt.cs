@@ -875,6 +875,10 @@ public enum PropertyInt : ushort
     [ServerOnly]
     MarketListingId = 515,
 
+    TrophyEssenceSpellId = 516,
+    TrophyEssenceSkill = 517,
+    TrophyEssenceEffectType = 518,
+
     [ServerOnly]
     PCAPRecordedAutonomousMovement = 8007,
 

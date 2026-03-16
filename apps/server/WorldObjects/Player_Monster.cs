@@ -5,6 +5,9 @@ namespace ACE.Server.WorldObjects;
 /// </summary>
 partial class Player
 {
+    private double lastCheckMonstersTime;
+    private const double CheckMonstersInterval = 0.1;
+
     /// <summary>
     /// Wakes up any monsters within the applicable range
     /// </summary>
@@ -15,17 +18,22 @@ partial class Player
             return;
         }
 
-        var visibleObjs = PhysicsObj.ObjMaint.GetVisibleObjectsValuesOfTypeCreature();
+        var now = Physics.Common.PhysicsTimer.CurrentTime;
+        if (now - lastCheckMonstersTime < CheckMonstersInterval)
+        {
+            return;
+        }
 
-        foreach (var monster in visibleObjs)
+        lastCheckMonstersTime = now;
+
+        PhysicsObj.ObjMaint.ForEachVisibleCreature(monster =>
         {
             if (monster is Player)
             {
-                continue;
+                return;
             }
 
             var distSq = PhysicsObj.get_distance_sq_to_object(monster.PhysicsObj, true);
-            //var distSq = Location.SquaredDistanceTo(monster.Location);
 
             if (
                 distSq <= monster.VisualAwarenessRangeSq
@@ -34,7 +42,7 @@ partial class Player
             {
                 AlertMonster(monster);
             }
-        }
+        });
     }
 
     /// <summary>

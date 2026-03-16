@@ -91,6 +91,8 @@ public partial class ShardDbContext : DbContext
 
     public virtual DbSet<AccountSessionLog> AccountSessions { get; set; }
 
+    public virtual DbSet<AccountWealthSnapshot> AccountWealthSnapshots { get; set; }
+
     public DbSet<ResonanceZoneRow> ResonanceZoneEntries { get; set; }
 
     public virtual DbSet<PlayerMarketListing> PlayerMarketListings { get; set; } = null!;
@@ -122,6 +124,29 @@ public partial class ShardDbContext : DbContext
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.UseCollation("utf8mb4_0900_ai_ci").HasCharSet("utf8mb4");
+
+        modelBuilder.Entity<AccountWealthSnapshot>(entity =>
+        {
+            entity.HasKey(e => e.Id).HasName("PRIMARY");
+
+            entity.ToTable("account_wealth_snapshot");
+
+            entity.HasIndex(e => e.AccountId, "idx_account_wealth_snapshot_account_id");
+            entity.HasIndex(e => e.UpdatedAtUtc, "idx_account_wealth_snapshot_updated_at");
+
+            entity.Property(e => e.Id).HasColumnName("id");
+            entity.Property(e => e.AccountId).HasColumnName("account_id");
+            entity.Property(e => e.CharacterId).HasColumnName("character_id");
+            entity.Property(e => e.PyrealWealth).HasColumnName("pyreal_wealth");
+            entity.Property(e => e.TrophyWealth).HasColumnName("trophy_wealth");
+            entity.Property(e => e.TotalWealth).HasColumnName("total_wealth");
+            entity.Property(e => e.UpdatedAtUtc).HasColumnName("updated_at_utc");
+
+            entity.Property(e => e.RowVersion)
+                .HasColumnName("row_version")
+                .IsConcurrencyToken()
+                .HasDefaultValueSql("0");
+        });
 
         modelBuilder.Entity<Biota>(entity =>
         {

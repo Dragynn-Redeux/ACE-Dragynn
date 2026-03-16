@@ -65,6 +65,24 @@ public static class MarketListingSnapshotSerializer
         {
             return null;
         }
+
+    }
+
+    public static MarketListingSnapshot? TryDeserializeSnapshot(string snapshotJson)
+    {
+        if (string.IsNullOrWhiteSpace(snapshotJson))
+        {
+            return null;
+        }
+
+        try
+        {
+            return JsonSerializer.Deserialize<MarketListingSnapshot>(snapshotJson, Options);
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     public static WorldObject? TryRecreateWorldObjectFromSnapshot(string snapshotJson)

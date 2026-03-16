@@ -52,11 +52,22 @@ internal sealed class MarketSnapshotUpdater
         await gate.WaitAsync();
         try
         {
-
             var threadChannel = await _client.GetChannelAsync(channelId) as IMessageChannel;
             if (threadChannel == null)
             {
                 return;
+            }
+
+            if (_client.GetChannel(channelId) is SocketThreadChannel socketThread && socketThread.IsArchived)
+            {
+                try
+                {
+                    await socketThread.ModifyAsync(p => p.Archived = false);
+                }
+                catch
+                {
+                    return;
+                }
             }
 
             var now = DateTime.UtcNow;
@@ -365,13 +376,20 @@ internal sealed class MarketSnapshotUpdater
                 return new ExistingMessageResult(messageId, editsThisRun);
             }
 
-            await um.ModifyAsync(p =>
+            try
             {
-                p.Content = desiredContent;
-                p.Embeds = desiredEmbed != null
-                    ? new Optional<Embed[]>([desiredEmbed])
-                    : new Optional<Embed[]>([]);
-            });
+                await um.ModifyAsync(p =>
+                {
+                    p.Content = desiredContent;
+                    p.Embeds = desiredEmbed != null
+                        ? new Optional<Embed[]>([desiredEmbed])
+                        : new Optional<Embed[]>([]);
+                });
+            }
+            catch (global::Discord.Net.HttpException ex) when ((int?)ex.DiscordCode == 50083)
+            {
+                return new ExistingMessageResult(messageId, editsThisRun);
+            }
 
             editsThisRun++;
             await Task.Delay(policy.EditDelay);

@@ -1,4 +1,5 @@
 using System;
+using ACE.Server.Managers;
 
 namespace ACE.Server.Market;
 
@@ -7,9 +8,6 @@ namespace ACE.Server.Market;
 /// </summary>
 public static class MarketServiceLocator
 {
-    public const double SaleFeeRate = 0.05;
-    public const double CancellationFeeRate = 0.05;
-
     public static int CalculateSaleFee(int amount)
     {
         if (amount <= 0)
@@ -17,7 +15,9 @@ public static class MarketServiceLocator
             return 0;
         }
 
-        return (int)Math.Floor(amount * SaleFeeRate);
+        var saleFee = PropertyManager.GetDouble("market_listing_payout_fee").Item;
+
+        return (int)Math.Floor(amount * saleFee);
     }
 
     public static int CalculateFee(int amount) => CalculateSaleFee(amount);
@@ -29,7 +29,9 @@ public static class MarketServiceLocator
             return 0;
         }
 
-        return (int)Math.Floor(amount * CancellationFeeRate);
+        var cancellationFee = PropertyManager.GetDouble("market_listing_cancellation_fee").Item;
+
+        return (int)Math.Floor(amount * cancellationFee);
     }
 
     public static int CalculateNetAfterFee(int amount)

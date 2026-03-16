@@ -86,5 +86,7 @@ public enum WeenieType : uint
     UpgradeKit,
     SpellPurge,
     BezelTool,
-    DungeonModder
+    DungeonModder,
+    TrophySolvent,
+    TrophyEssence
 }

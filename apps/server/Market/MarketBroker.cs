@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using ACE.Database;
@@ -14,9 +15,27 @@ namespace ACE.Server.Market;
 
 public static class MarketBroker
 {
+    private static readonly Serilog.ILogger MarketPayoutLog = Serilog.Log.ForContext(typeof(MarketBroker)).ForContext("Subsystem", "Market");
     private static readonly Serilog.ILogger Log = Serilog.Log.ForContext(typeof(MarketBroker));
 
     public const string TemplateName = "Market Broker";
+
+    private static bool ShouldDisplayNameWithMaterial(WorldObject item)
+    {
+        if (item == null)
+        {
+            return false;
+        }
+
+        return item.WeenieType == WeenieType.Salvage
+               || item.ItemType == ItemType.Armor
+               || item.ItemType == ItemType.Clothing
+               || item.ItemType == ItemType.Jewelry
+               || item.ItemType == ItemType.MeleeWeapon
+               || item.ItemType == ItemType.MissileWeapon
+               || item.ItemType == ItemType.Caster
+               || item.ItemType == ItemType.Weapon;
+    }
 
     private static string? TryGetListingItemName(ACE.Database.Models.Shard.PlayerMarketListing listing)
     {
@@ -25,16 +44,54 @@ public static class MarketBroker
             return null;
         }
 
+        WorldObject TryBuildItemForDisplayFromBiota(uint biotaId)
+        {
+            var biota = DatabaseManager.Shard.BaseDatabase.GetBiota(biotaId, true);
+            if (biota == null)
+            {
+                return null;
+            }
+
+            var entityBiota = Database.Adapter.BiotaConverter.ConvertToEntityBiota(biota);
+            return WorldObjectFactory.CreateWorldObject(entityBiota);
+        }
+
         // Prefer the exact persisted item name, if the biota still exists.
         if (listing.ItemBiotaId > 0)
         {
             try
             {
-                var biota = DatabaseManager.Shard.BaseDatabase.GetBiota(listing.ItemBiotaId, true);
-                var name = biota?.BiotaPropertiesString?.FirstOrDefault(p => p.Type == (ushort)PropertyString.Name)?.Value;
-                if (!string.IsNullOrWhiteSpace(name))
+                var item = TryBuildItemForDisplayFromBiota(listing.ItemBiotaId);
+                if (item != null)
                 {
-                    return name;
+                    var name = ShouldDisplayNameWithMaterial(item) ? item.NameWithMaterial : item.Name;
+                    item.Destroy();
+                    if (!string.IsNullOrWhiteSpace(name))
+                    {
+                        return name;
+                    }
+                }
+            }
+            catch
+            {
+                // ignore; fall back to weenie
+            }
+        }
+
+        // Fallback: use persisted snapshot if present (contains material props for salvage).
+        if (!string.IsNullOrWhiteSpace(listing.ItemSnapshotJson))
+        {
+            try
+            {
+                var item = MarketListingSnapshotSerializer.TryRecreateWorldObjectFromSnapshot(listing.ItemSnapshotJson);
+                if (item != null)
+                {
+                    var name = ShouldDisplayNameWithMaterial(item) ? item.NameWithMaterial : item.Name;
+                    item.Destroy();
+                    if (!string.IsNullOrWhiteSpace(name))
+                    {
+                        return name;
+                    }
                 }
             }
             catch
@@ -219,12 +276,17 @@ public static class MarketBroker
         SendTell(
             player,
             broker,
-            $"Market Broker tells you, \"We charge a {MarketServiceLocator.SaleFeeRate * 100:N0}% fee upon payout or cancellation, for our services.\"");
+            $"Market Broker tells you, \"We charge a {PropertyManager.GetDouble("market_listing_payout_fee").Item * 100:N0}% fee upon payout for our services.\"");
 
         SendTell(
             player,
             broker,
-            $"Market Broker tells you, \"Give me an item to start a listing.\"");
+            $"Market Broker tells you, \"We charge a {PropertyManager.GetDouble("market_listing_cancellation_fee").Item * 100:N0}% fee to cancel a listed item.");
+
+        SendTell(
+            player,
+            broker,
+            $"Market Broker tells you, \"Give me an item to start a listing. Then tell me the pyreal price you'd like to list it for.\"");
 
         SendTell(
             player,
@@ -475,8 +537,8 @@ public static class MarketBroker
                 $"List '{item.Name}' for {price:N0} pyreals?\n\n" +
                 $"Duration: {FormatListingDuration(duration)}\n" +
                 $"Expires: {expiresAtUtc:yyyy-MM-dd HH:mm} UTC\n" +
-                $"Fee: You will be charged a {MarketServiceLocator.SaleFeeRate * 100:N0}% fee ({MarketServiceLocator.CalculateSaleFee(price):N0} pyreals) upon payout or cancellation.\n\n" +
-                $"To cancel your listing: Tell the Market Broker \"listings\".";
+                $"Fee: You will be charged a {PropertyManager.GetDouble("market_listing_payout_fee").Item * 100:N0}% fee ({MarketServiceLocator.CalculateSaleFee(price):N0} pyreals) upon payout.\n\n" +
+                $"To cancel your listing: Tell the Market Broker \"listings\", and then tell them \"cancel <id>\" to cancel a listing. You will be charged {PropertyManager.GetDouble("market_listing_cancellation_fee").Item * 100:N0}% of the listing price to cancel.";
 
             player.ConfirmationManager.EnqueueSend(
                 new Confirmation_Custom(
@@ -499,6 +561,8 @@ public static class MarketBroker
             return;
         }
 
+        var notesBefore = GetTradeNotesInInventory(player);
+
         var payouts = MarketServiceLocator.PlayerMarketRepository
             .GetPendingPayouts(player.Character.AccountId)
             .OrderBy(p => p.CreatedAtUtc)
@@ -519,13 +583,20 @@ public static class MarketBroker
             return;
         }
 
-        var breakdown = GetTradeNoteBreakdown(total);
+        var tradeNoteTotal = (total / 100) * 100;
+        var pyrealRemainder = total % 100;
+
+        var breakdown = GetTradeNoteBreakdown(tradeNoteTotal);
 
         // Pre-validate capacity for the full payout (no partial claims).
         var itemsToReceive = new ItemsToReceive(player);
         foreach (var (wcid, amount) in breakdown)
         {
             itemsToReceive.Add(wcid, amount);
+        }
+        if (pyrealRemainder > 0)
+        {
+            itemsToReceive.Add((uint)WeenieClassName.W_COINSTACK_CLASS, pyrealRemainder);
         }
         if (itemsToReceive.PlayerExceedsLimits)
         {
@@ -568,6 +639,13 @@ public static class MarketBroker
             }
         }
 
+        if (pyrealRemainder > 0)
+        {
+            var pyreals = WorldObjectFactory.CreateNewWorldObject((uint)WeenieClassName.W_COINSTACK_CLASS);
+            pyreals.SetStackSize(pyrealRemainder);
+            created.Add(pyreals);
+        }
+
         foreach (var stack in created)
         {
             if (!player.TryCreateInInventoryWithNetworking(stack))
@@ -579,6 +657,24 @@ public static class MarketBroker
                 SendTell(player, broker, "You do not have enough pack space to claim your payouts.");
                 return;
             }
+        }
+
+        var notesAfter = GetTradeNotesInInventory(player);
+
+        try
+        {
+            MarketPayoutLog.Information(
+                "[MARKET PAYOUT] ClaimedPayouts={PayoutCount} Total={Total} Player='{PlayerName} ({PlayerAccountId})' \nNotesBefore={NotesBefore} \n NotesAfter={NotesAfter}",
+                payouts.Count,
+                total,
+                player.Name,
+                player.Character?.AccountId,
+                notesBefore,
+                notesAfter);
+        }
+        catch
+        {
+            // Do not allow logging failures to impact payout claims.
         }
 
         foreach (var payout in payouts)
@@ -622,8 +718,42 @@ public static class MarketBroker
             }
         }
 
-        // Anything not divisible by 100 can't be represented by trade notes.
-        // Keep behavior predictable by rounding down (payout records should be multiples of 100).
+        return result;
+    }
+
+    private static Dictionary<string, int> GetTradeNotesInInventory(Player player)
+    {
+        var result = new Dictionary<string, int>
+        {
+            ["M"] = 0,
+            ["D"] = 0,
+            ["C"] = 0,
+            ["L"] = 0,
+            ["X"] = 0,
+            ["V"] = 0,
+            ["I"] = 0,
+        };
+
+        foreach (var item in player.GetAllPossessions())
+        {
+            var key = item.WeenieClassId switch
+            {
+                (uint)WeenieClassName.W_TRADENOTE100000_CLASS => "M",
+                (uint)WeenieClassName.W_TRADENOTE50000_CLASS => "D",
+                (uint)WeenieClassName.W_TRADENOTE10000_CLASS => "C",
+                (uint)WeenieClassName.W_TRADENOTE5000_CLASS => "L",
+                (uint)WeenieClassName.W_TRADENOTE1000_CLASS => "X",
+                (uint)WeenieClassName.W_TRADENOTE500_CLASS => "V",
+                (uint)WeenieClassName.W_TRADENOTE100_CLASS => "I",
+                _ => null
+            };
+
+            if (key != null)
+            {
+                result[key] += item.StackSize ?? 1;
+            }
+        }
+
         return result;
     }
 
@@ -697,11 +827,32 @@ public static class MarketBroker
                 continue;
             }
 
+            var beforeCount = GetItemCountInInventory(player, item.WeenieClassId);
+
             if (!player.TryCreateInInventoryWithNetworking(item))
             {
                 item.Destroy();
                 SendTell(player, broker, "You do not have enough pack space to claim your expired listings.");
                 break;
+            }
+
+            var afterCount = GetItemCountInInventory(player, item.WeenieClassId);
+
+            try
+            {
+                MarketPayoutLog.Information(
+                    "[MARKET EXPIRED CLAIM] ListingId={ListingId} ItemWCID={ItemWeenieClassId} ItemName='{ItemName}' Player='{PlayerName} ({PlayerAccountId})' InventoryBefore={InventoryBefore} InventoryAfter={InventoryAfter}",
+                    listing.Id,
+                    listing.ItemWeenieClassId,
+                    item.Name,
+                    player.Name,
+                    player.Character?.AccountId,
+                    beforeCount,
+                    afterCount);
+            }
+            catch
+            {
+                // Do not allow logging failures to impact expired claims.
             }
 
             MarketServiceLocator.PlayerMarketRepository.MarkListingReturned(listing, DateTime.UtcNow);
@@ -715,7 +866,35 @@ public static class MarketBroker
             return;
         }
 
+        try
+        {
+            MarketPayoutLog.Information(
+                "[MARKET EXPIRED CLAIM] ReturnedListings={Returned} Requested={Requested} Player='{PlayerName} ({PlayerAccountId})'",
+                returned,
+                expired.Count,
+                player.Name,
+                player.Character?.AccountId);
+        }
+        catch
+        {
+            // Do not allow logging failures to impact expired claims.
+        }
+
         SendTell(player, broker, $"Claimed {returned} expired listing item(s)." );
+    }
+
+    private static int GetItemCountInInventory(Player player, uint weenieClassId)
+    {
+        var count = 0;
+        foreach (var item in player.GetAllPossessions())
+        {
+            if (item.WeenieClassId == weenieClassId)
+            {
+                count += item.StackSize ?? 1;
+            }
+        }
+
+        return count;
     }
 
     private static bool TryParseCancelInput(string input, out int listingId)
@@ -773,10 +952,14 @@ public static class MarketBroker
         }
 
         var itemName = TryGetListingItemName(listing) ?? $"WCID {listing.ItemWeenieClassId}";
+
+        var cancellationFeePercent = PropertyManager.GetDouble("market_listing_cancellation_fee").Item * 100;
+        var cancellationFee = MarketServiceLocator.CalculateCancellationFee(listing.ListedPrice);
         var confirmText =
             $"Cancel listing?\n\n" +
             $"Item: {itemName}\n" +
-            $"Price: {listing.ListedPrice:N0} pyreals\n\n" +
+            $"Price: {listing.ListedPrice:N0} pyreals\n" +
+            $"Fee: {cancellationFee:N0} pyreals ({cancellationFeePercent:N0}%)\n\n" +
             $"This will return the item to your inventory.";
 
         _stateByPlayerGuid.AddOrUpdate(
@@ -825,6 +1008,17 @@ public static class MarketBroker
         {
             SendTell(player, $"Listing #{listingId} not found (or not active). Use 'listings' to see your active listings.");
             return;
+        }
+        var cancelChargeAmount = MarketServiceLocator.CalculateCancellationFee(listing.ListedPrice);
+        if (cancelChargeAmount > 0)
+        {
+            // Charge cancellation fee before returning the escrowed item.
+            // Use the inventory consume routine as the source of truth for available currency.
+            if (!player.TryConsumeFromInventoryWithNetworking((uint)WeenieClassName.W_COINSTACK_CLASS, cancelChargeAmount))
+            {
+                SendTell(player, $"You need {cancelChargeAmount:N0} pyreals to pay the {PropertyManager.GetDouble("market_listing_cancellation_fee").Item * 100:N0}% cancellation fee. Cancellation aborted.");
+                return;
+            }
         }
 
         // Recreate the escrowed item and attempt to return it first.
@@ -887,27 +1081,9 @@ public static class MarketBroker
             return;
         }
 
-        var fee = MarketServiceLocator.CalculateCancellationFee(listing.ListedPrice);
-        if (fee > 0)
-        {
-            // Charge cancellation fee in pyreals.
-            if ((player.CoinValue ?? 0) < fee)
-            {
-                SendTell(player, $"You need {fee:N0} pyreals to pay the {MarketServiceLocator.CancellationFeeRate * 100:N0}% cancellation fee. Cancellation aborted.");
-                // Roll back item return because cancellation did not complete.
-                if (!player.TryRemoveFromInventoryWithNetworking(item.Guid, out _, Player.RemoveFromInventoryAction.GiveItem))
-                {
-                    // If we can't remove it, at least don't cancel the listing.
-                }
-                return;
-            }
-
-            player.TryConsumeFromInventoryWithNetworking((uint)WeenieClassName.W_COINSTACK_CLASS, fee);
-        }
-
         MarketServiceLocator.PlayerMarketRepository.CancelListing(listing);
         var display = requestedIndex.HasValue ? requestedIndex.Value : listingId;
-        SendTell(player, $"Cancelled listing #{display}." + (fee > 0 ? $" Cancellation fee: {fee:N0} pyreals." : ""));
+        SendTell(player, $"Cancelled listing #{display}." + (cancelChargeAmount > 0 ? $" Cancellation fee: {cancelChargeAmount:N0} pyreals." : ""));
     }
 
     private static void FinalizeConfirmedListing(Player player)
@@ -933,10 +1109,25 @@ public static class MarketBroker
                     .GetListingsForAccount(player.Character.AccountId, now)
                     .Count();
 
-                if (activeCount >= maxActive)
+                // Unclaimed expired listings should still count toward the limit.
+                // This prevents accounts from building up too many expired listings.
+                var unclaimedExpiredCount = MarketServiceLocator.PlayerMarketRepository
+                    .GetExpiredListingsForAccount(player.Character.AccountId, now)
+                    .Count(l => !l.IsSold);
+
+                var totalCount = activeCount + unclaimedExpiredCount;
+
+                if (totalCount >= maxActive)
                 {
                     ClearPendingItem(player);
-                    SendTell(player, $"You already have {activeCount} active listing(s). Maximum is {maxActive}. Cancel or wait for a listing to expire.");
+                    var maxMsg = $"You already have {activeCount} active listing(s)";
+                    if (unclaimedExpiredCount > 0)
+                    {
+                        maxMsg += $" and {unclaimedExpiredCount} expired listing(s) awaiting claim";
+                    }
+                    maxMsg += $". Maximum is {maxActive}. Cancel a listing or claim expired listings.";
+
+                    SendTell(player, maxMsg);
                     return;
                 }
             }

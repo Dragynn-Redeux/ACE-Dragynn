@@ -527,14 +527,20 @@ public class EmoteManager
 
             case EmoteType.DeleteSelf:
 
+                if (WorldObject is Creature)
+                {
+                    WorldObject.DeleteObject();
+                    break;
+                }
+
                 if (player != null)
                 {
                     var wo = player.FindObject(
                         WorldObject.Guid.Full,
                         Player.SearchLocations.Everywhere,
                         out _,
-                        out var rootOwner,
-                        out var wasEquipped
+                        out _,
+                        out _
                     );
 
                     if (wo != null)
@@ -543,10 +549,8 @@ public class EmoteManager
 
                         if (woStackSize > 1)
                         {
-                            // Consume exactly one from the stack
                             if (!player.TryConsumeFromInventoryWithNetworking(wo, 1))
                             {
-                                // Optional: log, but do NOT delete directly
                                 WorldObject.EmoteManager?._log.Warning(
                                     "[EMOTE] DeleteSelf: failed to consume 1x from stack 0x{Guid:X8}:{Name} for player {Player}",
                                     wo.Guid.Full,
@@ -557,7 +561,6 @@ public class EmoteManager
                         }
                         else
                         {
-                            // Single item (or non-stackable) – remove via inventory API
                             if (!player.TryConsumeFromInventoryWithNetworking(wo))
                             {
                                 WorldObject.EmoteManager?._log.Warning(
@@ -568,25 +571,21 @@ public class EmoteManager
                                 );
                             }
                         }
+
+                        break;
                     }
-                    else
-                    {
-                        // We expected a player but couldn't resolve the item in their possession.
-                        // Do NOT call WorldObject.DeleteObject() here; that risks killing the wrong instance
-                        // and leaving a ghost item in the player's inventory.
-                        WorldObject.EmoteManager?._log.Warning(
-                            "[EMOTE] DeleteSelf: WorldObject 0x{Guid:X8}:{Name} not found in possessions of {Player}; skipping inventory delete.",
-                            WorldObject.Guid.Full,
-                            WorldObject.Name,
-                            player.Name
-                        );
-                    }
-                }
-                else
-                {
-                    WorldObject.DeleteObject();
+
+                    WorldObject.EmoteManager?._log.Warning(
+                        "[EMOTE] DeleteSelf: WorldObject 0x{Guid:X8}:{Name} not found in possessions of {Player}; skipping inventory delete.",
+                        WorldObject.Guid.Full,
+                        WorldObject.Name,
+                        player.Name
+                    );
+
+                    break;
                 }
 
+                WorldObject.DeleteObject();
                 break;
 
             case EmoteType.DirectBroadcast:
@@ -1398,14 +1397,22 @@ public class EmoteManager
 
             case EmoteType.LocalSignal:
 
-                if (WorldObject != null)
+                if (WorldObject != null && WorldObject.CurrentLandblock != null)
                 {
-                    if (WorldObject.CurrentLandblock != null)
+                    var crossLb = WorldObject.GetProperty(PropertyBool.SignalCrossLB) ?? false;
+
+                     if (crossLb)
+                    {
+                        WorldObject.CurrentLandblock.EmitSignalWithAdjacents(WorldObject, emote.Message);
+                    }
+                    else
                     {
                         WorldObject.CurrentLandblock.EmitSignal(WorldObject, emote.Message);
                     }
                 }
+
                 break;
+
 
             case EmoteType.LockFellow:
 

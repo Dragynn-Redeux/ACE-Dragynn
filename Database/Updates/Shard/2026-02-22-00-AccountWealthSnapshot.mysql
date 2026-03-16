@@ -1,0 +1,15 @@
+-- NOTE: Execute this script against the *Shard* database on MariaDB/MySQL.
+
+CREATE TABLE IF NOT EXISTS `account_wealth_snapshot` (
+  `id` INT NOT NULL AUTO_INCREMENT,
+  `account_id` INT UNSIGNED NOT NULL,
+  `character_id` INT UNSIGNED NULL,
+  `pyreal_wealth` BIGINT NOT NULL,
+  `trophy_wealth` BIGINT NOT NULL,
+  `total_wealth` BIGINT NOT NULL,
+  `updated_at_utc` DATETIME(6) NOT NULL,
+  `row_version` BIGINT UNSIGNED NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uq_account_wealth_snapshot_account_id` (`account_id`),
+  KEY `idx_account_wealth_snapshot_updated_at` (`updated_at_utc`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

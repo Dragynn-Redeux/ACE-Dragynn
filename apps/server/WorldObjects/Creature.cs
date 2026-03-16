@@ -201,7 +201,7 @@ public partial class Creature : Container
 
             // Archetype System
             var useArchetypeSystem = UseArchetypeSystem ?? false;
-            if (useArchetypeSystem)
+            if (useArchetypeSystem && WeenieClassId != 1020001)
             {
                 var statWeight = 0.0f;
                 var level = (float)(Level ?? 1);
@@ -242,6 +242,7 @@ public partial class Creature : Container
                 var intelligence = ArchetypeIntelligence ?? 1.0;
                 var lethality = ArchetypeLethality ?? 1.0;
 
+                
                 SetSkills(tier, statWeight, toughness, physicality, dexterity, magic, intelligence, 1.0);
 
                 SetVitals(tier, statWeight, toughness, physicality, dexterity, magic);

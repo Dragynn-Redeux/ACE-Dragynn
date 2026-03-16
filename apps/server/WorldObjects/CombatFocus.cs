@@ -996,46 +996,24 @@ public class CombatFocus : WorldObject
 
     public void UpdateDescriptionText()
     {
-        var attributeSpellsText = "";
-        var skillSpellsText = "";
+        // De-dupe while preserving order; interactions can sometimes add duplicates.
+        var uniqueSpells = CurrentSpells.Distinct().ToList();
 
-        var firstAttribute = true;
-        var firstSkill = true;
-        foreach (var spellId in CurrentSpells)
-        {
-            var spellName = GetSpellName(spellId);
+        var attributeSpellsText = string.Join(", ",
+            uniqueSpells
+                .Where(IsAttribute)
+                .Select(GetSpellName)
+                .Where(n => !string.IsNullOrWhiteSpace(n)));
 
-            if (IsAttribute(spellId))
-            {
-                if (firstAttribute)
-                {
-                    firstAttribute = false;
-                }
-                else
-                {
-                    spellName = ", " + spellName;
-                }
-
-                attributeSpellsText += spellName;
-            }
-            else if (spellId is not (SpellId.NewcomersFortitude or SpellId.NewcomersPersistence))
-            {
-                if (firstSkill)
-                {
-                    firstSkill = false;
-                }
-                else
-                {
-                    spellName = ", " + spellName;
-                }
-
-                skillSpellsText += spellName;
-            }
-        }
+        var skillSpellsText = string.Join(", ",
+            uniqueSpells
+                .Where(s => !IsAttribute(s) && s is not (SpellId.NewcomersFortitude or SpellId.NewcomersPersistence or SpellId.NewcomersClarity))
+                .Select(GetSpellName)
+                .Where(n => !string.IsNullOrWhiteSpace(n)));
 
         var description = "Use this focus to gain a boost towards the following attributes and skills:\n\n";
-        description += "Attributes: " + attributeSpellsText + ".\n\n";
-        description += "Skills: " + skillSpellsText + ".\n\n";
+        description += "Attributes: " + (!string.IsNullOrWhiteSpace(attributeSpellsText) ? attributeSpellsText : "None") + ".\n\n";
+        description += "Skills: " + (!string.IsNullOrWhiteSpace(skillSpellsText) ? skillSpellsText : "None") + ".\n\n";
 
         var alteredDescription = "";
         if (CombatFocusAttributeSpellAdded != null)
@@ -1191,6 +1169,16 @@ public class CombatFocus : WorldObject
                 break;
             case SpellId.JumpingMasterySelf1:
                 name = "Jump";
+                break;
+
+            case SpellId.NewcomersFortitude:
+                name = "Fortitude";
+                break;
+            case SpellId.NewcomersPersistence:
+                name = "Persistence";
+                break;
+            case SpellId.NewcomersClarity:
+                name = "Clarity";
                 break;
         }
 

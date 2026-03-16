@@ -1,4 +1,4 @@
-﻿using System.Collections.Generic;
+using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
 using ACE.Server.WorldObjects;
@@ -122,4 +122,34 @@ public class Town
         {"Timaru", 6 },
         {"Wai Jhou", 6 },
     };
+
+    private static uint MapCoordsToLandblockId(Vector2 mapCoords)
+    {
+        var globalX = (mapCoords.X + 102) * 240;
+        var globalY = (mapCoords.Y + 102) * 240;
+        var blockX = (uint)(globalX / 192);
+        var blockY = (uint)(globalY / 192);
+        return (blockX << 24) | (blockY << 16) | 0xFFFF;
+    }
+
+    /// <summary>
+    /// Landblock IDs derived from each town's center coordinates.
+    /// Additional IDs can be added at runtime via Town.TownLandblockIds.Add(id).
+    /// </summary>
+    public static readonly HashSet<uint> TownLandblockIds = BuildTownLandblockIds();
+
+    private static HashSet<uint> BuildTownLandblockIds()
+    {
+        var ids = new HashSet<uint>();
+        foreach (var mapCoords in TownPositions.Values)
+        {
+            ids.Add(MapCoordsToLandblockId(mapCoords));
+        }
+        return ids;
+    }
+
+    public static bool IsTownLandblock(uint landblockId)
+    {
+        return TownLandblockIds.Contains(landblockId);
+    }
 }

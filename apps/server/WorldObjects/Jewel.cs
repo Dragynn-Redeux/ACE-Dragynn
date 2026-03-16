@@ -397,7 +397,7 @@ partial class Jewel : WorldObject
                 jewelRelativeQuality = (float)modifiedQuality / baseValue;
             }
 
-            Player.TryAwardCraftingXp(player, skill, Skill.Jewelcrafting, (int)difficulty);
+            Player.TryAwardCraftingXp(player, skill, Skill.Jewelcrafting, (int)difficulty, bonusMod: 3.0f, fail: true);
         }
         else
         {
