@@ -91,12 +91,6 @@ public static class DestabilizedLootForge
             return false;
         }
 
-        DebugLog(
-            player,
-            item,
-            $"queue accepted: confirmation enqueued ingredientCount={player.GetNumInventoryItemsOfWCID(RequiredIngredientWcid)}"
-        );
-
         player.ConfirmationManager.EnqueueSend(
             new DestabilizeConfirmation(
                 player.Guid,
@@ -104,13 +98,10 @@ public static class DestabilizedLootForge
                 {
                     if (!response)
                     {
-                        DebugLog(player, item, "confirmation declined or timed out");
                         player.SendTransientError("Destabilize cancelled.");
                         onResolved?.Invoke();
                         return;
                     }
-
-                    DebugLog(player, item, "confirmation accepted");
 
                     ExecuteFinalization(player, item.Guid);
                     onResolved?.Invoke();
@@ -155,12 +146,6 @@ public static class DestabilizedLootForge
             return false;
         }
 
-        DebugLog(
-            player,
-            item,
-            $"immediate finalize accepted: executing without additional confirmation ingredientCount={player.GetNumInventoryItemsOfWCID(RequiredIngredientWcid)}"
-        );
-
         ExecuteFinalization(player, item.Guid);
         onResolved?.Invoke();
         return true;
@@ -169,11 +154,6 @@ public static class DestabilizedLootForge
     private static void ExecuteFinalization(Player player, ObjectGuid itemGuid)
     {
         var item = player.FindObject(itemGuid.Full, Player.SearchLocations.MyInventory);
-        DebugLog(
-            player,
-            item,
-            $"execute start: itemLookupGuid={itemGuid.Full} ingredientCount={player.GetNumInventoryItemsOfWCID(RequiredIngredientWcid)}"
-        );
 
         if (item == null)
         {
@@ -212,11 +192,6 @@ public static class DestabilizedLootForge
         }
 
         var ingredientConsumed = true;
-        DebugLog(
-            player,
-            item,
-            $"ingredient consumed: {RequiredIngredientName} remainingCount={player.GetNumInventoryItemsOfWCID(RequiredIngredientWcid)}"
-        );
 
         var rollResult = DestabilizedLootEffects.ApplyDestabilize(item);
         if (!rollResult.Success)
@@ -231,19 +206,8 @@ public static class DestabilizedLootForge
             return;
         }
 
-        for (var packageIndex = 0; packageIndex < rollResult.PackageDetails.Count; packageIndex++)
-        {
-            DebugLog(
-                player,
-                item,
-                $"change {packageIndex + 1}/{rollResult.AppliedPackageCount}: {rollResult.PackageDetails[packageIndex]}"
-            );
-        }
-
+        var previousStage = ForgeStageDisplay.GetStage(item);
         var previousForgePassCount = item.GetProperty(ForgePassCountProperty) ?? 1;
-        var previousBonded = item.Bonded;
-        var previousAllowedWielder = item.AllowedWielder;
-        var previousNumTimesTinkered = item.NumTimesTinkered;
         item.SetProperty(TerminalDestabilizedLockProperty, true);
         item.SetProperty(ForgePassCountProperty, previousForgePassCount + 1);
         ForgeStageDisplay.ApplyStageOverlay(item);
@@ -251,11 +215,7 @@ public static class DestabilizedLootForge
         item.AllowedWielder = player.Guid.Full;
         item.CraftsmanName = player.Name;
 
-        DebugLog(
-            player,
-            item,
-            $"commit complete: terminalLock=true forgePassCount={previousForgePassCount}->{item.GetProperty(ForgePassCountProperty)} bonded={previousBonded}->{item.Bonded} allowedWielder={previousAllowedWielder}->{item.AllowedWielder} tinkers={previousNumTimesTinkered}->{item.NumTimesTinkered} changes={rollResult.AppliedPackageCount} exceptionalExtras={rollResult.ExceptionalExtraPackageCount}"
-        );
+        DebugLog(player, item, BuildAdminDestabilizationSuccessLog(player, item, previousStage, ForgeStageDisplay.GetStage(item), rollResult));
 
         player.EnqueueBroadcast(new GameMessageUpdateObject(item));
 
@@ -347,6 +307,57 @@ public static class DestabilizedLootForge
         }
 
         _log.Information("[DEBUG][Destabilize] {Context} {Message}", GetDebugContext(player, item), message);
+    }
+
+    private static string BuildAdminDestabilizationSuccessLog(
+        Player player,
+        WorldObject item,
+        ForgeStage beforeStage,
+        ForgeStage afterStage,
+        DestabilizedRollResult rollResult)
+    {
+        var itemGuid = $"0x{item.Guid.Full:X8}";
+        var changeSummary = BuildAdminPackageSummary(rollResult.PackageDetails, rollResult.AppliedPackageCount);
+        var exceptionalSegment = rollResult.ExceptionalExtraPackageCount > 0
+            ? $" exceptionalExtras={rollResult.ExceptionalExtraPackageCount}"
+            : string.Empty;
+
+        return $"[ForgeAdmin] destabilize success, {player.Name} lvl={player.Level ?? 1}. item={item.Name} ({itemGuid}). {beforeStage}->{afterStage} ingredient={RequiredIngredientName} x{RequiredIngredientAmount} changes={changeSummary}{exceptionalSegment}";
+    }
+
+    private static string BuildAdminPackageSummary(System.Collections.Generic.IReadOnlyList<string> packageDetails, int appliedPackageCount)
+    {
+        var meaningfulDetails = new System.Collections.Generic.List<string>();
+
+        foreach (var packageDetail in packageDetails)
+        {
+            if (!IsMeaningfulAdminPackageDetail(packageDetail))
+            {
+                continue;
+            }
+
+            meaningfulDetails.Add(packageDetail.TrimEnd('.'));
+        }
+
+        if (meaningfulDetails.Count == 0)
+        {
+            return $"{appliedPackageCount} package(s)";
+        }
+
+        return string.Join("; ", meaningfulDetails);
+    }
+
+    private static bool IsMeaningfulAdminPackageDetail(string packageDetail)
+    {
+        if (string.IsNullOrWhiteSpace(packageDetail))
+        {
+            return false;
+        }
+
+        return !packageDetail.Contains("(+0.00)", StringComparison.Ordinal)
+            && !packageDetail.Contains("(-0.00)", StringComparison.Ordinal)
+            && !packageDetail.Contains("(+0.00%)", StringComparison.Ordinal)
+            && !packageDetail.Contains("(-0.00%)", StringComparison.Ordinal);
     }
 
     private static string GetDebugContext(Player player, WorldObject item)

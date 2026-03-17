@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using ACE.Entity;
 using ACE.Entity.Enum;
 using ACE.Entity.Enum.Properties;
@@ -7,6 +8,7 @@ using ACE.Entity.Models;
 using ACE.Server.Entity;
 using ACE.Server.Entity.Actions;
 using ACE.Server.Factories;
+using ACE.Server.Factories.Tables;
 using ACE.Server.Network.GameMessages.Messages;
 using ACE.Server.Managers;
 using static ACE.Server.Factories.SigilTrinketConfig;
@@ -180,6 +182,8 @@ public class StabilizationDevice : WorldObject
                 // Preserve Lifespan in case upgrade fails; only clear it on success
                 var originalLifespan = target.Lifespan;
                 var beforeSnapshot = debugStabilization ? CaptureSnapshot(target) : default;
+                var beforeStage = debugStabilization ? ForgeStageDisplay.GetStage(target) : ForgeStage.None;
+                var tierAnalysis = debugStabilization ? AnalyzeStabilizationTarget(player, target) : default;
 
                 // Scale item to player tier (bypasses UpgradeKit stack count validation)
                 var upgradeSucceeded = target is SigilTrinket sigilTrinket
@@ -227,10 +231,7 @@ public class StabilizationDevice : WorldObject
                 {
                     var afterSnapshot = CaptureSnapshot(target);
                     _log.Information(
-                        "[DEBUG][Stabilization] Stabilization successful target={Target} guid={Guid} delta={Delta}",
-                        target.Name,
-                        target.Guid,
-                        BuildDeltaSummary(beforeSnapshot, afterSnapshot)
+                        BuildAdminStabilizationSuccessLog(player, target, beforeStage, ForgeStageDisplay.GetStage(target), tierAnalysis, beforeSnapshot, afterSnapshot)
                     );
                 }
                 
@@ -601,11 +602,47 @@ public class StabilizationDevice : WorldObject
         return leftSet.SetEquals(rightSet);
     }
 
+    private static UpgradeKit.StabilizationTierAnalysis AnalyzeStabilizationTarget(Player player, WorldObject target)
+    {
+        if (target is SigilTrinket sigilTrinket)
+        {
+            var playerLevel = player?.Level ?? 1;
+            var targetTier = Math.Clamp((player?.GetPlayerTier(playerLevel) ?? 1) - 1, 0, 7);
+            var currentRequirement = sigilTrinket.WieldDifficulty2 ?? sigilTrinket.WieldDifficulty ?? 1;
+            var currentTier = Math.Clamp(LootGenerationFactory.GetTierFromRequiredLevel(currentRequirement) - 1, 0, 7);
+            return new UpgradeKit.StabilizationTierAnalysis(currentTier, targetTier, "Level->PlayerTier", playerLevel);
+        }
+
+        return UpgradeKit.AnalyzeStabilizationTarget(player, target);
+    }
+
+    private static string BuildAdminStabilizationSuccessLog(
+        Player player,
+        WorldObject target,
+        ForgeStage beforeStage,
+        ForgeStage afterStage,
+        UpgradeKit.StabilizationTierAnalysis tierAnalysis,
+        StabilizationSnapshot before,
+        StabilizationSnapshot after)
+    {
+        var changeSummary = BuildAdminChangeSummary(before, after);
+        var spellUpgrades = BuildSpellUpgradeSummary(before, after);
+        var itemGuid = $"0x{target.Guid.Full:X8}";
+        var spellUpgradeSegment = spellUpgrades.Count > 0
+            ? $" spellUpgrades={string.Join("; ", spellUpgrades)}"
+            : string.Empty;
+
+        return $"[ForgeAdmin] stabilize success, {player.Name} lvl={player.Level ?? 1}. item={target.Name} ({itemGuid}). {beforeStage}->{afterStage} tier={tierAnalysis.FromTier}->{tierAnalysis.ToTier} driver={tierAnalysis.DriverName} ({tierAnalysis.DriverValue}) changes={changeSummary}{spellUpgradeSegment}";
+    }
+
     private readonly record struct StabilizationSnapshot(
         Dictionary<PropertyInt, int?> Ints,
         Dictionary<PropertyFloat, double?> Floats,
-        int SpellCount
+        int SpellCount,
+        List<SpellSnapshotEntry> Spells
     );
+
+    private readonly record struct SpellSnapshotEntry(string Source, int SpellId);
 
     private static StabilizationSnapshot CaptureSnapshot(WorldObject target)
     {
@@ -623,7 +660,26 @@ public class StabilizationDevice : WorldObject
 
         var spellCount = target.Biota.PropertiesSpellBook?.Count ?? 0;
 
-        return new StabilizationSnapshot(ints, floats, spellCount);
+        var spells = new List<SpellSnapshotEntry>();
+        if (target.Biota.PropertiesSpellBook != null)
+        {
+            foreach (var spellId in target.Biota.PropertiesSpellBook.Keys)
+            {
+                spells.Add(new SpellSnapshotEntry("Spellbook", spellId));
+            }
+        }
+
+        if (target.SpellDID is > 0)
+        {
+            spells.Add(new SpellSnapshotEntry("SpellDID", (int)target.SpellDID.Value));
+        }
+
+        if (target.ProcSpell is > 0)
+        {
+            spells.Add(new SpellSnapshotEntry("ProcSpell", (int)target.ProcSpell.Value));
+        }
+
+        return new StabilizationSnapshot(ints, floats, spellCount, spells);
     }
 
     private static string BuildDeltaSummary(StabilizationSnapshot before, StabilizationSnapshot after)
@@ -658,6 +714,177 @@ public class StabilizationDevice : WorldObject
         }
 
         return changes.Count > 0 ? string.Join(", ", changes) : "no tracked changes";
+    }
+
+    private static string BuildAdminChangeSummary(StabilizationSnapshot before, StabilizationSnapshot after)
+    {
+        var changes = new List<string>();
+
+        foreach (var property in DebugIntProperties)
+        {
+            if (!ShouldIncludeAdminIntProperty(property))
+            {
+                continue;
+            }
+
+            var beforeValue = before.Ints[property];
+            var afterValue = after.Ints[property];
+
+            if (beforeValue != afterValue)
+            {
+                changes.Add($"{property}: {FormatAdminInt(beforeValue)}->{FormatAdminInt(afterValue)}");
+            }
+        }
+
+        foreach (var property in DebugFloatProperties)
+        {
+            var beforeValue = before.Floats[property];
+            var afterValue = after.Floats[property];
+
+            if (beforeValue != afterValue)
+            {
+                changes.Add($"{property}: {FormatAdminFloat(property, beforeValue)}->{FormatAdminFloat(property, afterValue)}");
+            }
+        }
+
+        return changes.Count > 0 ? string.Join(", ", changes) : "none";
+    }
+
+    private static bool ShouldIncludeAdminIntProperty(PropertyInt property)
+    {
+        return property switch
+        {
+            PropertyInt.WieldDifficulty or PropertyInt.ItemCurMana or PropertyInt.Bonded or PropertyInt.Lifespan => false,
+            _ => true,
+        };
+    }
+
+    private static string FormatAdminInt(int? value)
+    {
+        return value.HasValue
+            ? value.Value.ToString("0.00", CultureInfo.InvariantCulture)
+            : "null";
+    }
+
+    private static string FormatAdminFloat(PropertyFloat property, double? value)
+    {
+        if (!value.HasValue)
+        {
+            return "null";
+        }
+
+        return UsesAdminPercentDisplay(property, value.Value)
+            ? (value.Value * 100).ToString("0.00", CultureInfo.InvariantCulture) + "%"
+            : value.Value.ToString("0.00", CultureInfo.InvariantCulture);
+    }
+
+    private static bool UsesAdminPercentDisplay(PropertyFloat property, double value)
+    {
+        return property switch
+        {
+            PropertyFloat.ManaRate => false,
+            PropertyFloat.WeaponOffense or PropertyFloat.WeaponPhysicalDefense or PropertyFloat.WeaponMagicalDefense => true,
+            _ => value >= -1.0 && value <= 1.0,
+        };
+    }
+
+    private static List<string> BuildSpellUpgradeSummary(StabilizationSnapshot before, StabilizationSnapshot after)
+    {
+        var beforeMap = BuildSpellSnapshotMap(before.Spells);
+        var afterMap = BuildSpellSnapshotMap(after.Spells);
+        var upgrades = new List<string>();
+
+        foreach (var pair in beforeMap)
+        {
+            if (!afterMap.TryGetValue(pair.Key, out var afterSpellId) || afterSpellId == pair.Value)
+            {
+                continue;
+            }
+
+            upgrades.Add(FormatSpellUpgrade(pair.Value, afterSpellId));
+        }
+
+        upgrades.Sort(StringComparer.Ordinal);
+        return upgrades;
+    }
+
+    private static Dictionary<string, int> BuildSpellSnapshotMap(List<SpellSnapshotEntry> spells)
+    {
+        var results = new Dictionary<string, int>();
+
+        foreach (var spell in spells)
+        {
+            var rootSpellId = GetRootSpellId(spell.SpellId);
+            var key = $"{spell.Source}:{rootSpellId}";
+            results[key] = spell.SpellId;
+        }
+
+        return results;
+    }
+
+    private static int GetRootSpellId(int spellId)
+    {
+        var minimumLevelSpellId = SpellLevelProgression.GetLevel1SpellId((SpellId)spellId, true);
+        return minimumLevelSpellId == SpellId.Undef ? spellId : (int)minimumLevelSpellId;
+    }
+
+    private static string FormatSpellUpgrade(int beforeSpellId, int afterSpellId)
+    {
+        var progression = SpellLevelProgression.GetSpellLevels((SpellId)beforeSpellId);
+        if (progression == null || progression.Count == 0)
+        {
+            return $"{new Spell((uint)beforeSpellId).Name} -> {new Spell((uint)afterSpellId).Name}";
+        }
+
+        var beforeLevel = progression.IndexOf((SpellId)beforeSpellId) + 1;
+        var afterLevel = progression.IndexOf((SpellId)afterSpellId) + 1;
+        if (progression.Count < 5)
+        {
+            var cantripName = NormalizeSpellBaseName(new Spell((uint)beforeSpellId).Name);
+            return $"{cantripName} {GetCantripRank(beforeLevel)} -> {GetCantripRank(afterLevel)}";
+        }
+
+        var baseName = NormalizeSpellBaseName(new Spell((uint)GetRootSpellId(beforeSpellId)).Name);
+        return $"{baseName} Lvl {beforeLevel} -> {afterLevel}";
+    }
+
+    private static string GetCantripRank(int level)
+    {
+        return level switch
+        {
+            1 => "Minor",
+            2 => "Major",
+            3 => "Epic",
+            4 => "Legendary",
+            _ => $"Lvl {level}",
+        };
+    }
+
+    private static string NormalizeSpellBaseName(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            return name;
+        }
+
+        var normalized = name
+            .Replace("Cantrip", string.Empty, StringComparison.OrdinalIgnoreCase)
+            .Replace("Minor", string.Empty, StringComparison.OrdinalIgnoreCase)
+            .Replace("Major", string.Empty, StringComparison.OrdinalIgnoreCase)
+            .Replace("Epic", string.Empty, StringComparison.OrdinalIgnoreCase)
+            .Replace("Legendary", string.Empty, StringComparison.OrdinalIgnoreCase)
+            .Trim();
+
+        foreach (var suffix in new[] { " VIII", " VII", " VI", " V", " IV", " III", " II", " I", " 8", " 7", " 6", " 5", " 4", " 3", " 2", " 1" })
+        {
+            if (normalized.EndsWith(suffix, StringComparison.Ordinal))
+            {
+                normalized = normalized[..^suffix.Length].TrimEnd();
+                break;
+            }
+        }
+
+        return string.Join(" ", normalized.Split(' ', StringSplitOptions.RemoveEmptyEntries));
     }
 
     private static string FormatInt(int? value)

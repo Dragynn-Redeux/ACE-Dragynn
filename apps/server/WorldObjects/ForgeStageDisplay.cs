@@ -1,3 +1,4 @@
+using System;
 using ACE.Entity.Enum.Properties;
 
 namespace ACE.Server.WorldObjects;
@@ -58,6 +59,13 @@ public static class ForgeStageDisplay
             ForgeStage.Destabilized => "Destabilized",
             _ => null,
         };
+    }
+
+    public static bool IsAllowedStage(WorldObject item, params ForgeStage[] allowedStages)
+    {
+        var stage = GetStage(item);
+
+        return stage == ForgeStage.None || Array.IndexOf(allowedStages, stage) >= 0;
     }
 
     public static void ApplyStageOverlay(WorldObject item)

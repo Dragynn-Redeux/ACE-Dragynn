@@ -59,6 +59,18 @@ public class Salvage : WorldObject
             return;
         }
 
+        if (!ForgeStageDisplay.IsAllowedStage(target, ForgeStage.Stable))
+        {
+            player.Session.Network.EnqueueSend(
+                new GameMessageSystemChat(
+                    "That item must be stable before it can be altered.",
+                    ChatMessageType.Craft
+                )
+            );
+            player.SendUseDoneEvent(WeenieError.YouDoNotPassCraftingRequirements);
+            return;
+        }
+
         var combineSalvage = false;
 
         if (target is { WeenieType: WeenieType.Salvage })

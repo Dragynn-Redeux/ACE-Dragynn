@@ -75,6 +75,45 @@ public class BezelTool : WorldObject
         UseObjectOnTarget(player, this, target);
     }
 
+    private static bool TryRequireSocketEligibleStage(Player player, WorldObject target, bool endUse)
+    {
+        if (target.Retained)
+        {
+            player.Session.Network.EnqueueSend(
+                new GameMessageSystemChat(
+                    $"The {target.NameWithMaterial} is retained and cannot be altered.",
+                    ChatMessageType.Craft
+                )
+            );
+
+            if (endUse)
+            {
+                player.SendUseDoneEvent();
+            }
+
+            return true;
+        }
+
+        if (ForgeStageDisplay.IsAllowedStage(target, ForgeStage.Stable, ForgeStage.Destabilized))
+        {
+            return false;
+        }
+
+        player.Session.Network.EnqueueSend(
+            new GameMessageSystemChat(
+                $"The {target.NameWithMaterial} must be stable before a socket can be added.",
+                ChatMessageType.Craft
+            )
+        );
+
+        if (endUse)
+        {
+            player.SendUseDoneEvent();
+        }
+
+        return true;
+    }
+
     public static void UseObjectOnTarget(Player player, WorldObject source, WorldObject target, bool confirmed = false)
     {
         var targetWorkmanship = target.ItemWorkmanship ?? 1;
@@ -114,15 +153,8 @@ public class BezelTool : WorldObject
             return;
         }
 
-        if (target.Retained)
+        if (TryRequireSocketEligibleStage(player, target, true))
         {
-            player.Session.Network.EnqueueSend(
-                new GameMessageSystemChat(
-                    $"The {target.NameWithMaterial} is retained and cannot be altered.",
-                    ChatMessageType.Craft
-                )
-            );
-            player.SendUseDoneEvent();
             return;
         }
 
@@ -318,6 +350,11 @@ public class BezelTool : WorldObject
                     player.SendTransientError(
                         "Either you or one of the items involved does not pass the requirements for this craft interaction."
                     );
+                    return;
+                }
+
+                if (TryRequireSocketEligibleStage(player, target, false))
+                {
                     return;
                 }
 

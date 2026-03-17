@@ -1431,12 +1431,8 @@ partial class WorldObject
             name = name.Replace(material, "");
         }
 
-        var result = $"{material} {name}";
-
-        return GetProperty(PropertyBool.IsUnstable) == true
-            ? $"Unstable {material} {name}"
-            : $"{material} {name}";
-            }
+        return $"{material} {name}";
+    }
 
     public string NameWithMaterialAndElement => GetNameWithMaterialAndElement();
 

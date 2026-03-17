@@ -23,6 +23,8 @@ public class UpgradeKit : Stackable
         Stabilization,
     }
 
+    public readonly record struct StabilizationTierAnalysis(int FromTier, int ToTier, string DriverName, int DriverValue);
+
     /// <summary>
     /// A new biota be created taking all of its values from weenie.
     /// </summary>
@@ -322,6 +324,39 @@ public class UpgradeKit : Stackable
     {
         return target.ItemType == ItemType.Jewelry
             || (target.WeenieType == WeenieType.Clothing && target.WieldRequirements == WieldRequirement.Level);
+    }
+
+    public static StabilizationTierAnalysis AnalyzeStabilizationTarget(Player player, WorldObject target)
+    {
+        if (player == null || target == null)
+        {
+            return default;
+        }
+
+        if (target.ItemType == ItemType.Jewelry)
+        {
+            var currentRequiredLevel = target.WieldDifficulty ?? 1;
+            var newRequiredLevel = Math.Max(currentRequiredLevel, GetRequiredLevelFromPlayerTier(player));
+            var currentRequiredTier = Math.Clamp(LootGenerationFactory.GetTierFromRequiredLevel(currentRequiredLevel) - 1, 0, 7);
+            var newRequiredTier = Math.Clamp(LootGenerationFactory.GetTierFromRequiredLevel(newRequiredLevel) - 1, 0, 7);
+
+            return new StabilizationTierAnalysis(currentRequiredTier, newRequiredTier, "Level", player.Level ?? 1);
+        }
+
+        var usesRequiredLevelPath = UsesRequiredLevelTiering(target);
+        var currentRequirement = target.WieldDifficulty ?? (usesRequiredLevelPath ? 1 : 50);
+        var newRequirement = Math.Max(currentRequirement, GetMaxRequirementForPlayer(player, target));
+        var currentTier = GetTierIndexFromRequirement(target, currentRequirement);
+        var newTier = GetTierIndexFromRequirement(target, newRequirement);
+
+        if (usesRequiredLevelPath || target.WieldRequirements != WieldRequirement.RawAttrib || target.WieldSkillType == null)
+        {
+            return new StabilizationTierAnalysis(currentTier, newTier, "Level", player.Level ?? 1);
+        }
+
+        var attribute = (PropertyAttribute)target.WieldSkillType;
+        var attributeValue = (int)player.Attributes[attribute].Base;
+        return new StabilizationTierAnalysis(currentTier, newTier, attribute.ToString(), attributeValue);
     }
 
     private static int GetMaxRequirementForPlayer(Player player, WorldObject target)
