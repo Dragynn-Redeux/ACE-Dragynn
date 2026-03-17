@@ -69,18 +69,8 @@ public class StabilizationDevice : WorldObject
 
     private static void SetEphemeralValues() { }
 
-    private bool DebugStabilization => PropertyManager.GetBool("debug_stabilization").Item;
-
     public override void HandleActionUseOnTarget(Player player, WorldObject target)
     {
-        if (DebugStabilization)
-        {
-            _log.Information(
-                "[DEBUG][Stabilization] HandleActionUseOnTarget source={Source}, target={Target}",
-                Name,
-                target?.Name);
-        }
-
         UseObjectOnTarget(player, this, target);
     }
 
@@ -88,32 +78,14 @@ public class StabilizationDevice : WorldObject
     {
         var debugStabilization = PropertyManager.GetBool("debug_stabilization").Item;
 
-        if (debugStabilization)
-        {
-            _log.Information(
-                "[DEBUG][Stabilization] UseObjectOnTarget confirmed={Confirmed}, source={Source}, target={Target}, IsUnstable={IsUnstable}",
-                confirmed,
-                source.Name,
-                target.Name,
-                target.GetProperty(PropertyBool.IsUnstable));
-        }
-
         if (player.IsBusy)
         {
-            if (debugStabilization)
-            {
-                _log.Information("[DEBUG][Stabilization] Player is busy");
-            }
             player.SendUseDoneEvent(WeenieError.YoureTooBusy);
             return;
         }
 
         if (target.GetProperty(PropertyBool.IsUnstable) != true)
         {
-            if (debugStabilization)
-            {
-                _log.Information("[DEBUG][Stabilization] Target is not unstable");
-            }
             player.Session.Network.EnqueueSend(
                 new GameMessageSystemChat(
                     "This item carries no unstable resonance for the device to stabilize.",
@@ -126,10 +98,6 @@ public class StabilizationDevice : WorldObject
 
         if (target.Lifespan == null)
         {
-            if (debugStabilization)
-            {
-                _log.Information("[DEBUG][Stabilization] Target is already stabilized");
-            }
             player.Session.Network.EnqueueSend(
                 new GameMessageSystemChat(
                     "This item is already stabilized and cannot be stabilized again.",

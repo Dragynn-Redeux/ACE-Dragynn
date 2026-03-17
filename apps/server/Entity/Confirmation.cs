@@ -3,7 +3,6 @@ using ACE.Entity;
 using ACE.Entity.Enum;
 using ACE.Server.Managers;
 using ACE.Server.WorldObjects;
-using Serilog;
 
 namespace ACE.Server.Entity;
 
@@ -132,10 +131,6 @@ public class Confirmation_Augmentation : Confirmation
 
 public class Confirmation_CraftInteration : Confirmation
 {
-    private static readonly ILogger _log = Log.ForContext(typeof(Confirmation_CraftInteration));
-
-    private bool DebugStabilization => PropertyManager.GetBool("debug_stabilization").Item;
-
     public ObjectGuid SourceGuid;
     public ObjectGuid TargetGuid;
 
@@ -180,16 +175,6 @@ public class Confirmation_CraftInteration : Confirmation
         if (response)
         {
             repeatConfirmation = false;
-
-            if (DebugStabilization)
-            {
-                _log.Information(
-                    "[DEBUG][Stabilization] source={Source}, WeenieType={WeenieTypeValue} ({WeenieTypeName}), target={Target}",
-                    source.Name,
-                    (int)source.WeenieType,
-                    source.WeenieType,
-                    target.Name);
-            }
         }
 
         switch (source.WeenieType)
@@ -219,10 +204,6 @@ public class Confirmation_CraftInteration : Confirmation
                 UpgradeKit.UseObjectOnTarget(player, source, target, true);
                 break;
             case WeenieType.StabilizationDevice:
-                if (DebugStabilization)
-                {
-                    _log.Information("[DEBUG][Stabilization] dispatch -> StabilizationDevice");
-                }
                 StabilizationDevice.UseObjectOnTarget(player, source, target, true);
                 break;
             case WeenieType.BezelTool:
@@ -238,13 +219,6 @@ public class Confirmation_CraftInteration : Confirmation
                 TrophyEssence.HandleTrophyEssenceCrafting(player, source, target, !repeatConfirmation);
                 break;
             default:
-                if (DebugStabilization)
-                {
-                    _log.Information(
-                        "[DEBUG][Stabilization] dispatch -> RecipeManager (WeenieType={WeenieTypeValue} {WeenieTypeName})",
-                        (int)source.WeenieType,
-                        source.WeenieType);
-                }
                 RecipeManager.UseObjectOnTarget(player, source, target, true);
                 break;
         }
