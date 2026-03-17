@@ -51,6 +51,20 @@ public static class DestabilizedLootEffects
         PropertyInt.ArmorLevel,
     };
 
+    private static readonly PropertyInt[] JewelryIntProperties =
+    {
+        PropertyInt.WardLevel,
+        PropertyInt.GearHealingBoost,
+        PropertyInt.GearMaxHealth,
+        PropertyInt.GearMaxStamina,
+        PropertyInt.GearMaxMana,
+        PropertyInt.GearCritDamage,
+        PropertyInt.GearCritResist,
+        PropertyInt.GearCritDamageResist,
+        PropertyInt.GearDamage,
+        PropertyInt.GearDamageResist,
+    };
+
     private static readonly PropertyFloat[] CasterFloatProperties =
     {
         PropertyFloat.WeaponPhysicalDefense,
@@ -106,13 +120,41 @@ public static class DestabilizedLootEffects
         return result;
     }
 
+    public static bool CanDestabilize(WorldObject item, out string reason)
+    {
+        reason = null;
+
+        if (item == null)
+        {
+            reason = "That item is unavailable.";
+            return false;
+        }
+
+        var family = GetEligibleFamily(item);
+        if (family == DestabilizeItemFamily.None)
+        {
+            reason = "That item family is not supported by destabilize.";
+            return false;
+        }
+
+        if (GetEligibleFloatCandidates(item, family).Count == 0 && GetEligibleIntCandidates(item, family).Count == 0)
+        {
+            reason = "The forge found no destabilize-eligible affixes on that item.";
+            return false;
+        }
+
+        return true;
+    }
+
     private static bool TryApplyFloatRoll(WorldObject item, PropertyFloat property, out string detail)
     {
         detail = null;
 
         var current = item.GetProperty(property) ?? 0.0;
         var deltaPercent = RollDeltaPercent();
-        var next = current * (1 + deltaPercent);
+        var next = UsesBaselineWeaponMultiplierMath(property)
+            ? 1.0 + ((current - 1.0) * (1 + deltaPercent))
+            : current * (1 + deltaPercent);
         next = Math.Max(GetMinimumFloatValue(property), next);
 
         if (AreNearlyEqual(current, next))
@@ -172,6 +214,11 @@ public static class DestabilizedLootEffects
             return DestabilizeItemFamily.ArmorOrClothing;
         }
 
+        if (itemType == ItemType.Jewelry)
+        {
+            return DestabilizeItemFamily.Jewelry;
+        }
+
         return DestabilizeItemFamily.None;
     }
 
@@ -226,6 +273,7 @@ public static class DestabilizedLootEffects
         {
             DestabilizeItemFamily.MeleeWeapon => MeleeIntProperties,
             DestabilizeItemFamily.ArmorOrClothing => ArmorOrClothingIntProperties,
+            DestabilizeItemFamily.Jewelry => JewelryIntProperties,
             _ => Array.Empty<PropertyInt>(),
         };
     }
@@ -254,7 +302,18 @@ public static class DestabilizedLootEffects
     {
         return property switch
         {
-            PropertyInt.Damage or PropertyInt.ArmorLevel => MinimumPositiveIntValue,
+            PropertyInt.Damage
+                or PropertyInt.ArmorLevel
+                or PropertyInt.WardLevel
+                or PropertyInt.GearHealingBoost
+                or PropertyInt.GearMaxHealth
+                or PropertyInt.GearMaxStamina
+                or PropertyInt.GearMaxMana
+                or PropertyInt.GearCritDamage
+                or PropertyInt.GearCritResist
+                or PropertyInt.GearCritDamageResist
+                or PropertyInt.GearDamage
+                or PropertyInt.GearDamageResist => MinimumPositiveIntValue,
             _ => 0,
         };
     }
@@ -319,6 +378,15 @@ public static class DestabilizedLootEffects
         };
     }
 
+    private static bool UsesBaselineWeaponMultiplierMath(PropertyFloat property)
+    {
+        return property switch
+        {
+            PropertyFloat.WeaponOffense or PropertyFloat.WeaponPhysicalDefense or PropertyFloat.WeaponMagicalDefense => true,
+            _ => false,
+        };
+    }
+
     private static string FormatPropertyName(Enum property)
     {
         return property switch
@@ -345,6 +413,16 @@ public static class DestabilizedLootEffects
             PropertyFloat.ArmorHealthRegenMod => "Health Regen Bonus",
             PropertyInt.Damage => "Damage",
             PropertyInt.ArmorLevel => "Armor Level",
+            PropertyInt.WardLevel => "Ward Level",
+            PropertyInt.GearHealingBoost => "Healing Boost Rating",
+            PropertyInt.GearMaxHealth => "Max Health Rating",
+            PropertyInt.GearMaxStamina => "Max Stamina Rating",
+            PropertyInt.GearMaxMana => "Max Mana Rating",
+            PropertyInt.GearCritDamage => "Critical Damage Rating",
+            PropertyInt.GearCritResist => "Critical Resist Rating",
+            PropertyInt.GearCritDamageResist => "Critical Damage Resist Rating",
+            PropertyInt.GearDamage => "Damage Rating",
+            PropertyInt.GearDamageResist => "Damage Resist Rating",
             _ => SplitPascalCase(property.ToString()),
         };
     }
@@ -379,6 +457,7 @@ public enum DestabilizeItemFamily
     MeleeWeapon,
     ArmorOrClothing,
     Caster,
+    Jewelry,
 }
 
 public sealed class DestabilizedRollResult

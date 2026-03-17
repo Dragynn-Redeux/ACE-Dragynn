@@ -246,14 +246,10 @@ public static class DestabilizedLootForge
         var previousNumTimesTinkered = item.NumTimesTinkered;
         item.SetProperty(TerminalDestabilizedLockProperty, true);
         item.SetProperty(ForgePassCountProperty, previousForgePassCount + 1);
+        ForgeStageDisplay.ApplyStageOverlay(item);
         item.Bonded = BondedStatus.Bonded;
         item.AllowedWielder = player.Guid.Full;
         item.CraftsmanName = player.Name;
-        // Reuse existing tinker gate behavior by forcing the item to its max tinker count.
-        if (item.Workmanship.HasValue)
-        {
-            item.NumTimesTinkered = Math.Max((int)Math.Ceiling(item.Workmanship.Value), item.NumTimesTinkered);
-        }
 
         DebugLog(
             player,

@@ -22,7 +22,6 @@ namespace ACE.Server.Network.Structure;
 public class AppraiseInfo
 {
     private const uint EnchantmentMask = 0x80000000;
-    private const PropertyBool TerminalDestabilizedLockProperty = (PropertyBool)10012;
 
     public IdentifyResponseFlags Flags;
 
@@ -925,6 +924,8 @@ public class AppraiseInfo
         // Spell proc rate ('Use' text)
         SetSpellProcRateUseText(wo);
 
+            SetForgeStageUseText(wo);
+
         // -------- WEAPON ATTACK/DEFENSE MODS --------
         _extraPropertiesText += "\n";
 
@@ -971,8 +972,6 @@ public class AppraiseInfo
         SetArmorModUseText(PropertyFloat.ArmorManaRegenMod, wo, "Bonus to Mana Regen: +(ONE)%", (float)(playerWielder?.GetArmorManaRegenMod() ?? 0.0));
 
         SetDamagePenaltyUseText();
-
-        SetDestabilizedUseText(wo);
 
         SetJewelcraftingUseText(wo);
 
@@ -1448,14 +1447,15 @@ public class AppraiseInfo
         _hasExtraPropertiesText = true;
     }
 
-    private void SetDestabilizedUseText(WorldObject wo)
+    private void SetForgeStageUseText(WorldObject wo)
     {
-        if (wo.GetProperty(TerminalDestabilizedLockProperty) != true)
+        var stageLabel = ForgeStageDisplay.GetStageLabel(wo);
+        if (string.IsNullOrEmpty(stageLabel))
         {
             return;
         }
 
-        _extraPropertiesText += "Destabilized\n";
+        _extraPropertiesText += $"{stageLabel}\n";
         _hasExtraPropertiesText = true;
     }
 

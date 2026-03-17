@@ -218,6 +218,7 @@ public class StabilizationDevice : WorldObject
                 target.SetProperty(PropertyInt.Bonded, 1);
                 target.AllowedWielder = player.Guid.Full;
                 target.CraftsmanName = player.Name;
+                ForgeStageDisplay.ApplyStageOverlay(target);
 
                 // Broadcast updated state (IsUnstable flag remains for forge)
                 player.EnqueueBroadcast(new GameMessageUpdateObject(target));

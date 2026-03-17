@@ -427,6 +427,11 @@ public static class ForgeStagingService
             return false;
         }
 
+        if (!DestabilizedLootEffects.CanDestabilize(item, out reason))
+        {
+            return false;
+        }
+
         return true;
     }
 
@@ -599,8 +604,8 @@ public static class ForgeStagingService
         }
 
         item.RemoveProperty(PropertyBool.IsUnstable);
-        item.RemoveProperty(PropertyDataId.IconOverlay);
         item.SetProperty(ForgePassCountProperty, forgePassCount + 1);
+        ForgeStageDisplay.ApplyStageOverlay(item);
 
         player.EnqueueBroadcast(new GameMessageUpdateObject(item));
         return true;
