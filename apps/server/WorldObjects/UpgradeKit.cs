@@ -266,6 +266,7 @@ public class UpgradeKit : Stackable
 
             // Wield Difficulty
             target.SetProperty(PropertyInt.WieldDifficulty, newRequirement);
+            target.Tier = newTier + 1;
 
             // Spells
             ScaleUpSpells(target, currentTier, newTier, upgradeContext);
@@ -309,6 +310,7 @@ public class UpgradeKit : Stackable
 
             // Level Requirement
             target.SetProperty(PropertyInt.WieldDifficulty, newRequiredLevel);
+            target.Tier = newTier + 1;
 
             // Spells
             ScaleUpSpells(target, currentTier, newTier, upgradeContext);

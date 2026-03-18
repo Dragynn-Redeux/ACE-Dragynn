@@ -23,6 +23,7 @@ public class StabilizationDevice : WorldObject
         PropertyInt.Damage,
         PropertyInt.ArmorLevel,
         PropertyInt.WardLevel,
+        PropertyInt.ItemDifficulty,
         PropertyInt.ItemMaxMana,
         PropertyInt.ItemCurMana,
         PropertyInt.GearDamage,
@@ -189,6 +190,7 @@ public class StabilizationDevice : WorldObject
                 target.RemoveProperty(PropertyInt.Lifespan);
                 target.SetProperty(PropertyInt.Bonded, 1);
                 target.AllowedWielder = player.Guid.Full;
+                DestabilizedLootForge.RecalculateArcaneLore(target);
                 target.CraftsmanName = player.Name;
                 ForgeStageDisplay.ApplyStageOverlay(target);
 
@@ -595,12 +597,16 @@ public class StabilizationDevice : WorldObject
     {
         var changeSummary = BuildAdminChangeSummary(before, after);
         var spellUpgrades = BuildSpellUpgradeSummary(before, after);
+        var arcaneSummary = BuildArcaneSummary(before, after);
         var itemGuid = $"0x{target.Guid.Full:X8}";
         var spellUpgradeSegment = spellUpgrades.Count > 0
             ? $" spellUpgrades={string.Join("; ", spellUpgrades)}"
             : string.Empty;
+        var arcaneSegment = arcaneSummary != null
+            ? $" arcane={arcaneSummary}"
+            : string.Empty;
 
-        return $"[ForgeAdmin] stabilize success, {player.Name} lvl={player.Level ?? 1}. item={target.Name} ({itemGuid}). {beforeStage}->{afterStage} tier={tierAnalysis.FromTier}->{tierAnalysis.ToTier} driver={tierAnalysis.DriverName} ({tierAnalysis.DriverValue}) changes={changeSummary}{spellUpgradeSegment}";
+        return $"[ForgeAdmin] stabilize success, {player.Name} lvl={player.Level ?? 1}. item={target.Name} ({itemGuid}). {beforeStage}->{afterStage} tier={tierAnalysis.FromTier}->{tierAnalysis.ToTier} driver={tierAnalysis.DriverName} ({tierAnalysis.DriverValue}) changes={changeSummary}{arcaneSegment}{spellUpgradeSegment}";
     }
 
     private readonly record struct StabilizationSnapshot(
@@ -722,9 +728,22 @@ public class StabilizationDevice : WorldObject
     {
         return property switch
         {
-            PropertyInt.WieldDifficulty or PropertyInt.ItemCurMana or PropertyInt.Bonded or PropertyInt.Lifespan => false,
+            PropertyInt.WieldDifficulty or PropertyInt.ItemDifficulty or PropertyInt.ItemCurMana or PropertyInt.Bonded or PropertyInt.Lifespan => false,
             _ => true,
         };
+    }
+
+    private static string BuildArcaneSummary(StabilizationSnapshot before, StabilizationSnapshot after)
+    {
+        var beforeValue = before.Ints[PropertyInt.ItemDifficulty];
+        var afterValue = after.Ints[PropertyInt.ItemDifficulty];
+
+        if (beforeValue == afterValue)
+        {
+            return $"unchanged ({FormatAdminInt(afterValue)})";
+        }
+
+        return $"{FormatAdminInt(beforeValue)}->{FormatAdminInt(afterValue)}";
     }
 
     private static string FormatAdminInt(int? value)

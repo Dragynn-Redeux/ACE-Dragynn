@@ -4,6 +4,7 @@ using ACE.Entity.Enum;
 using ACE.Entity.Enum.Properties;
 using ACE.Server.Entity;
 using ACE.Server.Factories;
+using ACE.Server.Factories.Tables;
 using ACE.Server.Managers;
 using ACE.Server.Network.GameMessages.Messages;
 using Serilog;
@@ -297,6 +298,97 @@ public static class DestabilizedLootForge
         player.Session.Network.EnqueueSend(new GameMessageSystemChat(LockedAlterationMessage, ChatMessageType.Craft));
         player.SendUseDoneEvent(WeenieError.YouDoNotPassCraftingRequirements);
         return true;
+    }
+
+    public static void RecalculateArcaneLore(WorldObject item)
+    {
+        if (item == null)
+        {
+            return;
+        }
+
+        item.ItemDifficulty = CalculateArcaneLore(item);
+    }
+
+    private static int CalculateArcaneLore(WorldObject item)
+    {
+        var numSpells = 0;
+        var increasedDifficulty = 0.0f;
+
+        if (item.Biota.PropertiesSpellBook != null)
+        {
+            const int Minor = 0;
+            const int Major = 1;
+            const int Epic = 2;
+            const int Legendary = 3;
+
+            foreach (SpellId spellId in item.Biota.PropertiesSpellBook.Keys)
+            {
+                numSpells++;
+
+                var cantripLevels = SpellLevelProgression.GetSpellLevels(spellId);
+                var cantripLevel = cantripLevels.IndexOf(spellId);
+
+                if (cantripLevel == Minor)
+                {
+                    increasedDifficulty += 5;
+                }
+                else if (cantripLevel == Major)
+                {
+                    increasedDifficulty += 10;
+                }
+                else if (cantripLevel == Epic)
+                {
+                    increasedDifficulty += 15;
+                }
+                else if (cantripLevel == Legendary)
+                {
+                    increasedDifficulty += 20;
+                }
+            }
+        }
+
+        var tier = Math.Max((item.Tier ?? 1) - 1, 0);
+
+        if (item.ProcSpell != null)
+        {
+            numSpells++;
+            increasedDifficulty += Math.Max(5 * tier, 5);
+        }
+
+        var armorSlots = item.ArmorSlots ?? 1;
+        var spellsPerSlot = (float)numSpells / armorSlots;
+
+        if (spellsPerSlot <= 1 && item.ProcSpell == null)
+        {
+            return 0;
+        }
+
+        var baseDifficulty = ActivationDifficultyPerTier(tier);
+        return baseDifficulty + (int)(increasedDifficulty / armorSlots);
+    }
+
+    private static int ActivationDifficultyPerTier(int tier)
+    {
+        switch (tier)
+        {
+            case 1:
+                return 75;
+            case 2:
+                return 175;
+            case 3:
+                return 225;
+            case 4:
+                return 275;
+            case 5:
+                return 325;
+            case 6:
+                return 375;
+            case 7:
+                return 425;
+            default:
+                return 50;
+        }
     }
 
     private static void DebugLog(Player player, WorldObject item, string message)
