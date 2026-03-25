@@ -5,12 +5,13 @@ using System.Text;
 using ACE.Common;
 using ACE.Entity.Enum;
 using ACE.Entity.Enum.Properties;
+using ACE.Server.Managers;
 
 namespace ACE.Server.WorldObjects;
 
 public static class DestabilizedLootEffects
 {
-    public const double BaseDestabilizePercent = 0.20;
+    public const double DefaultDestabilizeVariancePercent = 20.0;
     private const double MinimumAdditiveFloatValue = 0.001;
     private const double MinimumWeaponModifierValue = 1.0;
     private const int MinimumPositiveIntValue = 1;
@@ -188,7 +189,14 @@ public static class DestabilizedLootEffects
 
     private static double RollDeltaPercent()
     {
-        return ThreadSafeRandom.Next((float)-BaseDestabilizePercent, (float)BaseDestabilizePercent);
+        var variancePercent = Math.Clamp(
+            PropertyManager.GetDouble("destabilize_variance", DefaultDestabilizeVariancePercent).Item,
+            0.0,
+            100.0
+        );
+        var varianceDecimal = variancePercent / 100.0;
+
+        return ThreadSafeRandom.Next((float)-varianceDecimal, (float)varianceDecimal);
     }
 
     private static DestabilizeItemFamily GetEligibleFamily(WorldObject item)
