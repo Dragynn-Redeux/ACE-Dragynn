@@ -75,7 +75,7 @@ public static class ForgeStageDisplay
             return;
         }
 
-        var overlayIcon = GetOverlayIcon(GetStage(item));
+        var overlayIcon = GetStageOverlayIcon(GetStage(item));
         if (overlayIcon.HasValue)
         {
             item.SetProperty(PropertyDataId.IconOverlay, overlayIcon.Value);
@@ -86,7 +86,7 @@ public static class ForgeStageDisplay
         }
     }
 
-    private static uint? GetOverlayIcon(ForgeStage stage)
+    public static uint? GetStageOverlayIcon(ForgeStage stage)
     {
         return stage switch
         {

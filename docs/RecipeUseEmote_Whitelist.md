@@ -6,30 +6,30 @@ Only source item WeenieClassIds are evaluated.
 Recipe IDs are never used here.
 
 allowedWcids layout
-Line 1 — RIMS (Resonance Infused Mana Stone) devices
+Line 1 - RIMS (Resonance Infused Mana Stone) devices
 
 These are active tools that intentionally fire a Use emote when used in recipes.
 
 RIMS scanners / devices
 
-Lines 2–7 — Lore fragments
+Lines 2-7 - Lore fragments
 
 These are physical fragment items used in lore-combination recipes.
 Their Use emotes are permitted to fire on successful combines.
 
 Grouped by journal entry:
 
-Fragment E1 (A–D)
+Fragment E1 (A-D)
 
-Fragment E2 (A–D)
+Fragment E2 (A-D)
 
-Fragment E3 (A–D)
+Fragment E3 (A-D)
 
-Fragment E4 (A–D)
+Fragment E4 (A-D)
 
-Fragment E5 (A–D)
+Fragment E5 (A-D)
 
-Fragment E6 (A–D)
+Fragment E6 (A-D)
 
 Important notes
 

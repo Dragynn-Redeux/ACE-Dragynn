@@ -103,7 +103,7 @@ public static partial class LootGenerationFactory
         {
             wo.SlayerCreatureType = SlayerTypeChance.Roll(treasureDeath);
             wo.SlayerDamageBonus = 1.5f;
-            wo.IconOverlayId = 0x06005EC0;
+            wo.IconOverlayId = ForgeStageDisplay.GetStageOverlayIcon(ForgeStage.ResonanceStabilized);
             return true;
         }
         return false;
