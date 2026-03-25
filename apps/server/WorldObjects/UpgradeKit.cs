@@ -718,7 +718,6 @@ public class UpgradeKit : Stackable
 
         var currentRoll = currentBaseStat - currentBaseLevelFromTier;
         var rollPercentile = (float)currentRoll / currentRange;
-        rollPercentile = Math.Clamp(rollPercentile, 0.0f, 1.0f);
 
         var newTierRange =
             (jewelryBaseWardLevelPerTier[newTier + 1] * necklaceMultiplier)
@@ -747,7 +746,6 @@ public class UpgradeKit : Stackable
         var currentRoll = currentBaseStat - currentBaseLevelFromTier;
 
         var rollPercentile = (float)currentRoll / currentRange;
-        rollPercentile = Math.Clamp(rollPercentile, 0.0f, 1.0f);
 
         var newTierRange = jewelryBaseRatingPerTier[newTier];
         var amountAboveMinimum = newTierRange * rollPercentile;
