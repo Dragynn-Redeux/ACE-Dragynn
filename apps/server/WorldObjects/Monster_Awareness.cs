@@ -115,7 +115,6 @@ partial class Creature
             }
             else
             {
-                // FIX: write the incoming value, not the property again
                 SetProperty(PropertyInt.TargetingTactic, (int)value);
             }
         }
@@ -159,7 +158,6 @@ partial class Creature
 
     protected virtual void HandleFindTarget()
     {
-        // Only *non-combat* passive objectives never acquire targets (eg crates)
         if (GeneratesPassiveThreat && TargetingTactic == TargetingTactic.None)
         {
             return;
@@ -172,7 +170,6 @@ partial class Creature
 
         FindNextTarget(false);
     }
-
 
     private void SetNextTargetTime()
     {
@@ -201,6 +198,7 @@ partial class Creature
     }
     private readonly PassiveThreatController _passiveThreatController = new();
     private const int ThreatMinimum = 100;
+    private const float PlayerThreatTiebreakPct = 0.02f;
     private double ThreatGainedSinceLastTick = 1;
 
     public bool GeneratesPassiveThreat =>
@@ -220,9 +218,8 @@ partial class Creature
         NegativeThreat ??= new Dictionary<Creature, float>();
     }
 
-    // FIX: avoid C# collection expression [] (not supported in many ACE builds)
-    public List<Player> SkipThreatFromNextAttackTargets = new();
-    public List<Player> DoubleThreatFromNextAttackTargets = new();
+    public List<Player> SkipThreatFromNextAttackTargets = [];
+    public List<Player> DoubleThreatFromNextAttackTargets = [];
     public void IncreaseTargetThreatLevel(Creature targetCreature, int amount)
     {
         EnsureThreatCollections();
@@ -312,7 +309,6 @@ partial class Creature
                 ThreatLevel[key] = ThreatMinimum;
             }
 
-            // Keep passive-threat targets at or above their baseline
             if (key.GeneratesPassiveThreat && key.PassiveThreatThreshold >= 2)
             {
                 var passiveFloor = ThreatMinimum + key.PassiveThreatThreshold;
@@ -325,6 +321,7 @@ partial class Creature
 
         ThreatGainedSinceLastTick = 0;
     }
+
     private void PruneDeadThreatTargets()
     {
         EnsureThreatCollections();
@@ -346,7 +343,6 @@ partial class Creature
             }
         }
     }
-
 
     public virtual bool FindNextTarget(bool onTakeDamage, Creature untargetablePlayer = null)
     {
@@ -442,7 +438,6 @@ partial class Creature
                     }
                 }
 
-                // Apply passive threat sources (e.g., crates) so they influence selection math
                 _passiveThreatController.ApplyPassiveThreatThreshold(
                     this,
                     visibleTargets,
@@ -485,6 +480,21 @@ partial class Creature
                             if (targetCreature.Value < minimumAggroRange)
                             {
                                 safeTargetList.Add(targetCreature.Key, targetCreature.Value);
+                            }
+                        }
+
+                        var hasPassiveCandidate = potentialTargetList.Keys.Any(target => target.GeneratesPassiveThreat);
+                        var hasPatrolCompetitor = potentialTargetList.Keys.Any(target => target.HasPatrol);
+                        if (!hasPassiveCandidate && hasPatrolCompetitor)
+                        {
+                            var playerThreatTiebreak = Math.Max(1, (int)Math.Ceiling(minimumAggroRange * PlayerThreatTiebreakPct));
+
+                            foreach (var targetCreature in potentialTargetList.Keys.ToList())
+                            {
+                                if (targetCreature is Player)
+                                {
+                                    potentialTargetList[targetCreature] += playerThreatTiebreak;
+                                }
                             }
                         }
 
@@ -599,10 +609,11 @@ partial class Creature
                             NegativeThreat[targetCreatureKey.Key] = percentile - 1;
                         }
                     }
-                    _passiveThreatController.UpdatePassiveLossStreaks(AttackTarget as Creature, ThreatLevel);
-                    if (DebugThreatSystem)
+                    var selectedTarget = AttackTarget as Creature;
+                    _passiveThreatController.UpdatePassiveLossStreaks(selectedTarget, ThreatLevel);
+                    if (DebugThreatSystem && selectedTarget != null)
                     {
-                       _log.Information("SELECTED PLAYER: {Name}", AttackTarget.Name);
+                        _log.Information("SELECTED PLAYER: {Name}", selectedTarget.Name);
                     }
                 }
             }
@@ -728,11 +739,8 @@ partial class Creature
     {
         var visibleTargets = new List<Creature>();
 
-        // Start with the engine's normal "attack targets" list (players / pets / foes / etc.)
         var candidates = PhysicsObj.ObjMaint.GetVisibleTargetsValuesOfTypeCreature().ToList();
 
-        // Hard include: any visible creature that generates passive threat, even if it isn't in the normal
-        // AttackTargets pipeline yet. These only become valid if they are already within attack range.
         foreach (var obj in PhysicsObj.ObjMaint.GetVisibleObjects(PhysicsObj.CurCell))
         {
             var c = obj.WeenieObj.WorldObject as Creature;
@@ -751,13 +759,11 @@ partial class Creature
 
             var allowPassiveThreat = creature.GeneratesPassiveThreat;
 
-            // ensure attackable (unless passive threat target)
             if ((!allowPassiveThreat && !creature.Attackable && creature.TargetingTactic == TargetingTactic.None) || creature.Teleporting)
             {
                 continue;
             }
 
-            // check if player fooled this monster with vanish
             if (creature is Player player && IsPlayerVanished(player))
             {
                 continue;
@@ -772,8 +778,6 @@ partial class Creature
 
             if (allowPassiveThreat)
             {
-                // Passive-threat targets must be within "noticed" range to be considered.
-                // Use VisualAwarenessRange so this can be tuned per-weenie via PropertyFloat.VisualAwarenessRange.
                 if (distSq > VisualAwarenessRangeSq)
                 {
                     continue;
@@ -781,7 +785,6 @@ partial class Creature
             }
             else
             {
-                // Normal behavior: within detection/chase radius
                 var chaseDistSq = creature == AttackTarget ? MaxChaseRangeSq : VisualAwarenessRangeSq;
                 if (distSq > chaseDistSq)
                 {

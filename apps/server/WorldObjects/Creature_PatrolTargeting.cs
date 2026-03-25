@@ -4,6 +4,8 @@ namespace ACE.Server.WorldObjects;
 
 partial class Creature
 {
+    private const float PatrolTargetSwitchDistanceBiasSq = 1.44f;
+
     /// <summary>
     /// Patrols should only acquire monster targets (not players).
     /// This is intentionally simple: visible + attackable + is monster.
@@ -50,7 +52,29 @@ partial class Creature
             return false;
         }
 
-        AttackTarget = nearest[0].Target;
+        var nearestTarget = nearest[0].Target;
+        var currentTarget = AttackTarget as Creature;
+
+        if (currentTarget != null && currentTarget != nearestTarget)
+        {
+            foreach (var entry in nearest)
+            {
+                if (entry.Target != currentTarget)
+                {
+                    continue;
+                }
+
+                if (entry.Distance <= VisualAwarenessRangeSq && entry.Distance <= nearest[0].Distance * PatrolTargetSwitchDistanceBiasSq)
+                {
+                    AttackTarget = currentTarget;
+                    return true;
+                }
+
+                break;
+            }
+        }
+
+        AttackTarget = nearestTarget;
         return true;
     }
 }
