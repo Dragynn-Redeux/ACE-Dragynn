@@ -273,6 +273,11 @@ public class UpgradeKit : Stackable
 
             // Item Mana
             ScaleUpItemMana(target, newTier);
+
+            if (upgradeContext == UpgradeContext.Stabilization)
+            {
+                LootGenerationFactory.RecalculateWorkmanshipFromCurrentStats(target, newTier);
+            }
         }
 
         // Jewelry
@@ -311,6 +316,11 @@ public class UpgradeKit : Stackable
 
             // Item Mana
             ScaleUpItemMana(target, newTier);
+
+            if (upgradeContext == UpgradeContext.Stabilization)
+            {
+                LootGenerationFactory.RecalculateWorkmanshipFromCurrentStats(target, newTier);
+            }
         }
 
         return true;

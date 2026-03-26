@@ -612,6 +612,7 @@ public class StabilizationDevice : WorldObject
     private readonly record struct StabilizationSnapshot(
         Dictionary<PropertyInt, int?> Ints,
         Dictionary<PropertyFloat, double?> Floats,
+        double? Workmanship,
         int SpellCount,
         List<SpellSnapshotEntry> Spells
     );
@@ -633,6 +634,7 @@ public class StabilizationDevice : WorldObject
         }
 
         var spellCount = target.Biota.PropertiesSpellBook?.Count ?? 0;
+        var workmanship = target.Workmanship;
 
         var spells = new List<SpellSnapshotEntry>();
         if (target.Biota.PropertiesSpellBook != null)
@@ -653,7 +655,7 @@ public class StabilizationDevice : WorldObject
             spells.Add(new SpellSnapshotEntry("ProcSpell", (int)target.ProcSpell.Value));
         }
 
-        return new StabilizationSnapshot(ints, floats, spellCount, spells);
+        return new StabilizationSnapshot(ints, floats, workmanship, spellCount, spells);
     }
 
     private static string BuildDeltaSummary(StabilizationSnapshot before, StabilizationSnapshot after)
@@ -719,6 +721,11 @@ public class StabilizationDevice : WorldObject
             {
                 changes.Add($"{property}: {FormatAdminFloat(property, beforeValue)}->{FormatAdminFloat(property, afterValue)}");
             }
+        }
+
+        if (before.Workmanship != after.Workmanship)
+        {
+            changes.Add($"WS: {FormatWorkmanship(before.Workmanship)}->{FormatWorkmanship(after.Workmanship)}");
         }
 
         return changes.Count > 0 ? string.Join(", ", changes) : "none";
@@ -882,5 +889,10 @@ public class StabilizationDevice : WorldObject
     private static string FormatDouble(double? value)
     {
         return value?.ToString("0.###") ?? "null";
+    }
+
+    private static string FormatWorkmanship(double? value)
+    {
+        return value?.ToString("0.00", CultureInfo.InvariantCulture) ?? "null";
     }
 }

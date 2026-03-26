@@ -4,7 +4,7 @@ One quick reference for live shard admins working with the tide-mage world stabi
 
 ## Admin Controls
 
-This doc is intentionally narrow. The relevant shard property is `fragment_stability_phase_one`.
+The relevant shard property is `fragment_stability_phase_one`.
 
 ### 1. Inspect Current Value
 

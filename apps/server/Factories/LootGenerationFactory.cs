@@ -21,6 +21,8 @@ namespace ACE.Server.Factories;
 
 public static partial class LootGenerationFactory
 {
+    internal const int UnstableLootLifespanSeconds = 10800;
+
     private static readonly ILogger _log = Log.ForContext(typeof(LootGenerationFactory));
 
     // Used for cumulative ServerPerformanceMonitor event recording
@@ -2384,7 +2386,7 @@ public static partial class LootGenerationFactory
             TryApplyUnstableArmorStyle(wo);
 
             wo.SetProperty(PropertyBool.IsUnstable, true);
-            wo.SetProperty(PropertyInt.Lifespan, 72000);
+            wo.SetProperty(PropertyInt.Lifespan, UnstableLootLifespanSeconds);
             wo.SetProperty(PropertyBool.IsSellable, false);
             ForgeStageDisplay.ApplyStageOverlay(wo);
             
