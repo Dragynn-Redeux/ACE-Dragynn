@@ -28,6 +28,17 @@ public static class DestabilizedLootEffects
         PropertyInt.Damage,
     };
 
+    private static readonly PropertyFloat[] MissileFloatProperties =
+    {
+        PropertyFloat.DamageMod,
+        PropertyFloat.WeaponOffense,
+        PropertyFloat.WeaponPhysicalDefense,
+        PropertyFloat.WeaponMagicalDefense,
+        PropertyFloat.CriticalFrequency,
+        PropertyFloat.CriticalMultiplier,
+        PropertyFloat.IgnoreArmor,
+    };
+
     private static readonly PropertyFloat[] ArmorOrClothingFloatProperties =
     {
         PropertyFloat.ArmorWarMagicMod,
@@ -68,11 +79,24 @@ public static class DestabilizedLootEffects
 
     private static readonly PropertyFloat[] CasterFloatProperties =
     {
+        PropertyFloat.ElementalDamageMod,
+        PropertyFloat.WeaponRestorationSpellsMod,
         PropertyFloat.WeaponPhysicalDefense,
         PropertyFloat.WeaponMagicalDefense,
         PropertyFloat.WeaponWarMagicMod,
         PropertyFloat.WeaponLifeMagicMod,
         PropertyFloat.ManaConversionMod,
+    };
+
+    private static readonly PropertyFloat[] SigilFloatProperties =
+    {
+        PropertyFloat.CooldownDuration,
+        PropertyFloat.SigilTrinketTriggerChance,
+        PropertyFloat.SigilTrinketHealthReserved,
+        PropertyFloat.SigilTrinketStaminaReserved,
+        PropertyFloat.SigilTrinketManaReserved,
+        PropertyFloat.SigilTrinketIntensity,
+        PropertyFloat.SigilTrinketReductionAmount,
     };
 
     public static DestabilizedRollResult ApplyDestabilize(WorldObject item)
@@ -108,6 +132,8 @@ public static class DestabilizedLootEffects
                 result.PackageDetails.Add(detail);
             }
         }
+
+        NormalizeRolledItem(item, family);
 
         if (result.PackageDetails.Count == 0)
         {
@@ -206,10 +232,20 @@ public static class DestabilizedLootEffects
             return DestabilizeItemFamily.None;
         }
 
+        if (item.WeenieType == WeenieType.SigilTrinket)
+        {
+            return DestabilizeItemFamily.Sigil;
+        }
+
         var itemType = item.ItemType;
         if (itemType.HasFlag(ItemType.Caster))
         {
             return DestabilizeItemFamily.Caster;
+        }
+
+        if (itemType.HasFlag(ItemType.MissileWeapon))
+        {
+            return DestabilizeItemFamily.MissileWeapon;
         }
 
         if (itemType.HasFlag(ItemType.MeleeWeapon))
@@ -269,8 +305,10 @@ public static class DestabilizedLootEffects
         return family switch
         {
             DestabilizeItemFamily.MeleeWeapon => MeleeFloatProperties,
+            DestabilizeItemFamily.MissileWeapon => MissileFloatProperties,
             DestabilizeItemFamily.ArmorOrClothing => ArmorOrClothingFloatProperties,
             DestabilizeItemFamily.Caster => CasterFloatProperties,
+            DestabilizeItemFamily.Sigil => SigilFloatProperties,
             _ => Array.Empty<PropertyFloat>(),
         };
     }
@@ -286,12 +324,28 @@ public static class DestabilizedLootEffects
         };
     }
 
+    private static void NormalizeRolledItem(WorldObject item, DestabilizeItemFamily family)
+    {
+        if (family == DestabilizeItemFamily.Sigil && item is SigilTrinket sigilTrinket)
+        {
+            StabilizationDevice.ClampSigilStatsToGenerationBounds(sigilTrinket);
+        }
+    }
+
     private static bool IsEligibleFloatValue(PropertyFloat property, double value)
     {
         return property switch
         {
-            PropertyFloat.WeaponOffense or PropertyFloat.WeaponPhysicalDefense or PropertyFloat.WeaponMagicalDefense
+            PropertyFloat.DamageMod
+                or PropertyFloat.ElementalDamageMod
+                or PropertyFloat.WeaponRestorationSpellsMod
+                or PropertyFloat.WeaponOffense
+                or PropertyFloat.WeaponPhysicalDefense
+                or PropertyFloat.WeaponMagicalDefense
                 => value > 1.001,
+            PropertyFloat.CriticalFrequency
+                or PropertyFloat.CriticalMultiplier
+                or PropertyFloat.IgnoreArmor => value > 0.001,
             _ => value >= MinimumAdditiveFloatValue,
         };
     }
@@ -300,8 +354,16 @@ public static class DestabilizedLootEffects
     {
         return property switch
         {
-            PropertyFloat.WeaponOffense or PropertyFloat.WeaponPhysicalDefense or PropertyFloat.WeaponMagicalDefense
+            PropertyFloat.DamageMod
+                or PropertyFloat.ElementalDamageMod
+                or PropertyFloat.WeaponRestorationSpellsMod
+                or PropertyFloat.WeaponOffense
+                or PropertyFloat.WeaponPhysicalDefense
+                or PropertyFloat.WeaponMagicalDefense
                 => MinimumWeaponModifierValue,
+            PropertyFloat.CriticalFrequency
+                or PropertyFloat.CriticalMultiplier
+                or PropertyFloat.IgnoreArmor => MinimumAdditiveFloatValue,
             _ => MinimumAdditiveFloatValue,
         };
     }
@@ -381,7 +443,14 @@ public static class DestabilizedLootEffects
     {
         return property switch
         {
-            PropertyFloat.WeaponOffense or PropertyFloat.WeaponPhysicalDefense or PropertyFloat.WeaponMagicalDefense => false,
+            PropertyFloat.CooldownDuration
+                or PropertyFloat.DamageMod
+                or PropertyFloat.ElementalDamageMod
+                or PropertyFloat.WeaponRestorationSpellsMod
+                or PropertyFloat.WeaponOffense
+                or PropertyFloat.WeaponPhysicalDefense
+                or PropertyFloat.WeaponMagicalDefense
+                or PropertyFloat.CriticalMultiplier => false,
             _ => true,
         };
     }
@@ -390,7 +459,13 @@ public static class DestabilizedLootEffects
     {
         return property switch
         {
-            PropertyFloat.WeaponOffense or PropertyFloat.WeaponPhysicalDefense or PropertyFloat.WeaponMagicalDefense => true,
+            PropertyFloat.DamageMod
+                or PropertyFloat.ElementalDamageMod
+                or PropertyFloat.WeaponRestorationSpellsMod
+                or PropertyFloat.WeaponOffense
+                or PropertyFloat.WeaponPhysicalDefense
+                or PropertyFloat.WeaponMagicalDefense
+                or PropertyFloat.CriticalMultiplier => true,
             _ => false,
         };
     }
@@ -399,12 +474,25 @@ public static class DestabilizedLootEffects
     {
         return property switch
         {
+            PropertyFloat.DamageMod => "Damage Bonus",
+            PropertyFloat.ElementalDamageMod => "Elemental Damage Bonus",
+            PropertyFloat.WeaponRestorationSpellsMod => "Restoration Spell Bonus",
             PropertyFloat.WeaponOffense => "Attack Bonus",
             PropertyFloat.WeaponPhysicalDefense => "Physical Defense",
             PropertyFloat.WeaponMagicalDefense => "Magic Defense",
+            PropertyFloat.CriticalFrequency => "Critical Chance",
+            PropertyFloat.CriticalMultiplier => "Critical Damage",
+            PropertyFloat.IgnoreArmor => "Armor Cleaving",
             PropertyFloat.WeaponWarMagicMod => "War Magic Bonus",
             PropertyFloat.WeaponLifeMagicMod => "Life Magic Bonus",
             PropertyFloat.ManaConversionMod => "Mana Conversion Bonus",
+            PropertyFloat.CooldownDuration => "Cooldown Duration",
+            PropertyFloat.SigilTrinketTriggerChance => "Proc Chance",
+            PropertyFloat.SigilTrinketHealthReserved => "Health Reservation",
+            PropertyFloat.SigilTrinketStaminaReserved => "Stamina Reservation",
+            PropertyFloat.SigilTrinketManaReserved => "Mana Reservation",
+            PropertyFloat.SigilTrinketIntensity => "Intensity",
+            PropertyFloat.SigilTrinketReductionAmount => "Reduction Amount",
             PropertyFloat.ArmorWarMagicMod => "War Magic Bonus",
             PropertyFloat.ArmorLifeMagicMod => "Life Magic Bonus",
             PropertyFloat.ArmorAttackMod => "Attack Bonus",
@@ -463,9 +551,11 @@ public enum DestabilizeItemFamily
 {
     None,
     MeleeWeapon,
+    MissileWeapon,
     ArmorOrClothing,
     Caster,
     Jewelry,
+    Sigil,
 }
 
 public sealed class DestabilizedRollResult

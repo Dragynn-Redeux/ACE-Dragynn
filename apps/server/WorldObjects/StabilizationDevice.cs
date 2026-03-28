@@ -286,7 +286,7 @@ public class StabilizationDevice : WorldObject
         return true;
     }
 
-    private static void ClampSigilStatsToGenerationBounds(SigilTrinket sigilTrinket)
+    internal static void ClampSigilStatsToGenerationBounds(SigilTrinket sigilTrinket)
     {
         ResolveReservedBounds(sigilTrinket, out var healthMin, out var healthMax, out var staminaMin, out var staminaMax, out var manaMin, out var manaMax);
 

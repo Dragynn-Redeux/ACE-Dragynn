@@ -1455,7 +1455,7 @@ public class AppraiseInfo
             return;
         }
 
-        _extraPropertiesText += $"{stageLabel}\n";
+        _extraPropertiesText += $"\n{stageLabel}\n";
         _hasExtraPropertiesText = true;
     }
 
