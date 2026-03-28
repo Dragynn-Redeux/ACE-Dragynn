@@ -157,7 +157,7 @@ public class StabilizationDevice : WorldObject
                 // Scale item to player tier (bypasses UpgradeKit stack count validation)
                 var upgradeSucceeded = target is SigilTrinket sigilTrinket
                     ? StabilizeSigilTrinketForPlayer(player, sigilTrinket)
-                    : UpgradeKit.UpgradeItem(player, target, 0, UpgradeKit.UpgradeContext.Stabilization);
+                    : UnstableLootUpgrade.UpgradeItem(player, target);
 
                 if (!upgradeSucceeded)
                 {
@@ -572,7 +572,7 @@ public class StabilizationDevice : WorldObject
         return leftSet.SetEquals(rightSet);
     }
 
-    private static UpgradeKit.StabilizationTierAnalysis AnalyzeStabilizationTarget(Player player, WorldObject target)
+    private static UnstableLootUpgrade.StabilizationTierAnalysis AnalyzeStabilizationTarget(Player player, WorldObject target)
     {
         if (target is SigilTrinket sigilTrinket)
         {
@@ -580,10 +580,10 @@ public class StabilizationDevice : WorldObject
             var targetTier = Math.Clamp((player?.GetPlayerTier(playerLevel) ?? 1) - 1, 0, 7);
             var currentRequirement = sigilTrinket.WieldDifficulty2 ?? sigilTrinket.WieldDifficulty ?? 1;
             var currentTier = Math.Clamp(LootGenerationFactory.GetTierFromRequiredLevel(currentRequirement) - 1, 0, 7);
-            return new UpgradeKit.StabilizationTierAnalysis(currentTier, targetTier, "Level->PlayerTier", playerLevel);
+            return new UnstableLootUpgrade.StabilizationTierAnalysis(currentTier, targetTier, "Level->PlayerTier", playerLevel);
         }
 
-        return UpgradeKit.AnalyzeStabilizationTarget(player, target);
+        return UnstableLootUpgrade.AnalyzeTarget(player, target);
     }
 
     private static string BuildAdminStabilizationSuccessLog(
@@ -591,7 +591,7 @@ public class StabilizationDevice : WorldObject
         WorldObject target,
         ForgeStage beforeStage,
         ForgeStage afterStage,
-        UpgradeKit.StabilizationTierAnalysis tierAnalysis,
+        UnstableLootUpgrade.StabilizationTierAnalysis tierAnalysis,
         StabilizationSnapshot before,
         StabilizationSnapshot after)
     {

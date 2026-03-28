@@ -414,9 +414,21 @@ public static partial class LootGenerationFactory
         if (wo.ArmorType == (int)LootTables.ArmorType.MiscClothing && wo.ArmorWeightClass == 0)
         {
             var count = 0;
-            if ((wo.ArmorHealthMod ?? 0) > 0) count++;
-            if ((wo.ArmorStaminaMod ?? 0) > 0) count++;
-            if ((wo.ArmorManaMod ?? 0) > 0) count++;
+            if ((wo.ArmorHealthMod ?? 0) > 0)
+            {
+                count++;
+            }
+
+            if ((wo.ArmorStaminaMod ?? 0) > 0)
+            {
+                count++;
+            }
+
+            if ((wo.ArmorManaMod ?? 0) > 0)
+            {
+                count++;
+            }
+
             return count;
         }
 
