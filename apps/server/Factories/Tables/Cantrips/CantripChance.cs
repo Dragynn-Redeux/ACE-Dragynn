@@ -82,6 +82,25 @@ public static class CantripChance
         return cantripLevels[profile.Tier - 1].Roll(profile.LootQualityMod);
     }
 
+    public static int RollCantripLevelForTier(int tier, float qualityMod = 0.0f)
+    {
+        tier = Math.Clamp(tier, 1, cantripLevels.Count);
+        return cantripLevels[tier - 1].Roll(qualityMod);
+    }
+
+    public static int GetQuestCantripLevelForTier(int tier)
+    {
+        return tier switch
+        {
+            3 => 2,
+            4 => 2,
+            5 => 3,
+            6 => 3,
+            7 => 4,
+            _ => 0,
+        };
+    }
+
     private static List<ChanceTable<int>> numCantrips = _numCantrips;
 
     public static void ApplyNumCantripsMod(bool showResults = true)
