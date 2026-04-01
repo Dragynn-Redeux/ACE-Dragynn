@@ -4,20 +4,13 @@ using Serilog;
 
 namespace ACE.Server.WorldObjects;
 
-
-/// <summary>
-/// Passive-threat dynamics (crates/objectives) extracted out of Creature awareness.
-/// Owns smoothing / loss-streak state and applies a baseline threat floor to passive targets.
-/// </summary>
 public sealed class PassiveThreatController
 {
-    // --- Passive threat dynamics tuning ---
-    private const float PassiveTargetPctDefault = 0.40f;        // desired “pressure” vs top threat target
-    private const float PassivePlayerFavorDefault = 0.02f;      // tiny bias so ties/near-ties prefer players
-    private const float PassiveSmoothingDefault = 0.20f;        // EMA smoothing factor (0..1), lower = less yo-yo
-    private const int PassiveLossStreakThresholdDefault = 3;    // after this many “wins”, nudge toward players
+    private const float PassiveTargetPctDefault = 0.40f;
+    private const float PassivePlayerFavorDefault = 0.02f;
+    private const float PassiveSmoothingDefault = 0.20f;
+    private const int PassiveLossStreakThresholdDefault = 3;
 
-    // per-passive-target smoothing / debounce
     private readonly Dictionary<uint, float> _passiveThreatEma = new();
     private readonly Dictionary<uint, int> _passiveLossStreak = new();
 
@@ -83,29 +76,22 @@ public sealed class PassiveThreatController
                 continue;
             }
 
-            // additive floor still supported (your existing db usage like +25 etc)
             var additiveFloor = Math.Max(target.PassiveThreatThreshold, 0);
             var minFloorThreat = threatMinimum + additiveFloor;
 
-            // Desired threat relative to max active threat.
-            // With only one top competitor, and current thresholding behavior:
-            // P(Passive) ≈ 1 - 0.5*max / PassiveThreat  => PassiveThreat = 0.5*max/(1-P)
             var desired = (int)Math.Ceiling((0.5f * maxActiveThreat) / Math.Max(1e-3f, (1.0f - targetPct)));
 
-            // tiny bias toward players: keep passive a hair under the max active threat
             var capUnderTop = (int)Math.Floor(maxActiveThreat * (1.0f - playerFavor));
             if (desired > capUnderTop)
             {
                 desired = capUnderTop;
             }
 
-            // never below the additive floor
             if (desired < minFloorThreat)
             {
                 desired = minFloorThreat;
             }
 
-            // smooth it to avoid yo-yo
             var guid = target.Guid.Full;
             if (!_passiveThreatEma.TryGetValue(guid, out var ema))
             {
@@ -119,10 +105,8 @@ public sealed class PassiveThreatController
 
             threatLevel.TryAdd(target, threatMinimum);
 
-            // “debounce”: if Passive has been winning too often, nudge down a bit
             if (_passiveLossStreak.TryGetValue(guid, out var streak) && streak >= streakThreshold)
             {
-                // reduce a small amount, but never below the additive floor
                 smoothedDesired = Math.Max(smoothedDesired - 5, minFloorThreat);
             }
 
