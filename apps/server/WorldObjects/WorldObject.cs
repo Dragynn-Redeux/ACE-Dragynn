@@ -24,6 +24,7 @@ using ACE.Server.Physics.Animation;
 using ACE.Server.Physics.Common;
 using ACE.Server.Physics.Util;
 using ACE.Server.WorldObjects.Managers;
+using ACE.Server.Market;
 using Serilog;
 using Landblock = ACE.Server.Entity.Landblock;
 using Position = ACE.Entity.Position;
@@ -1088,11 +1089,37 @@ public abstract partial class WorldObject : IActor
 
         CurrentLandblock?.RemoveWorldObject(Guid);
 
-        RemoveBiotaFromDatabase();
+        // Market listing escrow items are persisted in the shard DB and referenced by PlayerMarketListing.ItemBiotaId.
+        // We construct temporary WorldObject instances for display/inspection; destroying those must not delete escrow.
+        var preserveBiota = MarketEscrowGuard.ShouldPreserveBiotaOnDestroy(this);
+        if (!preserveBiota)
+        {
+            RemoveBiotaFromDatabase();
+        }
 
+        // If this object represents an active market escrow item, its GUID can be referenced elsewhere.
+        // Recycling it can lead to GUID reuse collisions (generators/vendors/containers), so suppress recycling.
         if (Guid.IsDynamic())
         {
-            GuidManager.RecycleDynamicGuid(Guid);
+            if (preserveBiota)
+            {
+                if (PropertyManager.GetBool("log_market_guid_suppression").Item)
+                {
+                    _log.Warning(
+                        "[MARKET] Suppressing dynamic GUID recycle for escrow-backed object 0x{ObjectGuid:X8}:{Name} (WeenieClassId={WeenieClassId}, BiotaId={BiotaId}, OriginDb={OriginDb}, Landblock={Landblock}).",
+                        Guid.Full,
+                        Name,
+                        WeenieClassId,
+                        Biota?.Id,
+                        biotaOriginatedFromDatabase,
+                        CurrentLandblock?.Id
+                    );
+                }
+            }
+            else
+            {
+                GuidManager.RecycleDynamicGuid(Guid);
+            }
         }
     }
 

@@ -12,6 +12,8 @@ using ACE.Server.Network.Enum;
 using ACE.Server.Network.GameMessages.Messages;
 using ACE.Server.Network.Motion;
 using ACE.Server.Network.Sequence;
+using ACE.Server.Network.GameEvent.Events;
+using ACE.Server.Network.Structure;
 using ACE.Server.Physics;
 using ACE.Server.Physics.Common;
 
@@ -21,6 +23,9 @@ partial class Player
 {
     private readonly ActionQueue actionQueue = new ActionQueue();
 
+    /// <inheritdoc/>
+    public override bool NeedsPhysicsUpdate => true;
+
     private int initialAge;
     private DateTime initialAgeTime;
 
@@ -29,6 +34,12 @@ partial class Player
 
     private double houseRentWarnTimestamp;
     private const double houseRentWarnInterval = 3600;
+
+    private double nextRoadCheckTime;
+    private const double RoadCheckInterval = 0.5;
+    private double roadGraceEndTime;
+    private const double RoadGracePeriod = 5.0;
+    public static readonly uint RoadSpeedBuffSpellId = (uint)SpellId.RoadRunBuff;
 
     public void Player_Tick(double currentUnixTime)
     {
@@ -94,6 +105,8 @@ partial class Player
             FellowVitalUpdate = false;
         }
 
+        CheckRoadSpeedBuff(currentUnixTime);
+
         if (House != null && PropertyManager.GetBool("house_rent_enabled").Item)
         {
             if (houseRentWarnTimestamp > 0 && currentUnixTime > houseRentWarnTimestamp)
@@ -121,6 +134,88 @@ partial class Player
                 houseRentWarnTimestamp = Time.GetFutureUnixTime(houseRentWarnInterval);
             }
         }
+    }
+
+    /// <summary>
+    /// Checks whether the player is standing on a road texture and applies or removes the road speed buff accordingly.
+    /// </summary>
+    private void CheckRoadSpeedBuff(double currentUnixTime)
+    {
+        if (!PropertyManager.GetBool("road_speed_buff").Item)
+        {
+            RemoveRoadSpeedBuff();
+            return;
+        }
+
+        if (currentUnixTime < nextRoadCheckTime)
+        {
+            return;
+        }
+
+        nextRoadCheckTime = currentUnixTime + RoadCheckInterval;
+
+        // Road textures only exist on outdoor landcells (cell ID lower 16 bits < 0x100)
+        if ((PhysicsObj?.Position.ObjCellID & 0xFFFF) >= 0x100)
+        {
+            RemoveRoadSpeedBuff();
+            return;
+        }
+
+        var physLandblock = LScape.get_landblock(PhysicsObj.Position.ObjCellID);
+        if (physLandblock == null)
+        {
+            RemoveRoadSpeedBuff();
+            return;
+        }
+
+        var isOnRoad = physLandblock.OnRoad(PhysicsObj.Position.Frame.Origin)
+            && !Town.IsTownLandblock((Location.Landblock << 16) | 0xFFFF);
+        var hasRoadBuff = EnchantmentManager.HasSpell(RoadSpeedBuffSpellId);
+
+        if (isOnRoad)
+        {
+            roadGraceEndTime = 0;
+
+            if (!hasRoadBuff)
+            {
+                var spell = new Spell(RoadSpeedBuffSpellId);
+                if (spell.NotFound)
+                {
+                    return;
+                }
+
+                var addResult = EnchantmentManager.Add(spell, this, null);
+                if (addResult.Enchantment != null)
+                {
+                    Session.Network.EnqueueSend(new GameEventMagicUpdateEnchantment(Session, new Enchantment(this, addResult.Enchantment)));
+                    HandleSpellHooks(spell);
+                }
+            }
+        }
+        else if (hasRoadBuff)
+        {
+            if (roadGraceEndTime == 0)
+            {
+                roadGraceEndTime = currentUnixTime + RoadGracePeriod;
+            }
+            else if (currentUnixTime >= roadGraceEndTime)
+            {
+                roadGraceEndTime = 0;
+                RemoveRoadSpeedBuff();
+            }
+        }
+    }
+
+    private void RemoveRoadSpeedBuff()
+    {
+        var roadBuff = EnchantmentManager.GetEnchantment(RoadSpeedBuffSpellId);
+        if (roadBuff == null)
+        {
+            return;
+        }
+
+        EnchantmentManager.Remove(roadBuff, sound: false);
+        HandleRunRateUpdate();
     }
 
     private static readonly TimeSpan MaximumTeleportTime = TimeSpan.FromMinutes(5);

@@ -124,9 +124,6 @@ public class AllegianceNode
         };
 
         Rank = Math.Min(baseRank + leadershipBonus, 10u);
-
-        _log.Information("Rank calculation for {PlayerName}: {UniqueFollowers} followers (rank {BaseRank}) + {CurrentLeadership} leadership (rank {LeadershipBonus}) = final rank {Rank}",
-            Player.Name, uniqueFollowers, baseRank, currentLeadership, leadershipBonus, Rank);
     }
 
     private double GetUniqueFollowers(AllegianceNode playerNode)
@@ -200,7 +197,6 @@ public class AllegianceNode
         // Recalculate rank up the chain
         if (playerLevel == 10)
         {
-            _log.Information("Player {PlayerName} reached level 10, recalculating allegiance ranks", Player.Name);
             RecalculateRankChain();
         }
 

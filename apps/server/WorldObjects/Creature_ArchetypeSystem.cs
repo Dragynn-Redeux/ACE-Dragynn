@@ -1447,6 +1447,11 @@ partial class Creature
             return;
         }
 
+        if (WeenieClassId == 1020001)
+        {
+            return;
+        }
+
         var archetypeLethality = ArchetypeLethality ?? 1.0;
 
         var landblockLethalityMod = true switch

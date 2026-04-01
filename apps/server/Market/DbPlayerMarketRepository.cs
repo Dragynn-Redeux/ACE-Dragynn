@@ -34,6 +34,8 @@ public sealed class DbPlayerMarketRepository : IPlayerMarketRepository
 
         using var context = new ShardDbContext();
 
+        var snapshotJson = MarketListingSnapshotSerializer.TryCreateSnapshotJson(item);
+
         var listing = new PlayerMarketListing
         {
             SellerAccountId = seller.Character.AccountId,
@@ -42,6 +44,7 @@ public sealed class DbPlayerMarketRepository : IPlayerMarketRepository
             ItemGuid = item.Guid.Full,
             ItemBiotaId = (uint)item.Biota.Id,
             ItemWeenieClassId = item.WeenieClassId,
+            ItemSnapshotJson = snapshotJson,
             OriginalValue = item.Value ?? 0,
             ListedPrice = listedPrice,
             CurrencyType = (int)currencyType,

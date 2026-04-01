@@ -9,6 +9,7 @@ using ACE.Server.Entity.Actions;
 using ACE.Server.Network.GameEvent.Events;
 using ACE.Server.Network.GameMessages;
 using ACE.Server.Network.GameMessages.Messages;
+using ACE.Server.Managers;
 using Biota = ACE.Entity.Models.Biota;
 
 namespace ACE.Server.WorldObjects;
@@ -239,6 +240,8 @@ public class Storage : Container
         PlayParticleEffect(PlayScript.UnHide, Guid);
 
         FinishClose(_bankUser);
+
+        AccountWealthTracker.Update(_bankUser);
 
         // var itemsToSend = new List<GameMessage>();
         //

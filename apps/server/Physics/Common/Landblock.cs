@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Numerics;
+using System.Threading.Tasks;
 using ACE.DatLoader;
 using ACE.DatLoader.FileTypes;
 using ACE.Server.Physics.Animation;
@@ -70,9 +71,14 @@ public class Landblock : LandblockStruct
     public void PostInit()
     {
         init_landcell();
-
         init_buildings();
-        init_static_objs();
+
+        // init_static_objs() calls get_land_scenes() which creates hundreds of PhysicsObj
+        // instances for scenery (trees, rocks, etc.). All cell mutations inside are
+        // protected by ObjCell.readerWriterLockSlim, so it is safe to run off the
+        // physics thread. Doing it async removes 20-100 ms of landblock-load stall
+        // from UpdatePlayerPosition every time the player enters a new landblock.
+        Task.Run(init_static_objs);
     }
 
     public void add_static_object(PhysicsObj obj)

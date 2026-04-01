@@ -10,9 +10,11 @@ using ACE.Database.Entity;
 using ACE.Database.Models.Shard;
 using ACE.Entity.Enum;
 using ACE.Entity.Enum.Properties;
+using MySqlConnector;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.EntityFrameworkCore.Metadata;
 using Serilog;
 
 namespace ACE.Database;
@@ -20,6 +22,43 @@ namespace ACE.Database;
 public class ShardDatabase
 {
     private readonly ILogger _log = Log.ForContext<ShardDatabase>();
+
+    private const int BulkInClauseBatchSize = 500;
+
+    private static string GetTableName<TEntity>(DbContext context)
+        where TEntity : class
+    {
+        var entityType = context.Model.FindEntityType(typeof(TEntity));
+        return entityType?.GetTableName();
+    }
+
+    private static string GetColumnName<TEntity>(DbContext context, string propertyName)
+        where TEntity : class
+    {
+        var entityType = context.Model.FindEntityType(typeof(TEntity));
+        var prop = entityType?.FindProperty(propertyName);
+        return prop?.GetColumnName(StoreObjectIdentifier.Table(entityType.GetTableName(), entityType.GetSchema()));
+    }
+
+    private static (string whereSql, object[] parameters) BuildInClause(string columnSql, IReadOnlyList<uint> ids)
+    {
+        if (ids == null || ids.Count == 0)
+        {
+            return ("1=0", Array.Empty<object>());
+        }
+
+        var paramNames = new string[ids.Count];
+        var parameters = new object[ids.Count];
+        for (var i = 0; i < ids.Count; i++)
+        {
+            paramNames[i] = $"@p{i}";
+            var p = new MySqlConnector.MySqlParameter(paramNames[i], ids[i]);
+            parameters[i] = p;
+        }
+
+        var inList = string.Join(",", paramNames);
+        return ($"{columnSql} IN ({inList})", parameters);
+    }
 
     public bool Exists(bool retryUntilFound)
     {
@@ -57,6 +96,64 @@ public class ShardDatabase
                 return false;
             }
         }
+    }
+
+    public virtual (long pyrealWealth, long trophyWealth) GetBankWealthAggregate(uint bankAccountId)
+    {
+        if (bankAccountId == 0)
+        {
+            return (0, 0);
+        }
+
+        using var context = new ShardDbContext();
+
+        var conn = context.Database.GetDbConnection();
+        if (conn.State != System.Data.ConnectionState.Open)
+        {
+            conn.Open();
+        }
+
+        using var cmd = conn.CreateCommand();
+
+        cmd.CommandText = @"
+SELECT
+  COALESCE(SUM(CASE
+    WHEN b.weenie_Type = 14 THEN COALESCE(v.value, 0)
+    WHEN b.weenie_Class_Id = 20630 THEN COALESCE(ss.value, 1) * 100000
+    WHEN b.weenie_Class_Id = 20629 THEN COALESCE(ss.value, 1) * 50000
+    WHEN b.weenie_Class_Id = 20628 THEN COALESCE(ss.value, 1) * 10000
+    WHEN b.weenie_Class_Id = 20627 THEN COALESCE(ss.value, 1) * 5000
+    WHEN b.weenie_Class_Id = 20626 THEN COALESCE(ss.value, 1) * 1000
+    WHEN b.weenie_Class_Id = 20625 THEN COALESCE(ss.value, 1) * 500
+    WHEN b.weenie_Class_Id = 20624 THEN COALESCE(ss.value, 1) * 100
+    ELSE 0
+  END), 0) AS pyreal_wealth,
+  COALESCE(SUM(CASE
+    WHEN tq.value IS NULL OR tq.value <= 0 THEN 0
+    ELSE (tq.value * tq.value * 100)
+  END), 0) AS trophy_wealth
+FROM biota b
+INNER JOIN biota_properties_i_i_d bank
+  ON bank.object_Id = b.id AND bank.type = 9007 AND bank.value = @acct
+LEFT JOIN biota_properties_int v
+  ON v.object_Id = b.id AND v.type = 19
+LEFT JOIN biota_properties_int ss
+  ON ss.object_Id = b.id AND ss.type = 12
+LEFT JOIN biota_properties_int tq
+  ON tq.object_Id = b.id AND tq.type = 467;
+";
+
+        cmd.Parameters.Add(new MySqlParameter("@acct", bankAccountId));
+
+        using var reader = cmd.ExecuteReader();
+        if (!reader.Read())
+        {
+            return (0, 0);
+        }
+
+        var pyreal = reader.IsDBNull(0) ? 0 : reader.GetInt64(0);
+        var trophy = reader.IsDBNull(1) ? 0 : reader.GetInt64(1);
+        return (pyreal, trophy);
     }
 
     /// <summary>
@@ -521,6 +618,125 @@ public class ShardDatabase
         {
             return GetBiota(context, id, doNotAddToCache);
         }
+    }
+
+    public virtual Dictionary<uint, Biota> GetBiotaBulk(ShardDbContext context, IEnumerable<uint> ids)
+    {
+        context.ChangeTracker.QueryTrackingBehavior = QueryTrackingBehavior.NoTracking;
+
+        var idList = ids?.Distinct().ToList() ?? new List<uint>();
+        if (idList.Count == 0)
+        {
+            return new Dictionary<uint, Biota>();
+        }
+
+        var biotaTable = GetTableName<Biota>(context) ?? "biota";
+        var biotaIdColumn = GetColumnName<Biota>(context, nameof(Biota.Id)) ?? "Id";
+
+        var biotas = new List<Biota>();
+        for (var i = 0; i < idList.Count; i += BulkInClauseBatchSize)
+        {
+            var batch = idList.Skip(i).Take(BulkInClauseBatchSize).ToList();
+            var (biotaWhere, biotaParams) = BuildInClause(biotaIdColumn, batch);
+            biotas.AddRange(context.Biota.FromSqlRaw($"SELECT * FROM {biotaTable} WHERE {biotaWhere}", biotaParams));
+        }
+        biotas = biotas.GroupBy(b => b.Id).Select(g => g.First()).ToList();
+        var byId = biotas.ToDictionary(b => b.Id, b => b);
+
+        List<T> LoadByObjectId<T>(DbSet<T> set, IReadOnlyList<uint> objectIds)
+            where T : class
+        {
+            if (objectIds == null || objectIds.Count == 0)
+            {
+                return new List<T>();
+            }
+
+            var table = GetTableName<T>(context);
+            if (string.IsNullOrWhiteSpace(table))
+            {
+                return new List<T>();
+            }
+
+            var objectIdColumn =
+                GetColumnName<T>(context, "ObjectId") ?? GetColumnName<T>(context, "Object_Id") ?? "object_Id";
+
+            var all = new List<T>();
+            for (var i = 0; i < objectIds.Count; i += BulkInClauseBatchSize)
+            {
+                var batch = objectIds.Skip(i).Take(BulkInClauseBatchSize).ToList();
+                var (w, p) = BuildInClause(objectIdColumn, batch);
+                all.AddRange(set.FromSqlRaw($"SELECT * FROM {table} WHERE {w}", p));
+            }
+
+            return all;
+        }
+
+        void AssignList<T>(IReadOnlyList<uint> targets, List<T> all, Action<Biota, List<T>> assign, Func<T, uint> getId)
+        {
+            var grouped = all.GroupBy(getId).ToDictionary(g => g.Key, g => g.ToList());
+            foreach (var id in targets)
+            {
+                if (byId.TryGetValue(id, out var biota))
+                {
+                    assign(biota, grouped.TryGetValue(id, out var list) ? list : new List<T>());
+                }
+            }
+        }
+
+        // Only bulk-load the collections used by market/vendor items most frequently.
+        // Others can be added as needed.
+        {
+            var targets = biotas.Where(b => ((PopulatedCollectionFlags)b.PopulatedCollectionFlags).HasFlag(PopulatedCollectionFlags.BiotaPropertiesInt)).Select(b => b.Id).ToList();
+            var all = LoadByObjectId(context.BiotaPropertiesInt, targets);
+            AssignList(targets, all, (b, l) => b.BiotaPropertiesInt = l, r => r.ObjectId);
+        }
+        {
+            var targets = biotas.Where(b => ((PopulatedCollectionFlags)b.PopulatedCollectionFlags).HasFlag(PopulatedCollectionFlags.BiotaPropertiesInt64)).Select(b => b.Id).ToList();
+            var all = LoadByObjectId(context.BiotaPropertiesInt64, targets);
+            AssignList(targets, all, (b, l) => b.BiotaPropertiesInt64 = l, r => r.ObjectId);
+        }
+        {
+            var targets = biotas.Where(b => ((PopulatedCollectionFlags)b.PopulatedCollectionFlags).HasFlag(PopulatedCollectionFlags.BiotaPropertiesBool)).Select(b => b.Id).ToList();
+            var all = LoadByObjectId(context.BiotaPropertiesBool, targets);
+            AssignList(targets, all, (b, l) => b.BiotaPropertiesBool = l, r => r.ObjectId);
+        }
+        {
+            var targets = biotas.Where(b => ((PopulatedCollectionFlags)b.PopulatedCollectionFlags).HasFlag(PopulatedCollectionFlags.BiotaPropertiesFloat)).Select(b => b.Id).ToList();
+            var all = LoadByObjectId(context.BiotaPropertiesFloat, targets);
+            AssignList(targets, all, (b, l) => b.BiotaPropertiesFloat = l, r => r.ObjectId);
+        }
+        {
+            var targets = biotas.Where(b => ((PopulatedCollectionFlags)b.PopulatedCollectionFlags).HasFlag(PopulatedCollectionFlags.BiotaPropertiesString)).Select(b => b.Id).ToList();
+            var all = LoadByObjectId(context.BiotaPropertiesString, targets);
+            AssignList(targets, all, (b, l) => b.BiotaPropertiesString = l, r => r.ObjectId);
+        }
+        {
+            var targets = biotas.Where(b => ((PopulatedCollectionFlags)b.PopulatedCollectionFlags).HasFlag(PopulatedCollectionFlags.BiotaPropertiesDID)).Select(b => b.Id).ToList();
+            var all = LoadByObjectId(context.BiotaPropertiesDID, targets);
+            AssignList(targets, all, (b, l) => b.BiotaPropertiesDID = l, r => r.ObjectId);
+        }
+        {
+            var targets = biotas.Where(b => ((PopulatedCollectionFlags)b.PopulatedCollectionFlags).HasFlag(PopulatedCollectionFlags.BiotaPropertiesIID)).Select(b => b.Id).ToList();
+            var all = LoadByObjectId(context.BiotaPropertiesIID, targets);
+            AssignList(targets, all, (b, l) => b.BiotaPropertiesIID = l, r => r.ObjectId);
+        }
+        {
+            var targets = biotas.Where(b => ((PopulatedCollectionFlags)b.PopulatedCollectionFlags).HasFlag(PopulatedCollectionFlags.BiotaPropertiesPalette)).Select(b => b.Id).ToList();
+            var all = LoadByObjectId(context.BiotaPropertiesPalette, targets);
+            AssignList(targets, all, (b, l) => b.BiotaPropertiesPalette = l, r => r.ObjectId);
+        }
+        {
+            var targets = biotas.Where(b => ((PopulatedCollectionFlags)b.PopulatedCollectionFlags).HasFlag(PopulatedCollectionFlags.BiotaPropertiesTextureMap)).Select(b => b.Id).ToList();
+            var all = LoadByObjectId(context.BiotaPropertiesTextureMap, targets);
+            AssignList(targets, all, (b, l) => b.BiotaPropertiesTextureMap = l, r => r.ObjectId);
+        }
+        {
+            var targets = biotas.Where(b => ((PopulatedCollectionFlags)b.PopulatedCollectionFlags).HasFlag(PopulatedCollectionFlags.BiotaPropertiesAnimPart)).Select(b => b.Id).ToList();
+            var all = LoadByObjectId(context.BiotaPropertiesAnimPart, targets);
+            AssignList(targets, all, (b, l) => b.BiotaPropertiesAnimPart = l, r => r.ObjectId);
+        }
+
+        return byId;
     }
 
     public List<Biota> GetBiotasByWcid(uint wcid)
@@ -1375,5 +1591,43 @@ public class ShardDatabase
             .GroupBy(a => a.SessionIp).Count();
 
         return count;
+    }
+
+    public virtual void UpsertAccountWealthSnapshot(
+        uint accountId,
+        uint? characterId,
+        long rawPyrealCurrency,
+        long trophyValue,
+        DateTime updatedAtUtc
+    )
+    {
+        if (accountId == 0)
+        {
+            return;
+        }
+
+        try
+        {
+            using var context = new ShardDbContext();
+
+            // Requires UNIQUE KEY on account_id.
+            context.Database.ExecuteSqlInterpolated(
+                $@"INSERT INTO account_wealth_snapshot
+                    (account_id, character_id, pyreal_wealth, trophy_wealth, total_wealth, updated_at_utc, row_version)
+                  VALUES
+                    ({accountId}, {characterId}, {rawPyrealCurrency}, {trophyValue}, {rawPyrealCurrency + trophyValue}, {updatedAtUtc}, 0)
+                  ON DUPLICATE KEY UPDATE
+                    character_id = VALUES(character_id),
+                    pyreal_wealth = VALUES(pyreal_wealth),
+                    trophy_wealth = VALUES(trophy_wealth),
+                    total_wealth = VALUES(total_wealth),
+                    updated_at_utc = VALUES(updated_at_utc),
+                    row_version = row_version + 1"
+            );
+        }
+        catch (Exception ex)
+        {
+            _log.Error(ex, "Exception in UpsertAccountWealthSnapshot saving wealth snapshot data to DB.");
+        }
     }
 }

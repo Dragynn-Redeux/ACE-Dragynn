@@ -253,6 +253,16 @@ partial class WorldObject
     private int slowUpdateObjectPhysicsHits;
 
     /// <summary>
+    /// Returns true if this object requires a physics update this tick.
+    /// Used as a cheap gate in Landblock.TickPhysics to avoid virtual dispatch
+    /// and guard-chain evaluation for idle/sleeping objects (the 2019 TODO).
+    /// </summary>
+    public virtual bool NeedsPhysicsUpdate =>
+        PhysicsObj != null
+        && PhysicsObj.is_active()
+        && (PhysicsObj.IsAnimating || PhysicsObj.InitialUpdates <= 1 || (PhysicsObj.State & PhysicsState.Missile) != 0);
+
+    /// <summary>
     /// Handles calling the physics engine for non-player objects
     /// </summary>
     public virtual bool UpdateObjectPhysics()

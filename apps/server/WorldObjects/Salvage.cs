@@ -1148,7 +1148,7 @@ public class Salvage : WorldObject
             }
         }
 
-        Player.TryAwardCraftingXp(player, skill, tinkeringSkill, difficulty, armorSlots);
+        Player.TryAwardCraftingXp(player, skill, tinkeringSkill, difficulty, armorSlots, fail: !success);
         BroadcastTinkering(player, source, target, successChance, success, successAmount);
         TinkeringCleanup(player, source, target);
     }

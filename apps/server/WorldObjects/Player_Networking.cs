@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using ACE.Common;
 using ACE.Database.Models.Shard;
 using ACE.Entity;
@@ -6,7 +7,7 @@ using ACE.Entity.Enum;
 using ACE.Entity.Enum.Properties;
 using ACE.Server.Entity;
 using ACE.Server.Entity.Actions;
-using ACE.Server.Managers;
+using ACE.Server.Managers; // Ensure this is included only once
 using ACE.Server.Network.Enum;
 using ACE.Server.Network.GameEvent.Events;
 using ACE.Server.Network.GameMessages.Messages;
@@ -187,6 +188,40 @@ partial class Player
             Guid,
             DateTime.Now
         );
+
+        // If wealth differs from the last saved snapshot, it likely changed while the character was offline
+        // (e.g., admin actions, bank moves, housing moves, etc.).
+        try
+        {
+            var accountId = Session?.AccountId ?? 0;
+            if (accountId != 0)
+            {
+                var (pyrealWealth, trophyWealth) = PlayerWealthCalculator.GetAccountWealth(this);
+                var totalWealth = pyrealWealth + trophyWealth;
+
+                using var ctx = new ShardDbContext();
+                var snapshot = ctx.AccountWealthSnapshots
+                    .OrderByDescending(s => s.UpdatedAtUtc)
+                    .FirstOrDefault(s => s.AccountId == accountId);
+
+                if (snapshot != null && snapshot.TotalWealth != totalWealth)
+                {
+                    _log.Warning(
+                        "[WEALTH] Account {AccountId} wealth changed since last snapshot. Last={LastTotal}, Current={CurrentTotal}, Δ={Delta}.",
+                        accountId,
+                        snapshot.TotalWealth,
+                        totalWealth,
+                        totalWealth - snapshot.TotalWealth
+                    );
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            _log.Error(ex, "[WEALTH] Failed to compare wealth snapshot on login.");
+        }
+
+        AccountWealthTracker.Update(this);
     }
 
     public void SendTurbineChatChannels(bool breakAllegiance = false)
@@ -476,7 +511,18 @@ partial class Player
                 && forwardCommand != MotionCommand.Sleeping
             )
             {
-                var spell = new Spell(SpellId.CampfireRest1);
+                var spell = WellRestedHotspot.Level switch
+                {
+                    2 => new Spell(SpellId.CampfireRest2),
+                    3 => new Spell(SpellId.CampfireRest3),
+                    _ => new Spell(SpellId.CampfireRest1)
+                };
+
+                if (WellRestedHotspot is { WeenieClassId: 1053984 }) // Bliz's Eternal Bonfire in Hebian-to
+                {
+                    spell.SpellPowerMod = 2;
+                }    
+
                 CreateEnchantment(this, WellRestedHotspot, null, spell);
 
                 WellRestedHotspot = null;

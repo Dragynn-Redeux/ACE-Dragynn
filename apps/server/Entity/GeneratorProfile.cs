@@ -241,7 +241,38 @@ public class GeneratorProfile
                     {
                         var woi = new WorldObjectInfo(obj);
 
-                        Spawned.Add(obj.Guid.Full, woi);
+                        if (!Spawned.TryAdd(obj.Guid.Full, woi))
+                        {
+                            Spawned[obj.Guid.Full] = woi;
+                            _log.Warning(
+                                "[GENERATOR] 0x{GeneratorGuid}:{GeneratorWeenieClassId} ProcessQueue(): duplicate spawned Guid {SpawnedGuid} (spawned WCID {SpawnedWeenieClassId}) while processing {GeneratorName}; replacing previous entry",
+                                Generator.Guid,
+                                Generator.WeenieClassId,
+                                obj.Guid.Full,
+                                obj.WeenieClassId,
+                                Generator.Name
+                            );
+
+                            if (PropertyManager.GetBool("log_market_guid_suppression").Item)
+                            {
+                                try
+                                {
+                                    if (Market.MarketEscrowGuard.IsActiveListingBiotaId(obj.Guid.Full))
+                                    {
+                                        _log.Warning(
+                                            "[GENERATOR] 0x{GeneratorGuid}:{GeneratorWeenieClassId} ProcessQueue(): duplicate spawned Guid {SpawnedGuid} correlates to an ACTIVE market listing ItemBiotaId.",
+                                            Generator.Guid,
+                                            Generator.WeenieClassId,
+                                            obj.Guid.Full
+                                        );
+                                    }
+                                }
+                                catch
+                                {
+                                    // ignore correlation failures
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -403,17 +434,18 @@ public class GeneratorProfile
                 {
                     _log.Debug(
                         "[GENERATOR] 0x{GeneratorGuid}:{GeneratorWeenieClassId} {GeneratorName}.Spawn(): failed to spawn {WorldObjectName} (0x{WorldObjectGuid}:{WorldObjectWeenieClassId}) from profile {LinkId} at {RegenLocationType}\nGenerator Location: {GeneratorLocation}\nWorld Object Location: {WorldObjectLocation}",
-                        Generator.Guid,
-                        Generator.WeenieClassId,
-                        Generator.Name,
-                        obj.Name,
-                        obj.Guid,
-                        obj.WeenieClassId,
+                        Generator?.Guid,
+                        Generator?.WeenieClassId,
+                        Generator?.Name,
+                        obj?.Name,
+                        obj?.Guid,
+                        obj?.WeenieClassId,
                         LinkId,
                         RegenLocationType,
-                        Generator.Location?.ToLOCString(),
-                        obj.Location.ToLOCString()
+                        Generator?.Location?.ToLOCString(),
+                        obj?.Location?.ToLOCString()
                     );
+
                     obj.Destroy();
                 }
             }

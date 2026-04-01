@@ -484,8 +484,8 @@ public class AppraiseInfo
             }
         }
 
-        // convert legacy trophies
-        if (wo is { ItemType: ItemType.Misc, TrophyQuality: not null })
+        // convert legacy trophies (skip TrophyEssence items which legitimately carry TrophyQuality)
+        if (wo is { ItemType: ItemType.Misc, TrophyQuality: not null } && wo.WeenieType != WeenieType.TrophyEssence)
         {
             wo.ItemType = ItemType.Useless;
             examiner.Session.Network.EnqueueSend(new GameMessageUpdateObject(wo));

@@ -343,7 +343,10 @@ public class QuestManager
         // 6+ overflow: suppress if within 1s of last town message
         if (quest.NumTimesCompleted > 5)
         {
-            if (player.LastTownAttunementMsgTime == now)
+            // suppress if already Attuned for this town
+            var attunedQuestName = $"Attuned{townName}";
+                        
+            if (GetQuests().Any(q => string.Equals(q.QuestName, attunedQuestName, StringComparison.OrdinalIgnoreCase)))
             {
                 return;
             }

@@ -503,7 +503,8 @@ partial class Player
         Skill skill,
         int difficulty,
         int armorSlots = 1,
-        float bonusMod = 1.0f
+        float bonusMod = 1.0f,
+        bool fail = false
     )
     {
         // check to ensure appropriately difficult craft before granting (is player skill no more than 50 points above relative difficulty)
@@ -521,7 +522,7 @@ partial class Player
         var difficultyMod = 1 + Math.Clamp(relativeDifficulty, -50.0f, 50.0f) / 50.0f;
 
         var xP = (player.GetXPBetweenSkillLevels(creatureSkill.AdvancementClass, creatureSkill.Ranks, creatureSkill.Ranks + 1) ?? 0);
-        var totalXp = (uint)(xP * progressMod * difficultyMod * armorSlots * bonusMod);
+        var totalXp = (uint)(xP * progressMod * difficultyMod * armorSlots * bonusMod * (fail ? 0.5f : 1.0f));
 
         player.NoContribSkillXp(player, skill, totalXp, false);
 
@@ -532,7 +533,7 @@ partial class Player
                 $" Skill: {creatureSkill.Current}, RecipeDiff: {difficulty}\n" +
                 $" ProgressPercent: {progressPercentage}, ProgressMod: {progressMod}\n" +
                 $" CraftDiff: {relativeDifficulty}, DiffMod: {difficultyMod}\n" +
-                $" BonusMod: {bonusMod}\n" +
+                $" BonusMod: {bonusMod}, Fail: {fail}\n" +
                 $" ToLevelXp: {xP}, TotalXpAward: {totalXp}"
             );
         }

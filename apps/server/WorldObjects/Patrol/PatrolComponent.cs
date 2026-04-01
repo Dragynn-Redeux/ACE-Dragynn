@@ -272,7 +272,6 @@ public sealed class PatrolComponent
 
         return min + ((float)Random.Shared.NextDouble() * (max - min));
     }
-
     private void RejoinLoopFromCurrentPosition(double currentUnixTime)
     {
         // Clear any in-flight leg so we don't "arrive" at an old target after interruption.

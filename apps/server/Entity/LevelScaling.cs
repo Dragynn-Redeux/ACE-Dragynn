@@ -531,17 +531,63 @@ public static class LevelScaling
             return false;
         }
 
-        if (player.Level.HasValue && monster.Level.HasValue && player.Level <= monster.Level)
+        if (!player.Level.HasValue || !monster.Level.HasValue)
         {
             return false;
         }
 
-        if (monster.Level < 10)
+        if (player.Level <= monster.Level)
+        {
+            return false;
+        }
+
+        if (monster.Level.Value < 10)
         {
             return false;
         }
 
         return true;
+    }
+
+    public static float GetPlayerBoostHealScalarShroudedUpward(Player caster, Player target)
+    {
+        if (caster == null || target == null)
+        {
+            return 1.0f;
+        }
+
+        if (caster == target)
+        {
+            return 1.0f;
+        }
+
+        if (!caster.EnchantmentManager.HasSpell((uint)SpellId.Shrouded) || !target.EnchantmentManager.HasSpell((uint)SpellId.Shrouded))
+        {
+            return 1.0f;
+        }
+
+        if (!caster.Level.HasValue || !target.Level.HasValue)
+        {
+            return 1.0f;
+        }
+
+        if (caster.Level.Value >= target.Level.Value)
+        {
+            return 1.0f;
+        }
+
+        var statAtCasterLevel = GetPlayerBoostAtLevel(caster.Level.Value);
+        var statAtTargetLevel = GetPlayerBoostAtLevel(target.Level.Value);
+
+        if (PropertyManager.GetBool("debug_level_scaling_system").Item)
+        {
+            Console.WriteLine(
+                $"\nGetPlayerBoostHealScalarShroudedUpward(Caster {caster.Name}, Target {target.Name})"
+                    + $"\n  statAtCasterLevel ({caster.Level}): {statAtCasterLevel}, statAtTargetLevel ({target.Level}): {statAtTargetLevel}, scalarMod: {(float)statAtTargetLevel / statAtCasterLevel}"
+            );
+        }
+
+        return (float)statAtTargetLevel / statAtCasterLevel;
     }
 
     public static int MaxExposeSpellLevel(Creature target)

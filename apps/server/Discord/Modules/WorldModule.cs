@@ -23,9 +23,11 @@ public class WorldModule : InteractionModuleBase<SocketInteractionContext>
     [SlashCommand("close", "Close the world and boot players.")]
     public async Task Close()
     {
+        await DeferAsync(ephemeral: true);
+
         if (WorldManager.WorldStatus == WorldManager.WorldStatusState.Closed)
         {
-            await RespondAsync("The world is already **closed**.", ephemeral: true);
+            await FollowupAsync("The world is already **closed**.", ephemeral: true);
             return;
         }
 
@@ -45,15 +47,17 @@ public class WorldModule : InteractionModuleBase<SocketInteractionContext>
 
         var component = new ComponentBuilder().WithButton(button).WithButton(cancelButton);
 
-        await RespondAsync("Are you sure?", components: component.Build(), ephemeral: true);
+        await FollowupAsync("Are you sure?", components: component.Build(), ephemeral: true);
     }
 
     [SlashCommand("open", "Open the world to everyone.")]
     public async Task Open()
     {
+        await DeferAsync(ephemeral: true);
+
         if (WorldManager.WorldStatus == WorldManager.WorldStatusState.Open)
         {
-            await RespondAsync("The world is already **open**.", ephemeral: true);
+            await FollowupAsync("The world is already **open**.", ephemeral: true);
             return;
         }
 
@@ -73,15 +77,18 @@ public class WorldModule : InteractionModuleBase<SocketInteractionContext>
 
         var component = new ComponentBuilder().WithButton(button).WithButton(cancelButton);
 
-        await RespondAsync("Are you sure?", components: component.Build(), ephemeral: true);
+        await FollowupAsync("Are you sure?", components: component.Build(), ephemeral: true);
     }
 
     [ComponentInteraction("closeWorld", true)]
     public async Task HandleCloseWorld()
     {
-        WorldManager.Close(null, true);
+        if (!Context.Interaction.HasResponded)
+        {
+            await DeferAsync(true);
+        }
 
-        await DeferAsync(true);
+        WorldManager.Close(null, true);
         var embed = new EmbedBuilder()
             .WithColor(new Color(217, 50, 50))
             .WithAuthor(Context.Interaction.User)
@@ -96,9 +103,12 @@ public class WorldModule : InteractionModuleBase<SocketInteractionContext>
     [ComponentInteraction("openWorld", true)]
     public async Task HandleOpenWorld()
     {
-        WorldManager.Open(null);
+        if (!Context.Interaction.HasResponded)
+        {
+            await DeferAsync(true);
+        }
 
-        await DeferAsync(true);
+        WorldManager.Open(null);
         var embed = new EmbedBuilder()
             .WithColor(new Color(75, 181, 67))
             .WithAuthor(Context.Interaction.User)
@@ -113,7 +123,10 @@ public class WorldModule : InteractionModuleBase<SocketInteractionContext>
     [ComponentInteraction("cancel", true)]
     public async Task HandleCancel()
     {
-        await DeferAsync(true);
+        if (!Context.Interaction.HasResponded)
+        {
+            await DeferAsync(true);
+        }
         await Context.Interaction.DeleteOriginalResponseAsync();
     }
 }

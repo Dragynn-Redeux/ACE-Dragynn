@@ -8,6 +8,16 @@ namespace ACE.Server.WorldObjects;
 
 partial class Creature
 {
+    /// <inheritdoc/>
+    public override bool NeedsPhysicsUpdate =>
+        PhysicsObj != null
+        && PhysicsObj.is_active()
+        && (
+            IsDead
+            || PhysicsObj.InitialUpdates <= 1
+            || (PhysicsObj.IsAnimating && (!IsMonster || !IsAwake))
+        );
+
     /// <summary>
     /// Called every ~5 seconds for Creatures
     /// </summary>

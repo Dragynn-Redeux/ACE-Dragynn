@@ -16,6 +16,8 @@ public class PlayerMarketListing
     public uint ItemBiotaId { get; set; }
     public uint ItemWeenieClassId { get; set; }
 
+    public string? ItemSnapshotJson { get; set; }
+
     public int OriginalValue { get; set; }
     public int ListedPrice { get; set; }
 
