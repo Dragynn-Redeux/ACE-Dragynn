@@ -241,14 +241,15 @@ public enum PropertyFloat : ushort
     ArchetypeSpellDamageMultiplier = 200,
     
     [ServerOnly]
-    PatrolScanInterval = 201,
+    SpecializedPackBurdenMod = 204,
     
     [ServerOnly]
-    PatrolPauseMinSeconds = 202,
+    PatrolScanInterval = 205,
     
     [ServerOnly]
-    PatrolPauseMaxSeconds = 203,
+    PatrolPauseMinSeconds = 206,
     [ServerOnly]
+    PatrolPauseMaxSeconds = 207,
 
     PCAPRecordedWorkmanship = 8004,
 

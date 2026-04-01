@@ -873,6 +873,9 @@ public enum PropertyInt : ushort
     CombatFocusPrestigeVersionId = 514,
     [ServerOnly]
     MarketListingId = 515,
+    TrophyEssenceSpellId = 516,
+    TrophyEssenceSkill = 517,
+    TrophyEssenceEffectType = 518,
     [ServerOnly]
     PassiveThreatThreshold = 519,
 

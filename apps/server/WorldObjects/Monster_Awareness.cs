@@ -115,7 +115,7 @@ partial class Creature
             }
             else
             {
-                SetProperty(PropertyInt.TargetingTactic, (int)value);
+                SetProperty(PropertyInt.TargetingTactic, (int)TargetingTactic);
             }
         }
     }
