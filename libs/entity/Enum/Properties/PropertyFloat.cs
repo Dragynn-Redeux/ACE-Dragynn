@@ -239,18 +239,16 @@ public enum PropertyFloat : ushort
     SigilTrinketHealthReserved = 198,
     ResistBleed = 199,
     ArchetypeSpellDamageMultiplier = 200,
-    
+    [ServerOnly]
+    PatrolScanInterval = 201,
+    [ServerOnly]
+    PatrolPauseMinSeconds = 202,
+    [ServerOnly]
+    PatrolPauseMaxSeconds = 203,
     [ServerOnly]
     SpecializedPackBurdenMod = 204,
-    
-    [ServerOnly]
-    PatrolScanInterval = 205,
-    
-    [ServerOnly]
-    PatrolPauseMinSeconds = 206,
-    [ServerOnly]
-    PatrolPauseMaxSeconds = 207,
 
+    [ServerOnly]
     PCAPRecordedWorkmanship = 8004,
 
     [ServerOnly]
