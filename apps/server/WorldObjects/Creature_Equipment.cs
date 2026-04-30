@@ -408,6 +408,7 @@ partial class Creature
             && (wo.GearFireBane ?? 0) == 0
             && (wo.GearFrostBane ?? 0) == 0
             && (wo.GearLightningBane ?? 0) == 0
+            && (wo.GearFrigidProtection ?? 0) == 0
         )
         {
             return;
@@ -482,7 +483,8 @@ partial class Creature
                 { PropertyInt.GearAcidBane, 0 },
                 { PropertyInt.GearFireBane, 0 },
                 { PropertyInt.GearFrostBane, 0 },
-                { PropertyInt.GearLightningBane, 0 }
+                { PropertyInt.GearLightningBane, 0 },
+                { PropertyInt.GearFrigidProtection, 0 },
             };
         }
 
@@ -550,6 +552,7 @@ partial class Creature
         equippedItemsRatingCache[PropertyInt.GearFireBane] -= (wo.GearFireBane ?? 0);
         equippedItemsRatingCache[PropertyInt.GearFrostBane] -= (wo.GearFrostBane ?? 0);
         equippedItemsRatingCache[PropertyInt.GearLightningBane] -= (wo.GearLightningBane ?? 0);
+        equippedItemsRatingCache[PropertyInt.GearFrigidProtection] += (wo.GearFrigidProtection ?? 0);
     }
 
     private void RemoveItemFromEquippedItemsRatingCache(WorldObject wo)
@@ -622,6 +625,7 @@ partial class Creature
         equippedItemsRatingCache[PropertyInt.GearFireBane] -= (wo.GearFireBane ?? 0);
         equippedItemsRatingCache[PropertyInt.GearFrostBane] -= (wo.GearFrostBane ?? 0);
         equippedItemsRatingCache[PropertyInt.GearLightningBane] -= (wo.GearLightningBane ?? 0);
+        equippedItemsRatingCache[PropertyInt.GearFrigidProtection] -= (wo.GearFrigidProtection ?? 0);
     }
 
     public int GetEquippedItemsRatingSum(PropertyInt rating)
@@ -779,6 +783,7 @@ partial class Creature
             && (wo.ArmorStaminaMod ?? 0) == 0
             && (wo.ArmorManaMod ?? 0) == 0
             && (wo.ArmorResourcePenalty ?? 0) == 0
+            && (wo.GearFrigidProtectionMod ?? 0) == 0
         )
         {
             return;
@@ -811,6 +816,7 @@ partial class Creature
                 { PropertyFloat.ArmorStaminaMod, 0 },
                 { PropertyFloat.ArmorManaMod, 0 },
                 { PropertyFloat.ArmorResourcePenalty, 0 },
+                { PropertyFloat.GearFrigidProtectionMod, 0 },
             };
         }
 
@@ -837,6 +843,7 @@ partial class Creature
         equippedItemsSkillModCache[PropertyFloat.ArmorStaminaMod] += (wo.ArmorStaminaMod ?? 0);
         equippedItemsSkillModCache[PropertyFloat.ArmorManaMod] += (wo.ArmorManaMod ?? 0);
         equippedItemsSkillModCache[PropertyFloat.ArmorResourcePenalty] += (wo.ArmorResourcePenalty ?? 0);
+        equippedItemsSkillModCache[PropertyFloat.GearFrigidProtectionMod] += (wo.GearFrigidProtectionMod ?? 0);
     }
 
     private void RemoveItemFromEquippedItemsSkillModCache(WorldObject wo)
@@ -869,6 +876,7 @@ partial class Creature
         equippedItemsSkillModCache[PropertyFloat.ArmorStaminaMod] -= (wo.ArmorStaminaMod ?? 0);
         equippedItemsSkillModCache[PropertyFloat.ArmorManaMod] -= (wo.ArmorManaMod ?? 0);
         equippedItemsSkillModCache[PropertyFloat.ArmorResourcePenalty] -= (wo.ArmorResourcePenalty ?? 0);
+        equippedItemsSkillModCache[PropertyFloat.GearFrigidProtectionMod] -= (wo.GearFrigidProtectionMod ?? 0);
     }
 
     public double GetEquippedItemsSkillModSum(PropertyFloat skillMod)
@@ -1497,6 +1505,42 @@ partial class Creature
                     rngSelected = false;
 
                     modifier = createList.GetSetModifier(i, dropRateMod);
+
+                    // When effective drop probability exceeds 100%, fire guaranteed draws for each
+                    // whole multiple and leave TrophyMod as the fractional remainder for the normal pass.
+                    if (modifier.GuaranteedDrops > 0)
+                    {
+                        var effectiveProb = modifier.Set.TrophyProbability * dropRateMod;
+                        var fractionalChance = modifier.Set.TrophyProbability * modifier.TrophyMod;
+                        //_log.Information(
+                        //    "[LOOT][OVERFLOW] dropRateMod {DropRateMod:F4} -> effectiveProb {EffectiveProb:F4}: {GuaranteedDrops} guaranteed draw(s) + {FractionalChance:P1} fractional chance",
+                        //    dropRateMod,
+                        //    effectiveProb,
+                        //    modifier.GuaranteedDrops,
+                        //    fractionalChance
+                        //);
+                    }
+
+                    for (var g = 0; g < modifier.GuaranteedDrops; g++)
+                    {
+                        var guaranteed = DrawFromSetGuaranteed(modifier.Set);
+                        if (guaranteed != null)
+                        {
+                            results.Add(guaranteed);
+                            //_log.Information(
+                            //    "[LOOT][OVERFLOW] Guaranteed draw {DrawNumber}/{TotalDraws}: WeenieClassId {WeenieClassId}",
+                            //    g + 1,
+                            //    modifier.GuaranteedDrops,
+                            //    guaranteed.WeenieClassId
+                            //);
+                        }
+                    }
+
+                    // No fractional probability left — skip the probabilistic pass entirely.
+                    if (modifier.TrophyMod <= 0.0f)
+                    {
+                        rngSelected = true;
+                    }
                 }
 
                 if (modifier != null)
@@ -1507,7 +1551,6 @@ partial class Creature
                     totalProbability += probability;
                 }
 
-                //Console.WriteLine($"Modifier: {modifier}, Prob: {probability}, TotalProb: {totalProbability}");
                 if (rngSelected || rng >= totalProbability)
                 {
                     continue;
@@ -1520,6 +1563,33 @@ partial class Creature
         }
 
         return results;
+    }
+
+    /// <summary>
+    /// Selects one item from <paramref name="set"/> proportionally to the trophy probabilities,
+    /// with no chance of a "none" result. Used when a drop is guaranteed due to overflow.
+    /// </summary>
+    private static PropertiesCreateList DrawFromSetGuaranteed(CreateListSet set)
+    {
+        var trophies = set.Trophies;
+        if (trophies.Count == 0)
+        {
+            return null;
+        }
+
+        var rng = ThreadSafeRandom.Next(0.0f, set.TrophyProbability);
+        var cumulative = 0.0f;
+
+        foreach (var trophy in trophies)
+        {
+            cumulative += trophy.Shade;
+            if (rng < cumulative)
+            {
+                return trophy;
+            }
+        }
+
+        return trophies[trophies.Count - 1];
     }
 
     public uint? WieldedTreasureType

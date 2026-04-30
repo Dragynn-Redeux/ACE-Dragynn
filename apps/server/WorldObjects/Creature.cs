@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Numerics;
 using ACE.Common;
 using ACE.DatLoader;
 using ACE.DatLoader.FileTypes;
@@ -10,6 +11,7 @@ using ACE.Entity.Models;
 using ACE.Server.Entity;
 using ACE.Server.Managers;
 using ACE.Server.WorldObjects.Entity;
+using LScape = ACE.Server.Physics.Common.LScape;
 
 namespace ACE.Server.WorldObjects;
 
@@ -199,65 +201,6 @@ public partial class Creature : Container
                 }
             }
 
-            // Archetype System
-            var useArchetypeSystem = UseArchetypeSystem ?? false;
-            if (useArchetypeSystem && WeenieClassId != 1020001)
-            {
-                var statWeight = 0.0f;
-                var level = (float)(Level ?? 1);
-                var tier = (Tier ?? 1) - 1;
-
-                switch (tier)
-                {
-                    case 0:
-                        statWeight = level / 9;
-                        break;
-                    case 1:
-                        statWeight = (level - 10) / 10;
-                        break;
-                    case 2:
-                        statWeight = (level - 20) / 10;
-                        break;
-                    case 3:
-                        statWeight = (level - 30) / 10;
-                        break;
-                    case 4:
-                        statWeight = (level - 40) / 10;
-                        break;
-                    case 5:
-                        statWeight = (level - 50) / 25;
-                        break;
-                    case 6:
-                        statWeight = (level - 75) / 25;
-                        break;
-                    case 7:
-                        statWeight = (level - 100) / 25;
-                        break;
-                }
-
-                var toughness = ArchetypeToughness ?? 1.0;
-                var physicality = ArchetypePhysicality ?? 1.0;
-                var dexterity = ArchetypeDexterity ?? 1.0;
-                var magic = ArchetypeMagic ?? 1.0;
-                var intelligence = ArchetypeIntelligence ?? 1.0;
-                var lethality = ArchetypeLethality ?? 1.0;
-
-                
-                SetSkills(tier, statWeight, toughness, physicality, dexterity, magic, intelligence, 1.0);
-
-                SetVitals(tier, statWeight, toughness, physicality, dexterity, magic);
-
-                SetDamageArmorWard(tier, statWeight, toughness, physicality, magic, lethality);
-
-                var difficultyMod =
-                    (toughness * 3 + physicality + dexterity + magic + intelligence + lethality * 3) / 10.0;
-
-                //Console.WriteLine($"\nDIFFICULTY MOD: {difficultyMod}\n" +
-                //    $"Tough: {toughness}, Phys: {physicality}, Dex: {dexterity}, Magic: {magic}, Int: {intelligence}, Lethal: {lethality}");
-
-                SetXp(difficultyMod);
-            }
-
             // TODO: fix tod data
             Health.Current = Health.MaxValue;
             Stamina.Current = Stamina.MaxValue;
@@ -273,6 +216,124 @@ public partial class Creature : Container
 
     // verify logic
     public bool IsNPC => !(this is Player) && !Attackable && TargetingTactic == TargetingTactic.None;
+
+    public override bool EnterWorld()
+    {
+        var result = base.EnterWorld();
+
+        if (result && !(this is Player))
+        {
+            ApplyArchetypeSystem();
+        }
+
+        return result;
+    }
+
+    private void ApplyArchetypeSystem()
+    {
+        var useArchetypeSystem = UseArchetypeSystem ?? false;
+        if (useArchetypeSystem && WeenieClassId != 1020001)
+        {
+            var statWeight = 0.0f;
+            var level = (float)(Level ?? 1);
+            var tier = (Tier ?? 1) - 1;
+
+            switch (tier)
+            {
+                case 0:
+                    statWeight = level / 9;
+                    break;
+                case 1:
+                    statWeight = (level - 10) / 10;
+                    break;
+                case 2:
+                    statWeight = (level - 20) / 10;
+                    break;
+                case 3:
+                    statWeight = (level - 30) / 10;
+                    break;
+                case 4:
+                    statWeight = (level - 40) / 10;
+                    break;
+                case 5:
+                    statWeight = (level - 50) / 25;
+                    break;
+                case 6:
+                    statWeight = (level - 75) / 25;
+                    break;
+                case 7:
+                    statWeight = (level - 100) / 25;
+                    break;
+            }
+
+            var toughness = ArchetypeToughness ?? 1.0;
+            var physicality = ArchetypePhysicality ?? 1.0;
+            var dexterity = ArchetypeDexterity ?? 1.0;
+            var magic = ArchetypeMagic ?? 1.0;
+            var intelligence = ArchetypeIntelligence ?? 1.0;
+            var lethality = ArchetypeLethality ?? 1.0;
+
+            // Boost toughness and lethality for creatures that spawn on snow/ice above elevation 200.
+            // Multiplier scales at 1% per unit of elevation above 200.
+
+            if (IsInFrigidZone())
+            {
+                var esperMountainsMultiplier = EsperMountainsZone.Contains(Location) ? 10 : 1;
+
+                const double frigidElevationBase = 200.0;
+                const double frigidScalingFactor = 0.001;
+
+                FrigidBonus = 1.0 + (Location.PositionZ - frigidElevationBase) * frigidScalingFactor * esperMountainsMultiplier;
+                toughness *= FrigidBonus;
+                lethality *= FrigidBonus;
+
+                //_log.Information(
+                //    "[FRIGID ZONE] {Name} spawning on snow/ice at elevation {Elevation:F1} - toughness and lethality boosted by {Mod:P1}",
+                //    Name,
+                //    Location.PositionZ,
+                //    frigidMod - 1.0
+                //);
+            }
+
+            SetSkills(tier, statWeight, toughness, physicality, dexterity, magic, intelligence, 1.0);
+
+            SetVitals(tier, statWeight, toughness, physicality, dexterity, magic);
+
+            SetDamageArmorWard(tier, statWeight, toughness, physicality, magic, lethality);
+
+            var difficultyMod =
+                (toughness * 3 + physicality + dexterity + magic + intelligence + lethality * 3) / 10.0;
+
+            SetXp(difficultyMod);
+
+            // Reset vitals to the new max values set by the archetype system
+            Health.Current = Health.MaxValue;
+            Stamina.Current = Stamina.MaxValue;
+            Mana.Current = Mana.MaxValue;
+        }
+    }
+
+    /// <summary>
+    /// Returns true if this creature's spawn location is on snow or ice terrain above elevation 200.
+    /// Used to determine whether to apply frigid zone archetype stat boosts.
+    /// </summary>
+    private bool IsInFrigidZone()
+    {
+        if (Location == null || Location.PositionZ <= 200f)
+        {
+            return false;
+        }
+
+        // Snow and ice terrain only exist on outdoor landcells (lower 16 bits of cell ID < 0x100)
+        if ((Location.Cell & 0xFFFF) >= 0x100)
+        {
+            return false;
+        }
+
+        var frigidLandblock = LScape.get_landblock(Location.Cell);
+        return frigidLandblock != null && frigidLandblock.NearSnow(
+            new Vector3(Location.PositionX, Location.PositionY, Location.PositionZ), 50f);
+    }
 
     public void GenerateNewFace()
     {

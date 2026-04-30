@@ -506,6 +506,69 @@ public class Landblock : LandblockStruct
         return t0;
     }
 
+    /// <summary>
+    /// Returns TRUE if the position is on a snow or ice terrain tile.
+    /// </summary>
+    public bool OnSnow(Vector3 obj)
+    {
+        var cellX = (int)Math.Floor(obj.X / LandDefs.CellLength);
+        var cellY = (int)Math.Floor(obj.Y / LandDefs.CellLength);
+
+        if (cellX < 0 || cellX >= LandDefs.BlockSide || cellY < 0 || cellY >= LandDefs.BlockSide)
+        {
+            return false;
+        }
+
+        var terrain = Terrain[cellX * (LandDefs.BlockSide + 1) + cellY];
+        var terrainType = (LandDefs.TerrainType)((terrain >> 2) & 0x1F);
+        return terrainType == LandDefs.TerrainType.Snow || terrainType == LandDefs.TerrainType.Ice;
+    }
+
+    /// <summary>
+    /// Returns TRUE if any snow or ice terrain tile has any part within <paramref name="radius"/> units of <paramref name="obj"/>.
+    /// Uses AABB closest-point distance so partial cell overlaps are handled correctly.
+    /// Only searches within the current landblock.
+    /// </summary>
+    public bool NearSnow(Vector3 obj, float radius)
+    {
+        var cellLen = (float)LandDefs.CellLength;
+
+        var minCellX = Math.Max(0,                    (int)Math.Floor((obj.X - radius) / cellLen));
+        var maxCellX = Math.Min(LandDefs.BlockSide - 1, (int)Math.Floor((obj.X + radius) / cellLen));
+        var minCellY = Math.Max(0,                    (int)Math.Floor((obj.Y - radius) / cellLen));
+        var maxCellY = Math.Min(LandDefs.BlockSide - 1, (int)Math.Floor((obj.Y + radius) / cellLen));
+
+        var radiusSq = radius * radius;
+
+        for (var cx = minCellX; cx <= maxCellX; cx++)
+        {
+            for (var cy = minCellY; cy <= maxCellY; cy++)
+            {
+                // Closest point on the cell AABB to the player position (ignores Z)
+                var closestX = Math.Clamp(obj.X, cx * cellLen, (cx + 1) * cellLen);
+                var closestY = Math.Clamp(obj.Y, cy * cellLen, (cy + 1) * cellLen);
+
+                var dx = obj.X - closestX;
+                var dy = obj.Y - closestY;
+
+                if (dx * dx + dy * dy > radiusSq)
+                {
+                    continue;
+                }
+
+                var terrain = Terrain[cx * (LandDefs.BlockSide + 1) + cy];
+                var terrainType = (LandDefs.TerrainType)((terrain >> 2) & 0x1F);
+
+                if (terrainType == LandDefs.TerrainType.Snow || terrainType == LandDefs.TerrainType.Ice)
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
     public LandCell get_landcell(uint cellID)
     {
         var lcoord = LandDefs.gid_to_lcoord(cellID).Value;

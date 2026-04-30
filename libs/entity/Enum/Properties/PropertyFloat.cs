@@ -252,6 +252,8 @@ public enum PropertyFloat : ushort
     [ServerOnly]
     SpecializedPackBurdenMod = 204,
 
+    GearFrigidProtectionMod = 205,
+
     [ServerOnly]
     PCAPRecordedWorkmanship = 8004,
 

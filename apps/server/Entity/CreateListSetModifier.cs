@@ -1,3 +1,5 @@
+using System;
+
 namespace ACE.Server.Entity;
 
 public class CreateListSetModifier
@@ -6,8 +8,15 @@ public class CreateListSetModifier
     public float Modifier;
 
     /// <summary>
-    /// Usually Modifier, unless Set.TrophyProbability * Modifier > 1.0
-    /// In which case, TrophyMod is capped so Set.TrophyProbability * TrophyMod = 1.0
+    /// Number of guaranteed draws from the set's trophy pool when
+    /// Set.TrophyProbability * Modifier exceeds 1.0 (i.e. floor of the effective probability).
+    /// </summary>
+    public int GuaranteedDrops;
+
+    /// <summary>
+    /// The fractional trophy modifier used for the final probabilistic draw.
+    /// When effective probability <= 1.0 this equals Modifier (normal behaviour).
+    /// When effective probability > 1.0 this represents only the leftover fraction.
     /// </summary>
     public float TrophyMod;
 
@@ -27,12 +36,14 @@ public class CreateListSetModifier
         Set = set;
         Modifier = modifier;
 
-        // calculate TrophyMod
         var trophyProbability = Set.TrophyProbability;
+        var effectiveProb = trophyProbability * modifier;
 
-        if (trophyProbability * modifier > 1.0f)
+        if (effectiveProb > 1.0f)
         {
-            TrophyMod = 1.0f / trophyProbability;
+            GuaranteedDrops = (int)Math.Floor(effectiveProb);
+            var fractionalProb = effectiveProb - GuaranteedDrops;
+            TrophyMod = fractionalProb > 0f ? fractionalProb / trophyProbability : 0.0f;
         }
         else
         {

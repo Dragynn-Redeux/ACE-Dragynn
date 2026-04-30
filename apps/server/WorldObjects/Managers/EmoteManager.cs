@@ -676,6 +676,7 @@ public class EmoteManager
                         var trophyQualityIteration = 0u;
                         if (creatureObject is { WeenieClassId: 3932 })
                         {
+                            stackSize = 1;
                             trophyQualityIteration = (uint)((creatureObject.RefusalItem.Item1.TrophyQuality - 1) ?? 0);
                             weenieClassId += trophyQualityIteration;
                         }

@@ -53,6 +53,8 @@ partial class Creature
 
         if ((OverrideArchetypeSkills ?? false) != true)
         {
+            AdjustAttributesForArchetypeConstraints(tier, statWeight, physicality, dexterity, magic, intelligence);
+
             // Martial Weapons Skill
             {
                 var newSkill = GetNewMeleeAttackSkill(tier, statWeight, physicality, dexterity);
@@ -285,6 +287,14 @@ partial class Creature
                 Skills[Skill.Run] = new CreatureSkill(this, skillType, propertiesSkill);
             }
         }
+    }
+
+    // Round value to the nearest multiple of 5, capped so the result never exceeds value.
+    // Cases where the true nearest-5 would overshoot (value % 5 == 3 or 4) fall back to floor-to-5.
+    private static int NearestFiveNotExceeding(int value)
+    {
+        var candidate = ((value + 2) / 5) * 5;
+        return candidate > value ? candidate - 5 : candidate;
     }
 
     private static uint ApplyMultiplier(double multiplier, uint newSkill)
@@ -521,6 +531,85 @@ partial class Creature
 
     // HELPER FUNCTIONS
 
+    private void AdjustAttributesForArchetypeConstraints(int tier, float statWeight, double physicality, double dexterity, double magic, double intelligence)
+    {
+        // Each attribute is set so that (attribute / divisor) + minInitLevel == tweakedSkill.
+        // Helper functions then compute InitLevel = tweakedSkill - skillFromAttributes, which equals minInitLevel
+        // for the binding skill and is naturally higher for any less-constrained skill sharing the same attribute.
+        var minInitLevel = (Level ?? 1) * 2;
+
+        var attackTarget = enemyAttack[tier] + (enemyAttack[tier + 1] - enemyAttack[tier]) * statWeight;
+        var defenseTarget = enemyDefense[tier] + (enemyDefense[tier + 1] - enemyDefense[tier]) * statWeight;
+        var assDeceptTarget = enemyAssessDeception[tier] + (enemyAssessDeception[tier + 1] - enemyAssessDeception[tier]) * statWeight;
+        var runTarget = enemyRun[tier] + (enemyRun[tier + 1] - enemyRun[tier]) * statWeight;
+
+        // Strength: MeleeAttack uses Strength.Base / 2
+        {
+            var tweakedSkill = (int)(attackTarget * (physicality + dexterity) / 2);
+            Strength.StartingValue = (uint)Math.Max(1, NearestFiveNotExceeding((tweakedSkill - minInitLevel) * 2));
+        }
+
+        // Coordination: binding constraint is min of melee (phys+dex)/2 and missile dexterity multipliers
+        {
+            var tweakedSkill = (int)(attackTarget * Math.Min((physicality + dexterity) / 2, dexterity));
+            Coordination.StartingValue = (uint)Math.Max(1, NearestFiveNotExceeding((tweakedSkill - minInitLevel) * 2));
+        }
+
+        // Self: WarMagic and LifeMagic both use Self.Base / 2 with the same magic multiplier
+        {
+            var tweakedSkill = (int)(attackTarget * magic);
+            Self.StartingValue = (uint)Math.Max(1, NearestFiveNotExceeding((tweakedSkill - minInitLevel) * 2));
+        }
+
+        // Focus: Perception and Deception both use Focus.Base / 2 with the same intelligence multiplier
+        {
+            var tweakedSkill = (int)(assDeceptTarget * intelligence);
+            Focus.StartingValue = (uint)Math.Max(1, NearestFiveNotExceeding((tweakedSkill - minInitLevel) * 2));
+        }
+
+        // Quickness: Run uses Quickness.Base directly (divisor = 1)
+        {
+            var tweakedSkill = (int)(runTarget * dexterity);
+            Quickness.StartingValue = (uint)Math.Max(1, NearestFiveNotExceeding(tweakedSkill - minInitLevel));
+        }
+
+        // Physical Defense compound: (Coordination.Base + Quickness.Base) / 4.
+        // After individual assignments above the combined contribution may still overshoot; reduce both equally if so.
+        {
+            var tweakedSkill = (int)(defenseTarget * dexterity);
+            var skillFromAttributes = ((int)Coordination.Base + (int)Quickness.Base) / 4;
+            if (skillFromAttributes > tweakedSkill - minInitLevel)
+            {
+                var diff = tweakedSkill - minInitLevel - skillFromAttributes;
+                var halfAdjustment = diff * 2;
+                Coordination.StartingValue = (uint)Math.Max(1, (int)Coordination.StartingValue + halfAdjustment);
+                Quickness.StartingValue = (uint)Math.Max(1, (int)Quickness.StartingValue + halfAdjustment);
+                _log.Debug(
+                    "Creature.AdjustAttributesForArchetypeConstraints() - Coordination and Quickness reduced by {Adjustment} each for {Name} ({WeenieClassId}) to satisfy PhysicalDefense constraint.",
+                    halfAdjustment, Name, WeenieClassId
+                );
+            }
+        }
+
+        // Magic Defense compound: (Focus.Base + Self.Base) / 4.
+        // Same overflow check as Physical Defense.
+        {
+            var tweakedSkill = (int)(defenseTarget * magic);
+            var skillFromAttributes = ((int)Focus.Base + (int)Self.Base) / 4;
+            if (skillFromAttributes > tweakedSkill - minInitLevel)
+            {
+                var diff = tweakedSkill - minInitLevel - skillFromAttributes;
+                var halfAdjustment = diff * 2;
+                Focus.StartingValue = (uint)Math.Max(1, (int)Focus.StartingValue + halfAdjustment);
+                Self.StartingValue = (uint)Math.Max(1, (int)Self.StartingValue + halfAdjustment);
+                _log.Debug(
+                    "Creature.AdjustAttributesForArchetypeConstraints() - Focus and Self reduced by {Adjustment} each for {Name} ({WeenieClassId}) to satisfy MagicDefense constraint.",
+                    halfAdjustment, Name, WeenieClassId
+                );
+            }
+        }
+    }
+
     private uint GetNewMeleeAttackSkill(int tier, float statWeight, double physicality, double dexterity)
     {
         var target = enemyAttack[tier] + (enemyAttack[tier + 1] - enemyAttack[tier]) * statWeight;
@@ -529,19 +618,6 @@ partial class Creature
 
         var divisor = 2;
         var skillFromAttributes = Strength.Base / divisor;
-
-        if (skillFromAttributes > tweakedSkill)
-        {
-            var diff = (int)tweakedSkill - skillFromAttributes;
-            var attributeAdjustment = diff * divisor;
-            _log.Warning(
-                "Creature.SetSkills() - Archetype system is attempting to set the base Martial Weapons skill to {TweakedSkill} for {Name} ({WeenieClassId}) (defaulting to 1). Strength attribute should be lowered by {AttributeAdjustment}.",
-                diff,
-                Name,
-                WeenieClassId,
-                attributeAdjustment
-            );
-        }
 
         var newSkill = tweakedSkill < skillFromAttributes ? 0 : tweakedSkill - (uint)skillFromAttributes;
 
@@ -569,19 +645,6 @@ partial class Creature
         var divisor = 2;
         var skillFromAttributes = Coordination.Base / divisor;
 
-        if (skillFromAttributes > tweakedSkill)
-        {
-            var diff = (int)tweakedSkill - skillFromAttributes;
-            var attributeAdjustment = diff * divisor;
-            _log.Warning(
-                "Creature.SetSkills() - Archetype system is attempting to set the base Unarmed Combat skill to {TweakedSkill} for {Name} ({WeenieClassId}) (defaulting to 1). Coordination attribute should be lowered by {AttributeAdjustment}.",
-                diff,
-                Name,
-                WeenieClassId,
-                attributeAdjustment
-            );
-        }
-
         var newSkill = tweakedSkill < skillFromAttributes ? 0 : tweakedSkill - (uint)skillFromAttributes;
 
         if (DebugArchetypeSystem)
@@ -607,19 +670,6 @@ partial class Creature
 
         var divisor = 2;
         var skillFromAttributes = Coordination.Base / divisor;
-
-        if (skillFromAttributes > tweakedSkill)
-        {
-            var diff = (int)tweakedSkill - skillFromAttributes;
-            var attributeAdjustment = diff * divisor;
-            _log.Warning(
-                "Creature.SetSkills() - Archetype system is attempting to set the base Dagger skill to {TweakedSkill} for {Name} ({WeenieClassId}) (defaulting to 1). Coordination attribute should be lowered by {AttributeAdjustment}.",
-                diff,
-                Name,
-                WeenieClassId,
-                attributeAdjustment
-            );
-        }
 
         var newSkill = tweakedSkill < skillFromAttributes ? 0 : tweakedSkill - (uint)skillFromAttributes;
 
@@ -647,19 +697,6 @@ partial class Creature
         var divisor = 2;
         var skillFromAttributes = Coordination.Base / divisor;
 
-        if (skillFromAttributes > tweakedSkill)
-        {
-            var diff = (int)tweakedSkill - skillFromAttributes;
-            var attributeAdjustment = diff * divisor;
-            _log.Warning(
-                "Creature.SetSkills() - Archetype system is attempting to set the base Staff skill to {TweakedSkill} for {Name} ({WeenieClassId}) (defaulting to 1). Coordination attribute should be lowered by {AttributeAdjustment}.",
-                diff,
-                Name,
-                WeenieClassId,
-                attributeAdjustment
-            );
-        }
-
         var newSkill = tweakedSkill < skillFromAttributes ? 0 : tweakedSkill - (uint)skillFromAttributes;
 
         if (DebugArchetypeSystem)
@@ -685,19 +722,6 @@ partial class Creature
 
         var divisor = 2;
         var skillFromAttributes = Coordination.Base / divisor;
-
-        if (skillFromAttributes > tweakedSkill)
-        {
-            var diff = (int)tweakedSkill - skillFromAttributes;
-            var attributeAdjustment = diff * divisor;
-            _log.Warning(
-                "Creature.SetSkills() - Archetype system is attempting to set the base Bow skill to {TweakedSkill} for {Name} ({WeenieClassId}) (defaulting to 1). Coordination attribute should be lowered by {AttributeAdjustment}.",
-                diff,
-                Name,
-                WeenieClassId,
-                attributeAdjustment
-            );
-        }
 
         var newSkill = tweakedSkill < skillFromAttributes ? 0 : tweakedSkill - (uint)skillFromAttributes;
 
@@ -725,19 +749,6 @@ partial class Creature
         var divisor = 2;
         var skillFromAttributes = Strength.Base / divisor;
 
-        if (skillFromAttributes > tweakedSkill)
-        {
-            var diff = (int)tweakedSkill - skillFromAttributes;
-            var attributeAdjustment = diff * divisor;
-            _log.Warning(
-                "Creature.SetSkills() - Archetype system is attempting to set the base Thrown Weapons skill to {TweakedSkill} for {Name} ({WeenieClassId}) (defaulting to 1). Coordination attribute should be lowered by {AttributeAdjustment}.",
-                diff,
-                Name,
-                WeenieClassId,
-                attributeAdjustment
-            );
-        }
-
         var newSkill = tweakedSkill < skillFromAttributes ? 0 : tweakedSkill - (uint)skillFromAttributes;
 
         if (DebugArchetypeSystem)
@@ -763,19 +774,6 @@ partial class Creature
 
         var divisor = 2;
         var skillFromAttributes = Self.Base / divisor;
-
-        if (skillFromAttributes > tweakedSkill)
-        {
-            var diff = (int)tweakedSkill - skillFromAttributes;
-            var attributeAdjustment = diff * divisor;
-            _log.Warning(
-                "Creature.SetSkills() - Archetype system is attempting to set the base War Magic skill to {TweakedSkill} for {Name} ({WeenieClassId}) (defaulting to 1). Self attribute should be lowered by {AttributeAdjustment}.",
-                diff,
-                Name,
-                WeenieClassId,
-                attributeAdjustment
-            );
-        }
 
         var newSkill = tweakedSkill < skillFromAttributes ? 0 : tweakedSkill - (uint)skillFromAttributes;
 
@@ -803,19 +801,6 @@ partial class Creature
         var divisor = 2;
         var skillFromAttributes = Self.Base / divisor;
 
-        if (skillFromAttributes > tweakedSkill)
-        {
-            var diff = (int)tweakedSkill - skillFromAttributes;
-            var attributeAdjustment = diff * divisor;
-            _log.Warning(
-                "Creature.SetSkills() - Archetype system is attempting to set the base War Magic skill to {TweakedSkill} for {Name} ({WeenieClassId}) (defaulting to 1). Self attribute should be lowered by {AttributeAdjustment}.",
-                diff,
-                Name,
-                WeenieClassId,
-                attributeAdjustment
-            );
-        }
-
         var newSkill = tweakedSkill < skillFromAttributes ? 0 : tweakedSkill - (uint)skillFromAttributes;
 
         if (DebugArchetypeSystem)
@@ -842,19 +827,6 @@ partial class Creature
         var divisor = 4;
         var skillFromAttributes = (Coordination.Base + Quickness.Base) / divisor;
 
-        if (skillFromAttributes > tweakedSkill)
-        {
-            var diff = (int)tweakedSkill - skillFromAttributes;
-            var attributeAdjustment = diff * divisor;
-            _log.Warning(
-                "Creature.SetSkills() - Archetype system is attempting to set the base Physical Defense skill to {TweakedSkill} for {Name} ({WeenieClassId}) (defaulting to 1). Coordination and/or Quickness attributes should be lowered by a total of {AttributeAdjustment}.",
-                tweakedSkill,
-                Name,
-                WeenieClassId,
-                attributeAdjustment
-            );
-        }
-
         var newSkill = tweakedSkill < skillFromAttributes ? 0 : tweakedSkill - (uint)skillFromAttributes;
 
         if (DebugArchetypeSystem)
@@ -880,19 +852,6 @@ partial class Creature
 
         var divisor = 4;
         var skillFromAttributes = (Focus.Base + Self.Base) / divisor;
-
-        if (skillFromAttributes > tweakedSkill)
-        {
-            var diff = (int)tweakedSkill - skillFromAttributes;
-            var attributeAdjustment = diff * divisor;
-            _log.Warning(
-                "Creature.SetSkills() - Archetype system is attempting to set the base Magic Defense skill to {TweakedSkill} for {Name} ({WeenieClassId}) (defaulting to 1). Coordination and/or Quickness attributes should be lowered by a total of {AttributeAdjustment}.",
-                tweakedSkill,
-                Name,
-                WeenieClassId,
-                attributeAdjustment
-            );
-        }
 
         var newSkill = tweakedSkill < skillFromAttributes ? 0 : tweakedSkill - (uint)skillFromAttributes;
 
@@ -921,19 +880,6 @@ partial class Creature
         var divisor = 2;
         var skillFromAttributes = Focus.Base / divisor;
 
-        if (skillFromAttributes > tweakedSkill)
-        {
-            var diff = (int)tweakedSkill - skillFromAttributes;
-            var attributeAdjustment = diff * divisor;
-            _log.Warning(
-                "Creature.SetSkills() - Archetype system is attempting to set the base Perception skill to {TweakedSkill} for {Name} ({WeenieClassId}) (defaulting to 1). Focus attribute should be lowered by {AttributeAdjustment}.",
-                diff,
-                Name,
-                WeenieClassId,
-                attributeAdjustment
-            );
-        }
-
         var newSkill = tweakedSkill < skillFromAttributes ? 0 : tweakedSkill - (uint)skillFromAttributes;
 
         if (DebugArchetypeSystem)
@@ -961,19 +907,6 @@ partial class Creature
         var divisor = 2;
         var skillFromAttributes = Focus.Base / divisor;
 
-        if (skillFromAttributes > tweakedSkill)
-        {
-            var diff = (int)tweakedSkill - skillFromAttributes;
-            var attributeAdjustment = diff * divisor;
-            _log.Warning(
-                "Creature.SetSkills() - Archetype system is attempting to set the base Deception skill to {TweakedSkill} for {Name} ({WeenieClassId}) (defaulting to 1). Focus attribute should be lowered by {AttributeAdjustment}.",
-                diff,
-                Name,
-                WeenieClassId,
-                attributeAdjustment
-            );
-        }
-
         var newSkill = tweakedSkill < skillFromAttributes ? 0 : tweakedSkill - (uint)skillFromAttributes;
 
         if (DebugArchetypeSystem)
@@ -998,19 +931,6 @@ partial class Creature
         var tweakedSkill = (uint)(target * multiplier);
 
         var skillFromAttributes = Quickness.Base;
-
-        if (skillFromAttributes > tweakedSkill)
-        {
-            var diff = (int)tweakedSkill - skillFromAttributes;
-            var attributeAdjustment = diff;
-            _log.Warning(
-                "Creature.SetSkills() - Archetype system is attempting to set the base Run skill to {TweakedSkill} for {Name} ({WeenieClassId}) (defaulting to 1). Quickness attribute should be lowered by {AttributeAdjustment}.",
-                diff,
-                Name,
-                WeenieClassId,
-                attributeAdjustment
-            );
-        }
 
         var newSkill = tweakedSkill < skillFromAttributes ? 0 : tweakedSkill - skillFromAttributes;
 
