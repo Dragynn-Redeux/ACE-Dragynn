@@ -46,17 +46,13 @@ public class ArmorProfile
         var resistanceMod = armor.EnchantmentManager.GetArmorModVsType(damageType);
         var effectiveRL = (float)(baseResistance + resistanceMod);
 
-        if (effectiveRL < 1.0f)
-        {
-            var jewelBaneRating = GetJewelBaneRating(armor, damageType);
-            effectiveRL += jewelBaneRating;
-
-            if (effectiveRL > 1.0f)
-            {
-                effectiveRL = 1.0f;
-            }
-        }
-
+        // jewelrating: direct below 1.0, diminishing returns above 1.0, hard cap at 1.5
+        var jewelBaneRating = GetJewelBaneRating(armor, damageType);
+        var directPortion = Math.Clamp(1.0f - effectiveRL, 0.0f, jewelBaneRating);
+        var excessPortion = jewelBaneRating - directPortion;
+        var postDirect = effectiveRL + directPortion;
+        effectiveRL = Math.Min(postDirect + excessPortion * (1.5f - postDirect), 1.5f);
+        
         // resistance clamp
         // TODO: this would be a good place to test with client values
         //if (effectiveRL > 2.0f)

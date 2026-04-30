@@ -2965,7 +2965,7 @@ public static partial class LootGenerationFactory
         };
     }
 
-    public static void MutateTrophy(WorldObject wo, int tier)
+    public static void MutateTrophy(WorldObject wo, int tier, float frigidBonus = 1.0f)
     {
         if (wo.TrophyQuality == null)
         {
@@ -2973,13 +2973,22 @@ public static partial class LootGenerationFactory
         }
 
         var trophyQuality = WorkmanshipChance.Roll(tier);
+
+        // bonus trophy quality from monsters with frigid bonuses
+        var frigidBonusRoll = ThreadSafeRandom.Next(0.0f, frigidBonus - 1.0f);
+        var frigidBonusRounded = (int)Math.Round(trophyQuality + frigidBonusRoll, MidpointRounding.AwayFromZero);
+        trophyQuality = Math.Clamp(frigidBonusRounded, 1, 10);
+
         wo.SetProperty(PropertyInt.TrophyQuality, trophyQuality);
 
         var name = GetTrophyQualityName(trophyQuality);
         wo.SetProperty(PropertyString.Name, name + " " + wo.Name);
 
+        // if value is 0 (possibly due to StackUnitValue), set default to 100
+        var baseValue = wo.Value is > 0 ? wo.Value.Value : 100;
+
         var multiplier = trophyQuality * trophyQuality;
-        var value = (wo.Value ?? 0) * multiplier;
+        var value = baseValue * multiplier;
         wo.SetProperty(PropertyInt.Value, value);
         wo.SetProperty(PropertyInt.StackUnitValue, value);
     }

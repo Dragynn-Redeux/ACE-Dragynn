@@ -1039,7 +1039,12 @@ public class Vendor : Creature
     {
         foreach (var kvp in DefaultItemsForSale)
         {
-            if (UseAltCurrencValue(kvp.Value.AltCurrencyValue))
+            if (AlternateCurrency != null && kvp.Value.ItemType == ItemType.PromissoryNote)
+            {
+                var cost = GetSellCost(kvp.Value);
+                kvp.Value.Value = (int)Math.Floor((cost + 0.1) / 1.15);
+            }
+            else if (UseAltCurrencValue(kvp.Value.AltCurrencyValue))
             {
                 kvp.Value.Value = kvp.Value.AltCurrencyValue;
             }
@@ -1057,7 +1062,12 @@ public class Vendor : Creature
     {
         foreach (var kvp in DefaultItemsForSale)
         {
-            if (UseAltCurrencValue(kvp.Value.AltCurrencyValue))
+            if (AlternateCurrency != null && kvp.Value.ItemType == ItemType.PromissoryNote)
+            {
+                var cost = GetSellCost(kvp.Value);
+                kvp.Value.Value = (int)Math.Floor((cost + 0.1) / 1.15);
+            }
+            else if (UseAltCurrencValue(kvp.Value.AltCurrencyValue))
             {
                 kvp.Value.Value = kvp.Value.AltCurrencyValue;
             }
@@ -1597,7 +1607,7 @@ public class Vendor : Creature
         var sellRate = SellPrice ?? 1.0;
         if (itemType == ItemType.PromissoryNote)
         {
-            sellRate = 1.15;
+            sellRate = AlternateCurrency == null ? 1.15 : 1.0;
         }
 
         if (UseAltCurrencValue(altCurrencyValue))

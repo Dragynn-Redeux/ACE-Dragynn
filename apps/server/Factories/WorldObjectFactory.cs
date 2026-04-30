@@ -492,7 +492,7 @@ public static class WorldObjectFactory
     /// <summary>
     /// Creates a new WorldObject from a CreateList item
     /// </summary>
-    public static WorldObject CreateNewWorldObject(PropertiesCreateList item, int tier = 1)
+    public static WorldObject CreateNewWorldObject(PropertiesCreateList item, int tier = 1, float frigidBonus = 1.0f)
     {
         var isTreasure = (item.DestinationType & DestinationType.Treasure) != 0;
 
@@ -523,7 +523,7 @@ public static class WorldObjectFactory
 
         if (wo.TrophyQuality != null)
         {
-            LootGenerationFactory.MutateTrophy(wo, tier);
+            LootGenerationFactory.MutateTrophy(wo, tier, frigidBonus);
         }
 
         return wo;

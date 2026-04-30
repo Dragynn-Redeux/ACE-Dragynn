@@ -878,6 +878,7 @@ public enum PropertyInt : ushort
     TrophyEssenceSpellId = 516,
     TrophyEssenceSkill = 517,
     TrophyEssenceEffectType = 518,
+    GearFrigidProtection = 519,
 
     [ServerOnly]
     PCAPRecordedAutonomousMovement = 8007,

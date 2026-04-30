@@ -138,10 +138,16 @@ public class ContractTracker
         {
             if (player.QuestManager.HasQuest(Contract.QuestflagProgress))
             {
-                var quest = player.QuestManager.GetQuest(Contract.QuestflagProgress);
-                var progress = quest.NumTimesCompleted;
-
-                Stage = progress > 0 ? ContractStage.ProgressCounter + progress : ContractStage.InProgress;
+                if (player.QuestManager.IsMaxSolves(Contract.QuestflagProgress))
+                {
+                    Stage = ContractStage.DoneOrPendingRepeat;
+                }
+                else
+                {
+                    var quest = player.QuestManager.GetQuest(Contract.QuestflagProgress);
+                    var progress = quest.NumTimesCompleted;
+                    Stage = progress > 0 ? ContractStage.ProgressCounter + progress : ContractStage.InProgress;
+                }
             }
         }
     }

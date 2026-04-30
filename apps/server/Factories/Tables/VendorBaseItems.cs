@@ -215,7 +215,7 @@ public static class VendorBaseItems
         (0, false, HeritageAny, 1054000, 0, 0.0, -1), // Pearl of Spell Transference
         (0, false, HeritageAny, 1054005, 0, 0.0, -1), // Pearl of Spell Purging
         (0, false, HeritageAny, 1053979, 0, 0.0, -1), // Bezel (spellcrafting)
-        (0, false, HeritageAny, 1053983, 0, 0.0, -1), // Alkahest Salt (cooking/alchemy)
+        (0, false, HeritageAny, 1053981, 0, 0.0, -1), // Alkahest Salt (cooking/alchemy)
     ];
 
     // <(tier, onlyThisTier, heritage, wcid, paletteTemplate, shade, stackSize)>
@@ -547,12 +547,12 @@ public static class VendorBaseItems
         (2, false, HeritageAny, 1053941, 0, 0.0, -1), // steak
         (4, false, HeritageAny, 1053945, 0, 0.0, -1), // tender steak
         (6, false, HeritageAny, 1053949, 0, 0.0, -1), // choice steak
-        
+
         (0, false, HeritageAny, 1053938, 0, 0.0, -1), // gristly pepper steak
         (2, false, HeritageAny, 1053942, 0, 0.0, -1), // pepper steak
         (4, false, HeritageAny, 1053946, 0, 0.0, -1), // tender pepper steak
         (6, false, HeritageAny, 1053950, 0, 0.0, -1), // choice pepper steak
-        
+
         (0, false, HeritageAny, 1053939, 0, 0.0, -1), // gristly brined steak
         (2, false, HeritageAny, 1053943, 0, 0.0, -1), // brined steak
         (4, false, HeritageAny, 1053947, 0, 0.0, -1), // tender brined steak

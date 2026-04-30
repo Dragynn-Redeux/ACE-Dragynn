@@ -206,6 +206,118 @@ partial class Player
         }
     }
 
+    /// <summary>
+    /// Checks whether the player is on a snow terrain tile above elevation 100 and applies Frigid damage.
+    /// Damage = (PositionZ - 100), reduced by GearFrigidProtectionMod (% reduction) then GearFrigidProtection (flat reduction).
+    /// Called every heartbeat (~5 seconds).
+    /// </summary>
+    private void CheckFrigidDamage()
+    {
+        if (!PropertyManager.GetBool("frigid_damage").Item)
+        {
+            return;
+        }
+
+        if (IsDead || Teleporting)
+        {
+            return;
+        }
+
+        if (Location.PositionZ <= 200f)
+        {
+            return;
+        }
+
+        // Snow textures only exist on outdoor landcells (cell ID lower 16 bits < 0x100)
+        if ((PhysicsObj?.Position.ObjCellID & 0xFFFF) >= 0x100)
+        {
+            return;
+        }
+
+        var physLandblock = LScape.get_landblock(PhysicsObj.Position.ObjCellID);
+        if (physLandblock == null || !physLandblock.NearSnow(PhysicsObj.Position.Frame.Origin, 50f))
+        {
+            return;
+        }
+
+        // _log.Information(
+        //     "[FRIGID] {Name} is near snow/ice terrain (within 50 units) at cell {CellID:X8}, elevation {Elevation:F1}",
+        //     Name,
+        //     PhysicsObj.Position.ObjCellID,
+        //     Location.PositionZ
+        // );
+
+        var rawDamage = (float)Location.PositionZ - 200f;
+
+        // Outside the Northern Esper Mountains, Frigid damage is only 1/10th strength.
+        var inEsperMountains = EsperMountainsZone.Contains(Location);
+        var worldX = Location.LandblockX * 192f + Location.PositionX;
+        var worldY = Location.LandblockY * 192f + Location.PositionY;
+
+        //_log.Information(
+        //    "[FRIGID ZONE] {Name} zone check — inEsperMountains: {InZone}, mapCoords: {MapCoords}, worldX: {WorldX:F1}, worldY: {WorldY:F1}, rawDamage before modifier: {RawDamage:F1}",
+        //    Name,
+        //    inEsperMountains,
+        //    Location.GetMapCoordStr() ?? "unknown",
+        //    worldX,
+        //    worldY,
+        //    rawDamage
+        //);
+
+        if (!inEsperMountains)
+        {
+            rawDamage *= 0.1f;
+            //_log.Information(
+            //    "[FRIGID ZONE] {Name} is outside Esper Mountains — rawDamage reduced to {RawDamage:F1}",
+            //    Name,
+            //    rawDamage
+            //);
+        }
+
+        // Apply percentage reduction from equipped gear
+        var modReduction = GetEquippedItemsSkillModSum(PropertyFloat.GearFrigidProtectionMod);
+        rawDamage *= (float)Math.Max(0.0, 1.0 - modReduction);
+
+        // Apply cold resistance from active spells, natural resistance, and augmentations
+        var coldResistMod = GetResistanceMod(DamageType.Cold, null, null);
+        rawDamage *= coldResistMod;
+
+        // Apply flat reduction from equipped gear (after % reduction)
+        var flatReduction = GetEquippedItemsRatingSum(PropertyInt.GearFrigidProtection);
+        rawDamage -= flatReduction;
+
+        if (rawDamage <= 0)
+        {
+            return;
+        }
+
+        var damage = (int)Math.Ceiling(rawDamage);
+
+        //_log.Information(
+        //    "[FRIGID] {Name} took {Damage} Frigid damage at elevation {Elevation:F1} (modReduction: {ModReduction:P1}, flatReduction: {FlatReduction})",
+        //    Name,
+        //    damage,
+        //    Location.PositionZ,
+        //    modReduction,
+        //    flatReduction
+        //);
+
+        UpdateVitalDelta(Health, -damage);
+
+        Session.Network.EnqueueSend(
+            new GameMessageSystemChat(
+                $"The frigid air bites at you for {damage} points of cold damage!",
+                ChatMessageType.Broadcast
+            )
+        );
+
+        if (Health.Current == 0)
+        {
+            OnDeath(null, DamageType.Cold);
+            Die();
+        }
+    }
+
     private void RemoveRoadSpeedBuff()
     {
         var roadBuff = EnchantmentManager.GetEnchantment(RoadSpeedBuffSpellId);
@@ -232,6 +344,8 @@ partial class Player
         HandleTargetVitals();
 
         HandleBuildUpEffects();
+
+        CheckFrigidDamage();
 
         LifestoneProtectionTick();
 
