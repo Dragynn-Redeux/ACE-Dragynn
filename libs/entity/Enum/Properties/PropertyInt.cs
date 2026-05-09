@@ -871,14 +871,14 @@ public enum PropertyInt : ushort
     CombatFocusSkill3SpellRemoved = 512,
     CombatFocusSkill3SpellAdded = 513,
     CombatFocusPrestigeVersionId = 514,
-
     [ServerOnly]
     MarketListingId = 515,
-
     TrophyEssenceSpellId = 516,
     TrophyEssenceSkill = 517,
     TrophyEssenceEffectType = 518,
     GearFrigidProtection = 519,
+    [ServerOnly]
+    PassiveThreatThreshold = 520,
 
     [ServerOnly]
     PCAPRecordedAutonomousMovement = 8007,

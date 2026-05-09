@@ -258,6 +258,8 @@ public enum PropertyBool : ushort
     PatrolForceWalk = 175,
     [ServerOnly]
     SignalCrossLB = 176,
+    [ServerOnly]
+    GeneratesPassiveThreat = 177,
 
     /* custom */
     [ServerOnly]
