@@ -24,6 +24,8 @@ namespace ACE.Server.WorldObjects;
 
 partial class Player
 {
+    private readonly HashSet<uint> _confirmedAttuneEquips = new HashSet<uint>();
+
     /// <summary>
     /// Returns all inventory, side slot items, items in side containers, and all wielded items.
     /// </summary>
@@ -428,6 +430,17 @@ partial class Player
         HandleGearAttributeRatings(item, SpellId.RatingSelf, PropertyInt.GearSelf, SpellCategory.GearRatingSelf);
         HandleGearSkillRatings(item, SpellId.RatingPhysicalDefense, PropertyInt.GearToughness, SpellCategory.RatingPhysicalDefense, 20);
         HandleGearSkillRatings(item, SpellId.RatingMagicDefense, PropertyInt.GearResistance, SpellCategory.RatingMagicDefense, 20);
+
+        // attune-on-equip for imbued items
+        if (item.GetProperty(PropertyBool.AttuneOnEquip) ?? false)
+        {
+            item.RemoveProperty(PropertyBool.AttuneOnEquip);
+            item.Attuned = AttunedStatus.Attuned;
+            item.AllowedWielder = Guid.Full;
+            item.CraftsmanName = Name;
+            Session.Network.EnqueueSend(new GameMessageSystemChat(
+                $"The {item.Name} has attuned to you.", ChatMessageType.Broadcast));
+        }
 
         return true;
     }
@@ -2649,6 +2662,26 @@ partial class Player
                     $"You must remove your {existing?.Name} to wield {item.Name}"
                 )
             );
+            Session.Network.EnqueueSend(new GameEventInventoryServerSaveFailed(Session, item.Guid.Full));
+            return false;
+        }
+
+        // attune-on-equip confirmation: intercept before item is removed from inventory
+        if (!wasEquipped && (item.GetProperty(PropertyBool.AttuneOnEquip) ?? false)
+            && !_confirmedAttuneEquips.Remove(item.Guid.Full))
+        {
+            var itemGuidFull = item.Guid.Full;
+            var capturedWieldedLocation = wieldedLocation;
+
+            ConfirmationManager.EnqueueSend(
+                new Confirmation_Custom(Guid, () =>
+                {
+                    _confirmedAttuneEquips.Add(itemGuidFull);
+                    HandleActionGetAndWieldItem(itemGuidFull, capturedWieldedLocation);
+                }),
+                $"The {item.Name} will permanently attune to your character when equipped and can never be traded after this point. Do you wish to proceed?"
+            );
+
             Session.Network.EnqueueSend(new GameEventInventoryServerSaveFailed(Session, item.Guid.Full));
             return false;
         }
@@ -5191,6 +5224,18 @@ partial class Player
             return;
         }
 
+        if (ForgeStagingService.IsForgeTarget(target))
+        {
+            ForgeStagingService.TryHandleDirectItemFastPath(this, target, item, itemWasEquipped);
+
+            // Forge drag/drop is a use interaction, not a persisted move into the container.
+            Session.Network.EnqueueSend(new GameEventInventoryServerSaveFailed(Session, item.Guid.Full));
+
+            SendUseDoneEvent();
+
+            return;
+        }
+
         if (target is Creature brokerCreature && MarketBroker.IsMarketBroker(brokerCreature))
         {
             // Market Broker uses "Refuse" semantics (examine) for any listable item so the player keeps the item.
@@ -6142,7 +6187,7 @@ partial class Player
             dest.StackUnitValue = source.StackUnitValue;
             dest.Value = (dest.StackUnitValue ?? 0) * (dest.StackSize ?? 1);
         }
-        
+
         var sourceCooldownId = source.GetProperty(PropertyInt.SharedCooldown);
         var destCooldownId = dest.GetProperty(PropertyInt.SharedCooldown);
         if (sourceCooldownId.HasValue && sourceCooldownId != destCooldownId)

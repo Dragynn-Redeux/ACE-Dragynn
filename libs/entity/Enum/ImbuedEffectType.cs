@@ -25,5 +25,11 @@ public enum ImbuedEffectType : uint
 
     IgnoreSomeMagicProjectileDamage = 0x20000000,
     AlwaysCritical = 0x40000000,
-    IgnoreAllArmor = 0x80000000
+    IgnoreAllArmor = 0x80000000,
+
+    // Defensive armor imbue effects
+    ReducedPhysicalDamageTaken = 0x00010000, // Sunstone on armor
+    ReducedMagicalDamageTaken  = 0x00020000, // Tourmaline on armor
+    ReducedCriticalHitChance   = 0x00040000, // BlackOpal on armor
+    ReducedCriticalDamageTaken = 0x00080000, // FireOpal on armor
 }

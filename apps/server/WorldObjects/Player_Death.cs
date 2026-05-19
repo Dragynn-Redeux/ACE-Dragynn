@@ -1402,7 +1402,7 @@ partial class Player
                 return new();
             }
 
-            var items = LootGenerationFactory.CreateRandomLootObjects(OlthoiDeathTreasureType);
+            var items = LootGenerationFactory.CreateRandomLootObjects(OlthoiDeathTreasureType, null);
 
             var gland = LootGenerationFactory.RollGland(this, hadVitae);
 

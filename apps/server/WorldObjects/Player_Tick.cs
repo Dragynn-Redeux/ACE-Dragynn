@@ -82,6 +82,8 @@ partial class Player
         }
 
         actionQueue.RunActions();
+       
+        TryFlushPendingTownMessage(currentUnixTime);
 
         if (nextAgeUpdateTime <= currentUnixTime)
         {
@@ -139,6 +141,20 @@ partial class Player
     /// <summary>
     /// Checks whether the player is standing on a road texture and applies or removes the road speed buff accordingly.
     /// </summary>
+    private void TryFlushPendingTownMessage(double currentUnixTime)
+{
+    if (string.IsNullOrEmpty(PendingTownAttunementQuestName))
+    {
+        return;
+    }
+
+    if (currentUnixTime < PendingTownAttunementDueTime)
+    {
+        return;
+    }
+
+    QuestManager.FlushPendingTownMessage();
+}
     private void CheckRoadSpeedBuff(double currentUnixTime)
     {
         if (!PropertyManager.GetBool("road_speed_buff").Item)

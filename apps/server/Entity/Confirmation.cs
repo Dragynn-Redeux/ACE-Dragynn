@@ -203,6 +203,9 @@ public class Confirmation_CraftInteration : Confirmation
             case WeenieType.UpgradeKit:
                 UpgradeKit.UseObjectOnTarget(player, source, target, true);
                 break;
+            case WeenieType.StabilizationDevice:
+                StabilizationDevice.UseObjectOnTarget(player, source, target, true);
+                break;
             case WeenieType.BezelTool:
                 BezelTool.UseObjectOnTarget(player, source, target, true);
                 break;

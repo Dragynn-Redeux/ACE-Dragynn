@@ -324,16 +324,6 @@ public partial class RecipeManager
 
         successChance = SkillCheck.GetSkillChance((int)playerCurrentPlusLumAugSkilledCraft, difficulty);
 
-        // imbue: divide success by 3
-        if (recipe.IsImbuing())
-        {
-            successChance /= 3.0f;
-
-            if (player.AugmentationBonusImbueChance > 0)
-            {
-                successChance += player.AugmentationBonusImbueChance * 0.05f;
-            }
-        }
 
         // todo: remove this once foolproof salvage recipes are updated
         if (foolproofTinkers.Contains((WeenieClassName)tool.WeenieClassId))
@@ -716,22 +706,22 @@ public partial class RecipeManager
 
             // magic item tinkering
 
-            case 0x38000025: // Sunstone
-                //AddImbuedEffect(target, ImbuedEffectType.ArmorRending);
-                target.ImbuedEffect = ImbuedEffectType.ArmorRending;
-                break;
-            case 0x38000024: // FireOpal
-                //AddImbuedEffect(target, ImbuedEffectType.CripplingBlow);
-                target.ImbuedEffect = ImbuedEffectType.CripplingBlow;
-                break;
-            case 0x38000023: // BlackOpal
-                //AddImbuedEffect(target, ImbuedEffectType.CriticalStrike);
-                target.ImbuedEffect = ImbuedEffectType.CriticalStrike;
-                break;
-            case 0x38000058: // Tourmaline
-                //AddImbuedEffect(target, ImbuedEffectType.WardRending);
-                target.ImbuedEffect = ImbuedEffectType.WardRending;
-                break;
+            // case 0x38000025: // Sunstone
+            //     //AddImbuedEffect(target, ImbuedEffectType.ArmorRending);
+            //     target.ImbuedEffect = ImbuedEffectType.ArmorRending;
+            //     break;
+            // case 0x38000024: // FireOpal
+            //     //AddImbuedEffect(target, ImbuedEffectType.CripplingBlow);
+            //     target.ImbuedEffect = ImbuedEffectType.CripplingBlow;
+            //     break;
+            // case 0x38000023: // BlackOpal
+            //     //AddImbuedEffect(target, ImbuedEffectType.CriticalStrike);
+            //     target.ImbuedEffect = ImbuedEffectType.CriticalStrike;
+            //     break;
+            // case 0x38000058: // Tourmaline
+            //     //AddImbuedEffect(target, ImbuedEffectType.WardRending);
+            //     target.ImbuedEffect = ImbuedEffectType.WardRending;
+            //     break;
             case 0x3800002E: // Opal
                 //target.ManaConversionMod += 0.01f;
                 target.ManaConversionMod = (target.ManaConversionMod ?? 0.0f) + 0.01f;

@@ -110,6 +110,67 @@ public class SpellTransference : Stackable
         UseObjectOnTarget(player, this, target);
     }
 
+    private static bool TryRequireStableExtractionTarget(Player player, WorldObject target, bool endUse)
+    {
+        if (target.Retained == true)
+        {
+            player.Session.Network.EnqueueSend(
+                new GameMessageSystemChat(
+                    $"The {target.NameWithMaterial} is retained and cannot be dismantled for a contained spell.",
+                    ChatMessageType.Craft
+                )
+            );
+
+            if (endUse)
+            {
+                player.SendUseDoneEvent();
+            }
+
+            return true;
+        }
+
+        if (ForgeStageDisplay.IsAllowedStage(target, ForgeStage.Stable))
+        {
+            return false;
+        }
+
+        player.Session.Network.EnqueueSend(
+            new GameMessageSystemChat(
+                $"The {target.NameWithMaterial} must be stable before it can be dismantled for a contained spell.",
+                ChatMessageType.Craft
+            )
+        );
+
+        if (endUse)
+        {
+            player.SendUseDoneEvent();
+        }
+
+        return true;
+    }
+
+    private static bool TryRequireStableTransferTarget(Player player, WorldObject target, bool endUse)
+    {
+        if (ForgeStageDisplay.IsAllowedStage(target, ForgeStage.Stable))
+        {
+            return false;
+        }
+
+        player.Session.Network.EnqueueSend(
+            new GameMessageSystemChat(
+                $"The {target.NameWithMaterial} must be stable before it can receive a contained spell.",
+                ChatMessageType.Craft
+            )
+        );
+
+        if (endUse)
+        {
+            player.SendUseDoneEvent();
+        }
+
+        return true;
+    }
+
     public static void UseObjectOnTarget(Player player, WorldObject source, WorldObject target, bool confirmed = false)
     {
         if (source.SpellExtracted == null)
@@ -153,15 +214,8 @@ public class SpellTransference : Stackable
                 return;
             }
 
-            if (target.Retained == true)
+            if (TryRequireStableExtractionTarget(player, target, true))
             {
-                player.Session.Network.EnqueueSend(
-                    new GameMessageSystemChat(
-                        $"The {target.NameWithMaterial} is retained and cannot be dismantled for a contained spell.",
-                        ChatMessageType.Craft
-                    )
-                );
-                player.SendUseDoneEvent();
                 return;
             }
 
@@ -286,6 +340,12 @@ public class SpellTransference : Stackable
                         );
                         return;
                     }
+
+                    if (TryRequireStableExtractionTarget(player, target, false))
+                    {
+                        return;
+                    }
+
                     var pearl = WorldObjectFactory.CreateNewWorldObject(1054001);
                     var success = true;
                     var spellName = "";
@@ -390,6 +450,11 @@ public class SpellTransference : Stackable
             if (target.Workmanship == null || target.Tier == null)
             {
                 player.SendUseDoneEvent(WeenieError.YouDoNotPassCraftingRequirements);
+                return;
+            }
+
+            if (TryRequireStableTransferTarget(player, target, true))
+            {
                 return;
             }
 
@@ -596,6 +661,11 @@ public class SpellTransference : Stackable
                             player.SendTransientError(
                                 "Either you or one of the items involved does not pass the requirements for this craft interaction."
                             );
+                            return;
+                        }
+
+                        if (TryRequireStableTransferTarget(player, target, false))
+                        {
                             return;
                         }
 
