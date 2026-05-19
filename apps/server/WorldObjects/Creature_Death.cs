@@ -1022,6 +1022,16 @@ partial class Creature
                 _deathTreasureTier = Tier.Value;
             }
 
+            LootGenerationContext context = null;
+
+            if (UnstableLoot)
+            {
+                context = new LootGenerationContext
+                {
+                    UnstableLoot = true
+                };
+            }
+
             var deathTreasure = DeathTreasure;
 
             // FrigidBonus increases lootqualitymod.
@@ -1031,10 +1041,9 @@ partial class Creature
                 var fullFrigidBonus = (float)Math.Sqrt((FrigidBonus - 1.0f) / 4.0f) * 0.5f;
                 var frigidQualityBonus = (1.0f - deathTreasure.LootQualityMod) * fullFrigidBonus;
                 deathTreasure.LootQualityMod = Math.Min(1.0f, deathTreasure.LootQualityMod + frigidQualityBonus);
-                Console.WriteLine($"FB: {FrigidBonus}, fullFB: {fullFrigidBonus}, LQM: {deathTreasure.LootQualityMod}");
             }
 
-            var items = LootGenerationFactory.CreateRandomLootObjects(deathTreasure);
+            var items = LootGenerationFactory.CreateRandomLootObjects(deathTreasure, context);
 
             for (var i = items.Count - 1; i >= 0; i--)
             {

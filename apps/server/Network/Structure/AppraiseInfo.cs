@@ -925,6 +925,8 @@ public class AppraiseInfo
         // Spell proc rate ('Use' text)
         SetSpellProcRateUseText(wo);
 
+            SetForgeStageUseText(wo);
+
         // -------- WEAPON ATTACK/DEFENSE MODS --------
         _extraPropertiesText += "\n";
 
@@ -1443,6 +1445,18 @@ public class AppraiseInfo
             _extraPropertiesText += finalText + "\n";
         }
 
+        _hasExtraPropertiesText = true;
+    }
+
+    private void SetForgeStageUseText(WorldObject wo)
+    {
+        var stageLabel = ForgeStageDisplay.GetStageLabel(wo);
+        if (string.IsNullOrEmpty(stageLabel))
+        {
+            return;
+        }
+
+        _extraPropertiesText += $"\n{stageLabel}\n";
         _hasExtraPropertiesText = true;
     }
 

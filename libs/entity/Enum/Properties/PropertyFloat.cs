@@ -255,6 +255,9 @@ public enum PropertyFloat : ushort
     GearFrigidProtectionMod = 205,
 
     [ServerOnly]
+    DestabVarPercent = 205,
+
+    [ServerOnly]
     PCAPRecordedWorkmanship = 8004,
 
     [ServerOnly]

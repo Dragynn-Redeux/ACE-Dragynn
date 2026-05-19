@@ -486,7 +486,7 @@ public static partial class LootGenerationFactory
         return MinReduction + roll;
     }
 
-    private static uint GetBaseLevelCost(int tier)
+    internal static uint GetBaseLevelCost(int tier)
     {
         switch (tier)
         {
@@ -507,7 +507,7 @@ public static partial class LootGenerationFactory
         }
     }
 
-    private static int GetValuePerTier(int tier)
+    internal static int GetValuePerTier(int tier)
     {
         switch (tier)
         {

@@ -5191,6 +5191,18 @@ partial class Player
             return;
         }
 
+        if (ForgeStagingService.IsForgeTarget(target))
+        {
+            ForgeStagingService.TryHandleDirectItemFastPath(this, target, item, itemWasEquipped);
+
+            // Forge drag/drop is a use interaction, not a persisted move into the container.
+            Session.Network.EnqueueSend(new GameEventInventoryServerSaveFailed(Session, item.Guid.Full));
+
+            SendUseDoneEvent();
+
+            return;
+        }
+
         if (target is Creature brokerCreature && MarketBroker.IsMarketBroker(brokerCreature))
         {
             // Market Broker uses "Refuse" semantics (examine) for any listable item so the player keeps the item.
