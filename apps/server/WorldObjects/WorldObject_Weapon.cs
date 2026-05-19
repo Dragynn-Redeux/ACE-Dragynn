@@ -405,6 +405,13 @@ partial class WorldObject
         var critResistRatingMod = Creature.GetNegativeRatingMod(target.GetCritResistRating());
         critRate *= critResistRatingMod;
 
+        // armor imbue: ReducedCriticalHitChance
+        var armorCritReduction = target.GetArmorDefenseImbues(ImbuedEffectType.ReducedCriticalHitChance);
+        if (armorCritReduction > 0)
+        {
+            critRate *= Math.Max(0.0f, 1.0f - armorCritReduction * 0.01f);
+        }
+
         return critRate;
     }
 
@@ -455,6 +462,13 @@ partial class WorldObject
         // mitigation
         var critResistRatingMod = Creature.GetNegativeRatingMod(target.GetCritResistRating());
         critRate *= critResistRatingMod;
+
+        // armor imbue: ReducedCriticalHitChance
+        var armorCritReductionMagic = target.GetArmorDefenseImbues(ImbuedEffectType.ReducedCriticalHitChance);
+        if (armorCritReductionMagic > 0)
+        {
+            critRate *= Math.Max(0.0f, 1.0f - armorCritReductionMagic * 0.01f);
+        }
 
         return critRate;
     }

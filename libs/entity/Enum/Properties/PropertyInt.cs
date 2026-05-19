@@ -881,6 +881,9 @@ public enum PropertyInt : ushort
     PassiveThreatThreshold = 520,
 
     [ServerOnly]
+    ForgePassCount = 519,
+
+    [ServerOnly]
     PCAPRecordedAutonomousMovement = 8007,
 
     [ServerOnly]

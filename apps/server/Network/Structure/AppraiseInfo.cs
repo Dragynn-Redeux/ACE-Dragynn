@@ -865,6 +865,11 @@ public class AppraiseInfo
 
         SetStaminaReductionUseLongText(wo);
         SetFrigidResistanceUseLongText(wo);
+        SetArmorTemperingUseLongText(wo);
+        SetWardTemperingUseLongText(wo);
+        SetCriticalResistanceUseLongText(wo);
+        SetCriticalDamageResistanceUseLongText(wo);
+        SetAttuneOnEquipUseLongText(wo);
         SetNoCompsRequiredSchoolUseLongText(wo);
 
         SetGearRatingText(wo, PropertyInt.GearStrength, "Mighty Thews", "Grants +10 to current Strength, plus an additional +1 per equipped rating ((ONE) total).", 1.0f, 1.0f, 10);
@@ -924,6 +929,8 @@ public class AppraiseInfo
 
         // Spell proc rate ('Use' text)
         SetSpellProcRateUseText(wo);
+
+            SetForgeStageUseText(wo);
 
         // -------- WEAPON ATTACK/DEFENSE MODS --------
         _extraPropertiesText += "\n";
@@ -1446,6 +1453,18 @@ public class AppraiseInfo
         _hasExtraPropertiesText = true;
     }
 
+    private void SetForgeStageUseText(WorldObject wo)
+    {
+        var stageLabel = ForgeStageDisplay.GetStageLabel(wo);
+        if (string.IsNullOrEmpty(stageLabel))
+        {
+            return;
+        }
+
+        _extraPropertiesText += $"\n{stageLabel}\n";
+        _hasExtraPropertiesText = true;
+    }
+
     private void SetJewelryManaConUseText(WorldObject wo)
     {
         if (!PropertiesFloat.TryGetValue(PropertyFloat.ManaConversionMod, out var manaConversionMod) ||
@@ -1798,6 +1817,89 @@ public class AppraiseInfo
         _additionalPropertiesLongDescriptionsText +=
             $"~ Frigid Resistance {ToRoman(frigidProtection)}: Reduces damage taken from frigid temperatures by {frigidProtection}. " +
             $"This effect stacks with other sources of Frigid Resistance.{totalRatingString}\n";
+    }
+
+    private void SetArmorTemperingUseLongText(WorldObject wo)
+    {
+        if (!PropertiesInt.TryGetValue(PropertyInt.ImbuedEffect, out var imbuedEffect) ||
+            imbuedEffect != (int)ImbuedEffectType.ReducedPhysicalDamageTaken)
+        {
+            return;
+        }
+
+        var slots = PropertiesInt.TryGetValue(PropertyInt.ArmorSlots, out var armorSlots) ? armorSlots : 1;
+        var name = $"Armor Tempering {ToRoman(slots)}";
+
+        _additionalPropertiesList.Add(name);
+        _hasAdditionalProperties = true;
+        _additionalPropertiesLongDescriptionsText +=
+            $"~ {name}: Reduces physical damage taken by {slots}% ({slots} armor slot{(slots > 1 ? "s" : "")}, 1% each).\n";
+    }
+
+    private void SetWardTemperingUseLongText(WorldObject wo)
+    {
+        if (!PropertiesInt.TryGetValue(PropertyInt.ImbuedEffect, out var imbuedEffect) ||
+            imbuedEffect != (int)ImbuedEffectType.ReducedMagicalDamageTaken)
+        {
+            return;
+        }
+
+        var slots = PropertiesInt.TryGetValue(PropertyInt.ArmorSlots, out var armorSlots) ? armorSlots : 1;
+        var name = $"Ward Tempering {ToRoman(slots)}";
+
+        _additionalPropertiesList.Add(name);
+        _hasAdditionalProperties = true;
+        _additionalPropertiesLongDescriptionsText +=
+            $"~ {name}: Reduces magical damage taken by {slots}% ({slots} armor slot{(slots > 1 ? "s" : "")}, 1% each).\n";
+    }
+
+    private void SetCriticalResistanceUseLongText(WorldObject wo)
+    {
+        if (!PropertiesInt.TryGetValue(PropertyInt.ImbuedEffect, out var imbuedEffect) ||
+            imbuedEffect != (int)ImbuedEffectType.ReducedCriticalHitChance)
+        {
+            return;
+        }
+
+        var slots = PropertiesInt.TryGetValue(PropertyInt.ArmorSlots, out var armorSlots) ? armorSlots : 1;
+        var totalReduction = slots * 1;
+        var name = $"Critical Resistance {ToRoman(slots)}";
+
+        _additionalPropertiesList.Add(name);
+        _hasAdditionalProperties = true;
+        _additionalPropertiesLongDescriptionsText +=
+            $"~ {name}: Reduces enemy critical hit chance by {totalReduction}% multiplicatively (1% per armor slot).\n";
+    }
+
+    private void SetCriticalDamageResistanceUseLongText(WorldObject wo)
+    {
+        if (!PropertiesInt.TryGetValue(PropertyInt.ImbuedEffect, out var imbuedEffect) ||
+            imbuedEffect != (int)ImbuedEffectType.ReducedCriticalDamageTaken)
+        {
+            return;
+        }
+
+        var slots = PropertiesInt.TryGetValue(PropertyInt.ArmorSlots, out var armorSlots) ? armorSlots : 1;
+        var totalReduction = slots * 1;
+        var name = $"Critical Damage Resistance {ToRoman(slots)}";
+
+        _additionalPropertiesList.Add(name);
+        _hasAdditionalProperties = true;
+        _additionalPropertiesLongDescriptionsText +=
+            $"~ {name}: Reduces critical damage taken by {totalReduction}% (1% per armor slot).\n";
+    }
+
+    private void SetAttuneOnEquipUseLongText(WorldObject wo)
+    {
+        if (!(wo.GetProperty(PropertyBool.AttuneOnEquip) ?? false))
+        {
+            return;
+        }
+
+        _additionalPropertiesList.Add("Attune-on-Equip");
+        _hasAdditionalProperties = true;
+        _additionalPropertiesLongDescriptionsText +=
+            "~ Attune-on-Equip: This item will permanently attune to the first character who equips it. Once attuned, it cannot be traded.\n";
     }
 
     private void SetBitingStrikeUseLongText(WorldObject wo)

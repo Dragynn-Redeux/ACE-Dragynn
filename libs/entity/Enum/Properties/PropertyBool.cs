@@ -259,7 +259,16 @@ public enum PropertyBool : ushort
     [ServerOnly]
     SignalCrossLB = 176,
     [ServerOnly]
-    GeneratesPassiveThreat = 177,
+    UnstableLoot = 177,
+    [ServerOnly]
+    IsUnstable = 178,
+    [ServerOnly]
+    TerminalDestabilizedLock = 179,
+    [ServerOnly]
+    GeneratesPassiveThreat = 180,
+
+    [ServerOnly]
+    AttuneOnEquip = 181,
 
     /* custom */
     [ServerOnly]

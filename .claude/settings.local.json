@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(xargs grep -l \"3863\\\\|3864\\\\|3865\")",
+      "Bash(xargs grep -l \"recipe_requirements\")",
+      "Bash(grep -E \"get|=>|property|{$\")",
+      "Bash(dotnet build *)",
+      "Bash(Remove-Item \"C:\\\\Users\\\\dylan\\\\Documents\\\\GitHub\\\\daralet-ACE\\\\dist\\\\apps\\\\server\\\\net8.0\\\\Content\\\\sql\\\\recipes\\\\10020 - Offensive Imbue \\(Armor\\).sql\" -ErrorAction Stop)",
+      "Bash(Remove-Item \"C:\\\\Users\\\\dylan\\\\Documents\\\\GitHub\\\\daralet-ACE\\\\dist\\\\apps\\\\server\\\\net8.0\\\\Content\\\\sql\\\\recipes\\\\10021 - Offensive Imbue \\(Jewelry\\).sql\" -ErrorAction Stop)",
+      "Bash(Write-Output \"Deleted both SQL recipe files.\")",
+      "mcp__ide__getDiagnostics",
+      "Bash(xargs grep -li \"sunstone\")",
+      "Bash(xargs grep -li \"Sunstone\")",
+      "Bash(xargs grep -li \"short_desc\\\\|ShortDesc\\\\|Use.*imbue\\\\|tinkering\")"
+    ]
+  }
+}

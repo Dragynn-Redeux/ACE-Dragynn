@@ -939,6 +939,10 @@ partial class Creature
     /// </summary>
     public bool TryEquipObject(WorldObject worldObject, EquipMask wieldedLocation)
     {
+        if (worldObject.GetProperty(PropertyBool.IsUnstable) == true)
+        {
+            return false;
+        }
         // todo: verify wielded location is valid location
         if (!WieldedLocationIsAvailable(worldObject, wieldedLocation))
         {
@@ -1686,7 +1690,7 @@ partial class Creature
         var treasure = new List<WorldObject>();
         if (treasureDeath != null)
         {
-            treasure = LootGenerationFactory.CreateRandomLootObjects(treasureDeath);
+            treasure = LootGenerationFactory.CreateRandomLootObjects(treasureDeath, null);
         }
         else if (treasureWielded != null)
         {

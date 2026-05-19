@@ -225,7 +225,11 @@ public static class MarketBroker
             reason = "Character-bound items cannot be listed.";
             return false;
         }
-
+        if (item.GetProperty(PropertyBool.IsUnstable) == true)
+        {
+            reason = "Unstable items cannot be listed.";
+            return false;
+        }
         var t = item.ItemType;
         var ok = t == ItemType.Weapon
                  || t == ItemType.MeleeWeapon

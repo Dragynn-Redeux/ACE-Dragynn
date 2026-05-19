@@ -195,7 +195,7 @@ public static class SkillExtensions
             case Skill.Spellcraft:
                 return "Spellcraft";
             case Skill.Jewelcrafting:
-                return "Item Tinkering";
+                return "Jewelcrafting";
             case Skill.AssessPerson:
                 return "Assess Person";
             case Skill.Deception:

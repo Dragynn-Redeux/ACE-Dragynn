@@ -45,6 +45,8 @@ public class DamageEvent
     private float _criticalDamageMod;
     private float _criticalDamageRating;
     private float _criticalDamageResistanceRatingMod;
+    private float _imbuedArmorPhysicalDamageMod;
+    private float _imbuedArmorCritDamageMod;
     private bool _criticalDefendedFromAug;
     private float _damageBeforeMitigation;
     private float _damageMitigated;
@@ -1016,11 +1018,8 @@ public class DamageEvent
 
         _swarmedDamageReductionMod = GetSwarmedMod(playerDefender);
 
-        // if (playerAttacker is not null)
-        // {
-        //     Console.WriteLine(
-        //         $"{_armorMod} {ShieldMod} {_resistanceMod} {_damageResistanceRatingMod} {_evasionMod} {_specDefenseMod} {_ratingDamageTypeWard} {_ratingSelfHarm} {_ratingRedFury} {_ratingYellowFury}");
-        // }
+        _imbuedArmorPhysicalDamageMod = GetImbuedArmorPhysicalDamageMod(defender);
+        _imbuedArmorCritDamageMod = GetImbuedArmorCritDamageMod(defender);
 
         return _armorMod
                * ShieldMod
@@ -1033,7 +1032,36 @@ public class DamageEvent
                * _ratingSelfHarm
                * _ratingRedFury
                * _ratingYellowFury
-               * _swarmedDamageReductionMod;
+               * _swarmedDamageReductionMod
+               * _imbuedArmorPhysicalDamageMod
+               * _imbuedArmorCritDamageMod;
+    }
+
+    private const float ImbuedArmorPhysicalDamageReductionPerPiece = 0.01f;
+    private const float ImbuedArmorCritDamageReductionPerPiece = 0.01f;
+
+    private float GetImbuedArmorPhysicalDamageMod(Creature defender)
+    {
+        var count = defender.GetArmorDefenseImbues(ImbuedEffectType.ReducedPhysicalDamageTaken);
+        if (count > 0)
+        {
+            return Math.Max(0.5f, 1.0f - count * ImbuedArmorPhysicalDamageReductionPerPiece);
+        }
+        return 1.0f;
+    }
+
+    private float GetImbuedArmorCritDamageMod(Creature defender)
+    {
+        if (!IsCritical)
+        {
+            return 1.0f;
+        }
+        var count = defender.GetArmorDefenseImbues(ImbuedEffectType.ReducedCriticalDamageTaken);
+        if (count > 0)
+        {
+            return Math.Max(0.5f, 1.0f - count * ImbuedArmorCritDamageReductionPerPiece);
+        }
+        return 1.0f;
     }
 
     /// <summary>

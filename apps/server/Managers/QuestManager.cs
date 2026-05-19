@@ -166,6 +166,8 @@ public class QuestManager
 
     private CharacterPropertiesQuestRegistry GetOrCreateQuest(string questName, out bool questRegistryWasCreated)
     {
+        questName = NormalizeQuestNameForStorage(questName);
+
         if (Creature is Player player)
         {
             return player.Character.GetOrCreateQuest(
@@ -222,8 +224,8 @@ public class QuestManager
                 player.CharacterChangesDetected = true;
 
                 player.ContractManager.NotifyOfQuestUpdate(quest.QuestName);
-
-                SendTownQuestProgressMessage(player, quest);
+                
+                PrimeTownMessage(player, quest);
 
                 if (!quest.QuestName.Contains(","))
                 {
@@ -260,7 +262,7 @@ public class QuestManager
 
                 player.ContractManager.NotifyOfQuestUpdate(quest.QuestName);
 
-                SendTownQuestProgressMessage(player, quest);
+                PrimeTownMessage(player, quest);
 
                 if (!quest.QuestName.Contains(","))
                 {
@@ -269,10 +271,42 @@ public class QuestManager
             }
         }
     }
+    private void PrimeTownMessage(Player player, CharacterPropertiesQuestRegistry quest)
+    {
+        if (IsTownProgressQuest(quest.QuestName))
+        {
+            player.PendingTownAttunementQuestName = quest.QuestName;
+            player.PendingTownAttunementDueTime = Time.GetUnixTime() + 0.333;
+        }
+    }
+    public void FlushPendingTownMessage()
+    {
+        if (Creature is not Player player)
+        {
+            return;
+        }
 
+        var questName = player.PendingTownAttunementQuestName;
+
+        player.PendingTownAttunementQuestName = null;
+        player.PendingTownAttunementDueTime = 0;
+
+        if (string.IsNullOrEmpty(questName))
+        {
+            return;
+        }
+
+        var quest = GetQuest(questName);
+        if (quest == null)
+        {
+            return;
+        }
+
+        SendTownQuestProgressMessage(player, quest);
+    }
     private void SendTownQuestProgressMessage(Player player, CharacterPropertiesQuestRegistry quest)
     {
-        if (player is null || !QuestProgressQuestNames.Contains(quest.QuestName))
+        if (player is null || !IsTownProgressQuest(quest.QuestName))
         {
             return;
         }
@@ -304,13 +338,14 @@ public class QuestManager
         };
 
         var now = (uint)Time.GetUnixTime();
+        var resonanceExposureLabel = quest.NumTimesCompleted == 1 ? "exposure" : "exposures";
 
         // Always allow 1–4
         if (quest.NumTimesCompleted <= 4)
         {
             player.Session.Network.EnqueueSend(
                 new GameMessageSystemChat(
-                    $"Tempered by the portal energies of {townName}, a {level} resilience has taken shape within you.",
+                    $"Tempered by the portal energies of {townName}, a {level} resilience has taken shape within you. You currently have {quest.NumTimesCompleted} resonance {resonanceExposureLabel}.",
                     ChatMessageType.System
                 )
             );
@@ -362,6 +397,17 @@ public class QuestManager
 
             player.PlayParticleEffect(PlayScript.PortalStorm, player.Guid);
         }
+    }
+
+    private bool IsTownProgressQuest(string questName)
+    {
+        return QuestProgressQuestNames.Contains(questName, StringComparer.OrdinalIgnoreCase);
+    }
+
+    private string NormalizeQuestNameForStorage(string questName)
+    {
+        return QuestProgressQuestNames.FirstOrDefault(q => q.Equals(questName, StringComparison.OrdinalIgnoreCase))
+            ?? questName;
     }
 
     private readonly List<string> QuestProgressQuestNames =

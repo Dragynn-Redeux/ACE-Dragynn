@@ -4,6 +4,7 @@ using System.Text.RegularExpressions;
 using ACE.Common;
 using ACE.Entity;
 using ACE.Entity.Enum;
+using ACE.Entity.Enum.Properties;
 using ACE.Entity.Models;
 using ACE.Server.Entity;
 using ACE.Server.Entity.Actions;
@@ -50,6 +51,23 @@ public class Salvage : WorldObject
 
         if (!RecipeManager.VerifyUse(player, source, target, true) || target.Workmanship == null)
         {
+            player.SendUseDoneEvent(WeenieError.YouDoNotPassCraftingRequirements);
+            return;
+        }
+
+        if (DestabilizedLootForge.TryBlockFurtherAlteration(player, target))
+        {
+            return;
+        }
+
+        if (!ForgeStageDisplay.IsAllowedStage(target, ForgeStage.Stable))
+        {
+            player.Session.Network.EnqueueSend(
+                new GameMessageSystemChat(
+                    "That item must be stable before it can be altered.",
+                    ChatMessageType.Craft
+                )
+            );
             player.SendUseDoneEvent(WeenieError.YouDoNotPassCraftingRequirements);
             return;
         }
@@ -149,6 +167,11 @@ public class Salvage : WorldObject
 
         if (TinkeringTarget.TryGetValue(source.MaterialType, out var tinkeringSkill) && !combineSalvage)
         {
+            if (IsImbueSource(source.MaterialType))
+            {
+                tinkeringSkill = GetOffensiveImbuingSkill(target);
+            }
+
             var skill = player.GetCreatureSkill(tinkeringSkill);
 
             if (skill.AdvancementClass < SkillAdvancementClass.Trained && PropertyManager.GetBool("bypass_crafting_checks").Item == false)
@@ -172,6 +195,36 @@ public class Salvage : WorldObject
             return;
         }
 
+        // Offensive imbue limit: 1 per weapon/caster/jewelry, 1 per armor piece
+        if (!combineSalvage && IsImbueSource(source.MaterialType))
+        {
+            if (target.ItemType == ItemType.Armor || target.ItemType == ItemType.Clothing)
+            {
+                if (HasArmorDefenseImbue(target))
+                {
+                    player.Session.Network.EnqueueSend(new GameMessageSystemChat(
+                        "The armor has already been imbued.", ChatMessageType.Broadcast));
+                    player.SendUseDoneEvent(WeenieError.YouDoNotPassCraftingRequirements);
+                    return;
+                }
+            }
+            else
+            {
+                const uint offensiveFlags = (uint)(
+                    ImbuedEffectType.CriticalStrike |
+                    ImbuedEffectType.CripplingBlow  |
+                    ImbuedEffectType.ArmorRending   |
+                    ImbuedEffectType.WardRending);
+                if (((uint)target.GetImbuedEffects() & offensiveFlags) != 0)
+                {
+                    player.Session.Network.EnqueueSend(new GameMessageSystemChat(
+                        "This item has already been imbued.", ChatMessageType.Broadcast));
+                    player.SendUseDoneEvent(WeenieError.YouDoNotPassCraftingRequirements);
+                    return;
+                }
+            }
+        }
+
         var salvageWorkmanship = source.Workmanship ?? 1;
         var itemWorkmanship = target.Workmanship ?? 1;
 
@@ -193,10 +246,6 @@ public class Salvage : WorldObject
         var creatureSkill = player.GetCreatureSkill(tinkeringSkill);
         var successChance = SkillCheck.GetSkillChance((int)creatureSkill.Current, difficulty);
 
-        if (ImbueSalvage.Contains((MaterialType)source.MaterialType))
-        {
-            successChance /= 3.0f;
-        }
 
         if (PropertyManager.GetBool("bypass_crafting_checks").Item || combineSalvage)
         {
@@ -210,7 +259,7 @@ public class Salvage : WorldObject
         message =
             $"You determine that you have a {percent} percent chance to succeed and will require {salvageCost} {units} of salvage.\n\n" +
             $"This craft {craftingXpString} award xp towards your {tinkeringSkill}.";
-        
+
 
         if (combineSalvage)
         {
@@ -333,11 +382,20 @@ public class Salvage : WorldObject
 
     public static bool CheckTinkerType(Player player, WorldObject source, WorldObject target, Skill tinkeringSkill)
     {
-        if (
-            tinkeringSkill == Skill.Blacksmithing && target.ItemType == ItemType.MeleeWeapon
+        // weapon-only imbues are not yet implemented for armor or jewelry
+        if (IsWeaponOnlyImbueSource(source.MaterialType))
+        {
+            return target.ItemType == ItemType.MeleeWeapon
+                || target.ItemType == ItemType.MissileWeapon
+                || target.ItemType == ItemType.Caster
+                || target.WeenieType == WeenieType.Missile
+                || target.WeenieType == WeenieType.MissileLauncher;
+        }
+
+        if (tinkeringSkill == Skill.Blacksmithing && (
+            target.ItemType == ItemType.MeleeWeapon
             || target.WeenieType == WeenieType.Missile
-            || target.ArmorWeightClass == 4
-        )
+            || target.ArmorWeightClass == 4))
         {
             return true;
         }
@@ -966,16 +1024,38 @@ public class Salvage : WorldObject
                     target.IconUnderlayId = 0x0600335B;
                     break;
                 case ACE.Entity.Enum.MaterialType.BlackOpal:
-                    target.ImbuedEffect = ImbuedEffectType.CriticalStrike;
-                    target.IconUnderlayId = 0x06003358;
+                    if (target.ItemType == ItemType.Armor || target.ItemType == ItemType.Clothing)
+                    {
+                        target.ImbuedEffect = ImbuedEffectType.ReducedCriticalHitChance;
+                        target.IconUnderlayId = 0x06003358;
+                        successAmount = "imbuing it with Critical Resistance";
+                    }
+                    else
+                    {
+                        target.ImbuedEffect = ImbuedEffectType.CriticalStrike;
+                        target.IconUnderlayId = 0x06003358;
+                        successAmount = "imbuing it with Critical Strike";
+                    }
+                    target.SetProperty(PropertyBool.AttuneOnEquip, true);
                     break;
                 case ACE.Entity.Enum.MaterialType.Emerald:
                     target.ImbuedEffect = ImbuedEffectType.AcidRending;
                     target.IconUnderlayId = 0x06003355;
                     break;
                 case ACE.Entity.Enum.MaterialType.FireOpal:
-                    target.ImbuedEffect = ImbuedEffectType.CripplingBlow;
-                    target.IconUnderlayId = 0x06003357;
+                    if (target.ItemType == ItemType.Armor || target.ItemType == ItemType.Clothing)
+                    {
+                        target.ImbuedEffect = ImbuedEffectType.ReducedCriticalDamageTaken;
+                        target.IconUnderlayId = 0x06003357;
+                        successAmount = "imbuing it with Critical Damage Resistance";
+                    }
+                    else
+                    {
+                        target.ImbuedEffect = ImbuedEffectType.CripplingBlow;
+                        target.IconUnderlayId = 0x06003357;
+                        successAmount = "imbuing it with Crippling Blow";
+                    }
+                    target.SetProperty(PropertyBool.AttuneOnEquip, true);
                     break;
 
                 case ACE.Entity.Enum.MaterialType.ImperialTopaz:
@@ -991,12 +1071,34 @@ public class Salvage : WorldObject
                     target.IconUnderlayId = 0x06003359;
                     break;
                 case ACE.Entity.Enum.MaterialType.Sunstone:
-                    target.ImbuedEffect = ImbuedEffectType.ArmorRending;
-                    target.IconUnderlayId = 0x06003356;
+                    if (target.ItemType == ItemType.Armor || target.ItemType == ItemType.Clothing)
+                    {
+                        target.ImbuedEffect = ImbuedEffectType.ReducedPhysicalDamageTaken;
+                        target.IconUnderlayId = 0x06003356;
+                        successAmount = "imbuing it with Armor Tempering";
+                    }
+                    else
+                    {
+                        target.ImbuedEffect = ImbuedEffectType.ArmorRending;
+                        target.IconUnderlayId = 0x06003356;
+                        successAmount = "imbuing it with Armor Rending";
+                    }
+                    target.SetProperty(PropertyBool.AttuneOnEquip, true);
                     break;
                 case ACE.Entity.Enum.MaterialType.Tourmaline:
-                    target.ImbuedEffect = ImbuedEffectType.WardRending;
-                    target.IconUnderlayId = 0x06003356;
+                    if (target.ItemType == ItemType.Armor || target.ItemType == ItemType.Clothing)
+                    {
+                        target.ImbuedEffect = ImbuedEffectType.ReducedMagicalDamageTaken;
+                        target.IconUnderlayId = 0x06003356;
+                        successAmount = "imbuing it with Ward Tempering";
+                    }
+                    else
+                    {
+                        target.ImbuedEffect = ImbuedEffectType.WardRending;
+                        target.IconUnderlayId = 0x06003356;
+                        successAmount = "imbuing it with Ward Rending";
+                    }
+                    target.SetProperty(PropertyBool.AttuneOnEquip, true);
                     break;
                 case ACE.Entity.Enum.MaterialType.WhiteSapphire:
                     target.ImbuedEffect = ImbuedEffectType.BludgeonRending;
@@ -1580,4 +1682,49 @@ public class Salvage : WorldObject
         { ACE.Entity.Enum.MaterialType.Pine, Skill.Woodworking },
         { ACE.Entity.Enum.MaterialType.Teak, Skill.Woodworking }
     };
+
+    private static bool IsImbueSource(ACE.Entity.Enum.MaterialType? material) =>
+        material.HasValue && ImbueSalvage.Contains(material.Value);
+
+    private static bool IsWeaponOnlyImbueSource(ACE.Entity.Enum.MaterialType? material) =>
+        material == ACE.Entity.Enum.MaterialType.Aquamarine ||
+        material == ACE.Entity.Enum.MaterialType.BlackGarnet ||
+        material == ACE.Entity.Enum.MaterialType.Emerald ||
+        material == ACE.Entity.Enum.MaterialType.ImperialTopaz ||
+        material == ACE.Entity.Enum.MaterialType.Jet ||
+        material == ACE.Entity.Enum.MaterialType.RedGarnet ||
+        material == ACE.Entity.Enum.MaterialType.WhiteSapphire;
+
+    private static Skill GetOffensiveImbuingSkill(WorldObject target)
+    {
+        if (target.WeenieType == WeenieType.Caster)
+        {
+            return Skill.Spellcrafting;
+        }
+        if (target.WeenieType is WeenieType.MeleeWeapon or WeenieType.Missile)
+        {
+            return Skill.Blacksmithing;
+        }
+        if (target.WeenieType == WeenieType.MissileLauncher)
+        {
+            return Skill.Woodworking;
+        }
+        if (target.ItemType == ItemType.Armor || target.ItemType == ItemType.Clothing)
+        {
+            return target.ArmorWeightClass == (int)ACE.Entity.Enum.ArmorWeightClass.Heavy
+                ? Skill.Blacksmithing
+                : Skill.Tailoring;
+        }
+        return Skill.Jewelcrafting;
+    }
+
+    private static bool HasArmorDefenseImbue(WorldObject target)
+    {
+        const uint armorDefenseFlags = (uint)(
+            ImbuedEffectType.ReducedPhysicalDamageTaken |
+            ImbuedEffectType.ReducedMagicalDamageTaken  |
+            ImbuedEffectType.ReducedCriticalHitChance   |
+            ImbuedEffectType.ReducedCriticalDamageTaken);
+        return ((uint)target.GetImbuedEffects() & armorDefenseFlags) != 0;
+    }
 }
