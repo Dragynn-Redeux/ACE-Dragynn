@@ -1911,6 +1911,17 @@ partial class Creature
     }
 
     /// <summary>
+    /// Returns the effective imbue count for a particular defensive armor imbue, summing ArmorSlots for each
+    /// equipped armor piece that carries the effect. Multi-slot pieces count proportionally to their slot count.
+    /// </summary>
+    public int GetArmorDefenseImbues(ImbuedEffectType imbuedEffectType)
+    {
+        return EquippedObjects.Values
+            .Where(i => i.ItemType == ItemType.Armor && i.GetImbuedEffects().HasFlag(imbuedEffectType))
+            .Sum(i => i.GetProperty(PropertyInt.ArmorSlots) ?? 1);
+    }
+
+    /// <summary>
     /// Returns the cloak the creature has equipped,
     /// or 'null' if no cloak is equipped
     /// </summary>

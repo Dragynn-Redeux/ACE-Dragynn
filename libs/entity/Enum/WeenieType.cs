@@ -88,5 +88,8 @@ public enum WeenieType : uint
     BezelTool,
     DungeonModder,
     TrophySolvent,
-    TrophyEssence
+    TrophyEssence,
+    StabilizationDevice,
+    ResonanceForge,
+    Destabilizer
 }

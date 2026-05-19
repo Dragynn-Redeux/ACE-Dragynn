@@ -44,7 +44,7 @@ public class CreateInventoryLoot
         for (var i = 0; i < numItems; i++)
         {
             //var wo = LootGenerationFactory.CreateRandomLootObjects(profile, true);
-            var wo = LootGenerationFactory.CreateRandomLootObjects_New(profile, TreasureItemCategory.MagicItem);
+            var wo = LootGenerationFactory.CreateRandomLootObjects_New(profile, TreasureItemCategory.MagicItem, null);
             if (wo != null)
             {
                 session.Player.TryCreateInInventoryWithNetworking(wo);
