@@ -804,6 +804,8 @@ public static class DefaultPropertyManager
 
         ("road_speed_buff", new Property<bool>(true, "if TRUE, players receive a run speed buff while travelling on wilderness roads")),
 
+        ("frigid_damage", new Property<bool>(true, "if TRUE, players standing on snow terrain above elevation 200 take Frigid damage each heartbeat")),
+
         ("debug_threat_system", new Property<bool>(false, "enable this to see threat system console logging")),
         ("debug_crafting_system", new Property<bool>(false, "enable this to see crafting system console logging")),
         ("debug_loot_quality_system", new Property<bool>(false, "enable this to see loot quality system console logging")),

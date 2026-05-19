@@ -189,9 +189,21 @@ internal sealed class MarketSnapshotRenderer
                     const int embedHardLimit = 6000;
                     const int safety = 32;
                     var currentLen = 0;
-                    if (!string.IsNullOrEmpty(sectionEmbed.Title)) currentLen += sectionEmbed.Title.Length;
-                    if (!string.IsNullOrEmpty(sectionEmbed.Description)) currentLen += sectionEmbed.Description.Length;
-                    if (sectionEmbed.Footer != null && !string.IsNullOrEmpty(sectionEmbed.Footer.Text)) currentLen += sectionEmbed.Footer.Text.Length;
+                    if (!string.IsNullOrEmpty(sectionEmbed.Title))
+                    {
+                        currentLen += sectionEmbed.Title.Length;
+                    }
+
+                    if (!string.IsNullOrEmpty(sectionEmbed.Description))
+                    {
+                        currentLen += sectionEmbed.Description.Length;
+                    }
+
+                    if (sectionEmbed.Footer != null && !string.IsNullOrEmpty(sectionEmbed.Footer.Text))
+                    {
+                        currentLen += sectionEmbed.Footer.Text.Length;
+                    }
+
                     if (sectionEmbed.Fields != null)
                     {
                         foreach (var f in sectionEmbed.Fields)

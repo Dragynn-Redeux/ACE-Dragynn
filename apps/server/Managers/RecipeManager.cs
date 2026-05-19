@@ -861,6 +861,10 @@ public partial class RecipeManager
                 Ammunition.HandleAmmoSharpening(player, source, target);
                 break;
 
+            case 0x39000005: // Frigid Shard - GearFrigidProtection
+                target.SetProperty(PropertyInt.GearFrigidProtection, (target.GetProperty(PropertyInt.GearFrigidProtection) ?? 0) + 1);
+                break;
+
             default:
                 _log.Error(
                     $"{player.Name}.RecipeManager.Tinkering_ModifyItem({source.Name} ({source.Guid}), {target.Name} ({target.Guid})) - unknown mutation id: {dataId:X8}"
@@ -987,6 +991,11 @@ public partial class RecipeManager
             return false;
         }
 
+        if (!VerifyCustomRequirements(recipe, player, source, target))
+        {
+            return false;
+        }
+
         if (!VerifyRequirements(recipe, player, target, RequirementType.Target))
         {
             return false;
@@ -1003,6 +1012,30 @@ public partial class RecipeManager
         }
 
         // if (!RequiresEqualOrGreaterWork(player, source, target)) return false;
+
+        return true;
+    }
+
+    /// <summary>
+    /// Handles dynamic recipe requirements that cannot be expressed as static
+    /// <c>recipe_requirements_int</c> entries because they compare two per-item properties.
+    /// Add a new <c>case</c> here for each recipe that needs such a check.
+    /// </summary>
+    private static bool VerifyCustomRequirements(Recipe recipe, Player player, WorldObject source, WorldObject target)
+    {
+        switch (recipe.Id)
+        {
+            case 10011: // Frigid Shard - GearFrigidProtection must be < ArmorSlots
+                var currentFrigid = target.GetProperty(PropertyInt.GearFrigidProtection) ?? 0;
+                var armorSlots = target.GetProperty(PropertyInt.ArmorSlots) ?? 1;
+                if (currentFrigid >= armorSlots)
+                {
+                    player.Session.Network.EnqueueSend(new GameMessageSystemChat(
+                        "The armor has already reached its maximum Frigid Resistance capacity.", ChatMessageType.Craft));
+                    return false;
+                }
+                break;
+        }
 
         return true;
     }

@@ -68,7 +68,7 @@ partial class Player
         }
         else
         {
-            nearbyMsg = deathMessage.Broadcast;
+            nearbyMsg = string.Format(deathMessage.Broadcast, Name);
         }
 
         var broadcastMsg = new GameMessagePlayerKilled(nearbyMsg, Guid, lastDamager?.Guid ?? ObjectGuid.Invalid);

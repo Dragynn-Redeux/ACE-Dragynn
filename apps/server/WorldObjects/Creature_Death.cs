@@ -42,6 +42,7 @@ partial class Creature
     private bool onDeathEntered = false;
 
     private float SpellStackBonus = 1.0f;
+    private double FrigidBonus = 1.0;
 
     /// <summary>
     /// Called when a monster or player dies, in conjunction with Die()
@@ -1031,7 +1032,18 @@ partial class Creature
                 };
             }
 
-            var items = LootGenerationFactory.CreateRandomLootObjects(DeathTreasure, context);
+            var deathTreasure = DeathTreasure;
+
+            // FrigidBonus increases lootqualitymod.
+            // Strong diminishing returns, cap of 0.5 at FrigidBonus = 5.0
+            if (FrigidBonus > 1.0f)
+            {
+                var fullFrigidBonus = (float)Math.Sqrt((FrigidBonus - 1.0f) / 4.0f) * 0.5f;
+                var frigidQualityBonus = (1.0f - deathTreasure.LootQualityMod) * fullFrigidBonus;
+                deathTreasure.LootQualityMod = Math.Min(1.0f, deathTreasure.LootQualityMod + frigidQualityBonus);
+            }
+
+            var items = LootGenerationFactory.CreateRandomLootObjects(deathTreasure, context);
 
             for (var i = items.Count - 1; i >= 0; i--)
             {
@@ -1118,25 +1130,50 @@ partial class Creature
                 )
                 .ToList();
 
-            SpellStackBonus = GetSpellStackBonus(killer);
+            if (StackableSpellType > StackableSpellTables.StackableSpellType.None)
+            {
+                SpellStackBonus = GetSpellStackBonus(killer);
+            }
+
+            var frigidDropBonus =  (float)(1.0f + (FrigidBonus - 1) * 2.0f);
+
+            var dropRateBonus = 1.0f + (SpellStackBonus - 1.0f) + (frigidDropBonus - 1.0f);
 
             var selected = new List<PropertiesCreateList>();
-
-            if (SpellStackBonus != 1.0f && StackableSpellType > StackableSpellTables.StackableSpellType.None)
-            {
-                selected = CreateListSelect(createList, SpellStackBonus);
-            }
-            else
-            {
-                selected = CreateListSelect(createList);
-            }
-
+            selected = CreateListSelect(createList, dropRateBonus);
+            
             if (selected.Count > 0)
             {
+                var createdObjects = new List<WorldObject>();
                 foreach (var item in selected)
                 {
-                    var wo = WorldObjectFactory.CreateNewWorldObject(item, Tier ?? 1);
+                    var wo = WorldObjectFactory.CreateNewWorldObject(item, Tier ?? 1, frigidDropBonus);
+                    if (wo != null)
+                    {
+                        createdObjects.Add(wo);
+                    }
+                }
 
+                // Merge identical stackable items — can produce duplicates when overflow
+                // guaranteed draws select the same entry more than once.
+                for (var i = createdObjects.Count - 1; i >= 0; i--)
+                {
+                    if ((createdObjects[i].MaxStackSize ?? 1) > 1)
+                    {
+                        for (var j = 0; j < i; j++)
+                        {
+                            if (createdObjects[j].WeenieClassId == createdObjects[i].WeenieClassId)
+                            {
+                                createdObjects[j].SetStackSize((createdObjects[j].StackSize ?? 1) + (createdObjects[i].StackSize ?? 1));
+                                createdObjects.RemoveAt(i);
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                foreach (var wo in createdObjects)
+                {
                     if (corpse != null)
                     {
                         corpse.TryAddToInventory(wo);
@@ -1415,7 +1452,7 @@ partial class Creature
             QuestManager.Stamp($"KilledByTracking-{lastDamager.Name}");
         }
 
-        if (lastDamager.IsPlayer && Name is not null)
+        if (lastDamager is { IsPlayer: true } && Name is not null)
         {
             //var creatureName = Name.Replace(" ", "");
             lastDamager.Player.QuestManager.Stamp($"KilledTracking-{Name}");

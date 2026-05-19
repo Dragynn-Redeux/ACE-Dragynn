@@ -143,6 +143,7 @@ partial class Player
         // check if vassals earned XP while offline
         HandleAllegianceOnLogin();
         HandleHouseOnLogin();
+        ContractManager.HandleContractsOnLogin();
 
         // retail appeared to send the squelch list very early,
         // even before the CreatePlayer, but doing it here

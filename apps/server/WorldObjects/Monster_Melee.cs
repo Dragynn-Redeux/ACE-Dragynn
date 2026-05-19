@@ -706,20 +706,16 @@ partial class Creature
         {
             armorBane = IgnoreMagicArmorScaled(armorBane);
         }
-
-        if (resistance < 1.0f)
-        {
-            var jewelBaneRating = ArmorProfile.GetJewelBaneRating(armor, damageType);
-            resistance += jewelBaneRating;
-
-            if (resistance > 1.0f)
-            {
-                resistance = 1.0f;
-            }
-        }
-
+        
         // Console.WriteLine("Bane: " + armorBane);
         var effectiveRL = (float)(resistance + armorBane);
+
+        // jewelrating: direct below 1.0, diminishing returns above 1.0, hard cap at 1.5
+        var jewelBaneRating = ArmorProfile.GetJewelBaneRating(armor, damageType);
+        var directPortion = Math.Clamp(1.0f - effectiveRL, 0.0f, jewelBaneRating);
+        var excessPortion = jewelBaneRating - directPortion;
+        var postDirect = effectiveRL + directPortion;
+        effectiveRL = Math.Min(postDirect + excessPortion * (1.5f - postDirect), 1.5f);
 
         // resistance clamp
         effectiveRL = Math.Clamp(effectiveRL, -2.0f, 2.0f);

@@ -9633,4 +9633,42 @@ partial class WorldObject
             }
         }
     }
+
+    /// <summary>
+    /// Percentage (0.0–1.0) of Frigid damage reduction granted to the wielder.
+    /// </summary>
+    public double? GearFrigidProtectionMod
+    {
+        get => GetProperty(PropertyFloat.GearFrigidProtectionMod);
+        set
+        {
+            if (!value.HasValue)
+            {
+                RemoveProperty(PropertyFloat.GearFrigidProtectionMod);
+            }
+            else
+            {
+                SetProperty(PropertyFloat.GearFrigidProtectionMod, value.Value);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Flat Frigid damage reduction applied to the wielder after percentage reduction.
+    /// </summary>
+    public int? GearFrigidProtection
+    {
+        get => GetProperty(PropertyInt.GearFrigidProtection);
+        set
+        {
+            if (!value.HasValue)
+            {
+                RemoveProperty(PropertyInt.GearFrigidProtection);
+            }
+            else
+            {
+                SetProperty(PropertyInt.GearFrigidProtection, value.Value);
+            }
+        }
+    }
 }
