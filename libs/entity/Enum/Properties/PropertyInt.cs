@@ -874,14 +874,16 @@ public enum PropertyInt : ushort
 
     [ServerOnly]
     MarketListingId = 515,
-
     TrophyEssenceSpellId = 516,
     TrophyEssenceSkill = 517,
     TrophyEssenceEffectType = 518,
     GearFrigidProtection = 519,
-
+    
     [ServerOnly]
-    ForgePassCount = 519,
+    ForgePassCount = 520,
+    
+    [ServerOnly]
+    PassiveThreatThreshold = 521,
 
     [ServerOnly]
     PCAPRecordedAutonomousMovement = 8007,
