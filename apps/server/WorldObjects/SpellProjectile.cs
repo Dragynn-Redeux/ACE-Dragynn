@@ -897,6 +897,15 @@ public class SpellProjectile : WorldObject
                 finalDamage *= monsterSpellDamageMultiplier;
             }
 
+        // armor imbue: reduced physical/magical damage taken
+        finalDamage *= GetImbuedArmorSpellDamageMod(target);
+
+        // armor imbue: reduced critical damage taken
+        if (criticalHit)
+        {
+            finalDamage *= GetImbuedArmorCritSpellDamageMod(target);
+        }
+
         //if (sourcePlayer is not null)
         //{
         //    Console.WriteLine($"\n{sourceCreature.Name} casted {Spell.Name} on {target.Name} for {Math.Round(finalDamage, 0)}.\n" +
@@ -994,6 +1003,26 @@ public class SpellProjectile : WorldObject
     /// <summary>
     /// SPEC BONUS - War Magic (Wand/Baton): +50% crit damage (additively)
     /// </summary>
+    private float GetImbuedArmorSpellDamageMod(Creature target)
+    {
+        var count = target.GetArmorDefenseImbues(ImbuedEffectType.ReducedMagicalDamageTaken);
+        if (count > 0)
+        {
+            return Math.Max(0.5f, 1.0f - count * 0.01f);
+        }
+        return 1.0f;
+    }
+
+    private float GetImbuedArmorCritSpellDamageMod(Creature target)
+    {
+        var count = target.GetArmorDefenseImbues(ImbuedEffectType.ReducedCriticalDamageTaken);
+        if (count > 0)
+        {
+            return Math.Max(0.5f, 1.0f - count * 0.01f);
+        }
+        return 1.0f;
+    }
+
     private static float CheckForWarMagicSpecCriticalDamageBonus(Player sourcePlayer, WorldObject weapon)
     {
         if (sourcePlayer == null || weapon == null)
