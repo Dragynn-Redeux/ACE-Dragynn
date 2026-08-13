@@ -2039,7 +2039,21 @@ public class EmoteManager
 
                 if (creature != null)
                 {
-                    creature.UpdateProperty(creature, (PropertyFloat)emote.Stat, emote.Percent);
+                    var property = (PropertyFloat)emote.Stat;
+
+                    creature.UpdateProperty(creature, property, emote.Percent);
+
+                    if (property == PropertyFloat.Translucency)
+                    {
+                        creature.EnqueueBroadcast(
+                            false,
+                            new GameMessagePublicUpdatePropertyFloat(
+                                creature,
+                                property,
+                                Convert.ToDouble(emote.Percent)
+                            )
+                        );
+                    }
                 }
                 break;
             case EmoteType.SetMyBoolStat:
