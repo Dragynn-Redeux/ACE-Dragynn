@@ -29,6 +29,12 @@ public struct ObjectGuid
     public static uint StaticObjectMin { get; } = 0x70000000;
     public static uint StaticObjectMax { get; } = 0x7FFFFFFF;
 
+    // Static objects in an instance can't keep the guid they have in the world db, because every instance of the landblock
+    // would get the same one. They get one from this range instead, which is part of the static range so they stay static.
+    // No landblock has an X of 0xFF (0xFE is the last), so nothing in the world db uses this part of the static range.
+    public static uint EphemeralStaticMin { get; } = 0x7FF00000;
+    public static uint EphemeralStaticMax { get; } = 0x7FFFFFFF;
+
     // These represent items are generated in the world. Some of them will be saved to the Shard db.
     public static uint DynamicMin { get; } = 0x80000000;
     public static uint DynamicMax { get; } = 0xFFFFFFFE; // Ends at E because uint.Max is reserved for "invalid"
@@ -46,6 +52,15 @@ public struct ObjectGuid
     public static bool IsDynamic(uint guid)
     {
         return (guid >= DynamicMin && guid <= DynamicMax);
+    }
+
+    /// <summary>
+    /// True for the guid of a static object that only exists for as long as an instance does.
+    /// These are also static (<see cref="IsStatic(uint)"/>), so everything that treats static objects specially still does.
+    /// </summary>
+    public static bool IsEphemeralStatic(uint guid)
+    {
+        return (guid >= EphemeralStaticMin && guid <= EphemeralStaticMax);
     }
 
     public uint Full { get; }
@@ -88,6 +103,11 @@ public struct ObjectGuid
     public bool IsDynamic()
     {
         return Type == GuidType.Dynamic;
+    }
+
+    public bool IsEphemeralStatic()
+    {
+        return IsEphemeralStatic(Full);
     }
 
     public static bool operator ==(ObjectGuid g1, ObjectGuid g2)

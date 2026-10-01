@@ -212,13 +212,13 @@ public sealed class PatrolComponent
         nextPos.PositionY = basePos.Pos.Y + offset.Dy;
 
         // Update cell before terrain lookup.
-        nextPos.LandblockId = new LandblockId(nextPos.GetCell());
+        nextPos.LandblockId = new LandblockId(nextPos.GetCell(_creature.InstanceId));
 
         // Terrain height accounts for hills.
-        nextPos.PositionZ = nextPos.GetTerrainZ();
+        nextPos.PositionZ = nextPos.GetTerrainZ(_creature.InstanceId);
 
         // Update cell again after Z assignment.
-        nextPos.LandblockId = new LandblockId(nextPos.GetCell());
+        nextPos.LandblockId = new LandblockId(nextPos.GetCell(_creature.InstanceId));
 
         // Pause: fixed override on waypoint, otherwise weenie random default range.
         _pauseOnArrivalSeconds = offset.PauseSeconds ?? GetDefaultPauseSeconds();
@@ -301,7 +301,7 @@ public sealed class PatrolComponent
 
         for (var i = 0; i < _path.Count; i++)
         {
-            var wp = BuildWaypoint(basePos, _path[i]);
+            var wp = BuildWaypoint(basePos, _path[i], _creature.InstanceId);
 
             var dx = _creature.Location.Pos.X - wp.Pos.X;
             var dy = _creature.Location.Pos.Y - wp.Pos.Y;
@@ -343,16 +343,16 @@ public sealed class PatrolComponent
 
     }
 
-    private static Position BuildWaypoint(Position basePos, PatrolOffset offset)
+    private static Position BuildWaypoint(Position basePos, PatrolOffset offset, uint instance)
     {
         var nextPos = new Position(basePos);
 
         nextPos.PositionX = basePos.Pos.X + offset.Dx;
         nextPos.PositionY = basePos.Pos.Y + offset.Dy;
 
-        nextPos.LandblockId = new LandblockId(nextPos.GetCell());
-        nextPos.PositionZ = nextPos.GetTerrainZ();
-        nextPos.LandblockId = new LandblockId(nextPos.GetCell());
+        nextPos.LandblockId = new LandblockId(nextPos.GetCell(instance));
+        nextPos.PositionZ = nextPos.GetTerrainZ(instance);
+        nextPos.LandblockId = new LandblockId(nextPos.GetCell(instance));
 
         return nextPos;
     }
@@ -407,9 +407,9 @@ public sealed class PatrolComponent
             detour.PositionX = detour.Pos.X + ox;
             detour.PositionY = detour.Pos.Y + oy;
 
-            detour.LandblockId = new LandblockId(detour.GetCell());
-            detour.PositionZ = detour.GetTerrainZ();
-            detour.LandblockId = new LandblockId(detour.GetCell());
+            detour.LandblockId = new LandblockId(detour.GetCell(_creature.InstanceId));
+            detour.PositionZ = detour.GetTerrainZ(_creature.InstanceId);
+            detour.LandblockId = new LandblockId(detour.GetCell(_creature.InstanceId));
 
             _detouring = true;
             _currentDest = detour;

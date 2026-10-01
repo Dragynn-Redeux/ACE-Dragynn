@@ -31,6 +31,16 @@ partial class Player
         //Console.WriteLine($"\n{Name}.HandleActionBuyHouse()");
         _log.Information($"[HOUSE] {Name}.HandleActionBuyHouse()");
 
+        // A house in an instance is a copy that nothing keeps, with a guid that is only good for as long as the instance is. Whoever bought it
+        // would be saved as the owner of a house that does not exist.
+        if (InstanceId != 0)
+        {
+            Session.Network.EnqueueSend(
+                new GameMessageSystemChat("You can't do that here.", ChatMessageType.Broadcast)
+            );
+            return;
+        }
+
         // verify player doesn't already own a house
         var houseInstance = GetHouseInstance();
 
@@ -240,6 +250,16 @@ partial class Player
         _log.Information(
             $"[HOUSE] {Name}.HandleActionRentHouse({slumlord_id:X8}, {string.Join(", ", item_ids.Select(i => i.ToString("X8")))})"
         );
+
+        // A house in an instance is a copy that nothing keeps, with a guid that is only good for as long as the instance is. Whoever bought it
+        // would be saved as the owner of a house that does not exist.
+        if (InstanceId != 0)
+        {
+            Session.Network.EnqueueSend(
+                new GameMessageSystemChat("You can't do that here.", ChatMessageType.Broadcast)
+            );
+            return;
+        }
 
         var slumlord = FindObject(slumlord_id, SearchLocations.Landblock) as SlumLord;
         if (slumlord == null)

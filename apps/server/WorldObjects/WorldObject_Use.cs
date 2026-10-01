@@ -209,7 +209,8 @@ partial class WorldObject
 
         if (!(this is Creature) && ActivationTarget > 0)
         {
-            var activationTarget = CurrentLandblock?.GetObject(new ObjectGuid(ActivationTarget));
+            // the guid can be one the weenie has from the world database, which in an instance is not the guid the target has there
+            var activationTarget = CurrentLandblock?.GetObjectFromWorldGuid(ActivationTarget);
             if (activationTarget != null)
             {
                 activationTarget.OnActivate(activator);

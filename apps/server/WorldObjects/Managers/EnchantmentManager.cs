@@ -644,6 +644,18 @@ public class EnchantmentManager
     }
 
     /// <summary>
+    /// Changes the StatModValue of an enchantment already in the registry,
+    /// for enchantments whose strength is set by the server instead of by their spell (ie. gear bonuses).
+    /// Does not send the updated enchantment to the client.
+    /// </summary>
+    public virtual void SetStatModValue(PropertiesEnchantmentRegistry entry, float statModValue)
+    {
+        entry.StatModValue = statModValue;
+
+        WorldObject.ChangesDetected = true;
+    }
+
+    /// <summary>
     /// Silently removes a spell from the enchantment registry, and sends the relevant network message for dispel
     /// </summary>
     public virtual void Dispel(PropertiesEnchantmentRegistry entry)
@@ -1944,6 +1956,11 @@ public class EnchantmentManager
             //    $" -FinalTickAmount: {tickAmount * resistanceMod * wardMod * damageResistRatingMod * dotResistRatingMod * bleedResistance * levelScalingMod * overloadDamageMod * batteryDamageMod}");
 
             tickAmount *= resistanceMod * wardMod * damageResistRatingMod * dotResistRatingMod * bleedResistance * levelScalingMod * overloadDamageMod * batteryDamageMod;
+
+            if (creature.Invulnerable)
+            {
+                tickAmount = 0.0f;
+            }
 
             // make sure the target's current health is not exceeded
             if (tickAmountTotal + tickAmount >= creature.Health.Current)

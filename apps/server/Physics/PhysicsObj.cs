@@ -51,6 +51,24 @@ public class PhysicsObj
     public Position Position;
     public ObjCell CurCell;
     public Landblock CurLandblock;
+
+    private uint instance;
+
+    /// <summary>
+    /// The instance this object is in, or is about to enter. 0 is the persistent world.<para />
+    /// Every cell this object looks up by id is looked up in this instance. The server object that owns this sets it
+    /// before the object is placed. Static objects made by a landblock take it from the cell they are added to.
+    /// </summary>
+    public uint Instance
+    {
+        get => instance;
+        set
+        {
+            instance = value;
+            CellArray.Instance = value;
+        }
+    }
+
     public int NumShadowObjects;
     public Dictionary<uint, ShadowObj> ShadowObjects;
     public PhysicsState State;
@@ -266,10 +284,10 @@ public class PhysicsObj
         if (cellID < 0x100)
         {
             LandDefs.AdjustToOutside(position);
-            return ObjCell.GetVisible(position.ObjCellID);
+            return ObjCell.GetVisible(position.ObjCellID, Instance);
         }
 
-        var visibleCell = (EnvCell)ObjCell.GetVisible(position.ObjCellID);
+        var visibleCell = (EnvCell)ObjCell.GetVisible(position.ObjCellID, Instance);
         if (visibleCell == null)
         {
             return null;
@@ -289,7 +307,7 @@ public class PhysicsObj
         }
 
         position.adjust_to_outside();
-        return ObjCell.GetVisible(position.ObjCellID);
+        return ObjCell.GetVisible(position.ObjCellID, Instance);
     }
 
     public bool CacheHasPhysicsBSP()
@@ -1843,7 +1861,12 @@ public class PhysicsObj
                 LandDefs.AdjustToOutside(newPos);
 
                 // ensure walkable slope
-                var landcell = (LandCell)LScape.get_landcell(newPos.ObjCellID);
+                // null if this is next to the landblock the object is in, and that one is not in the instance
+                var landcell = LScape.get_landcell(newPos.ObjCellID, Instance) as LandCell;
+                if (landcell == null)
+                {
+                    continue;
+                }
 
                 Polygon walkable = null;
                 var terrainPoly = landcell.find_terrain_poly(newPos.Frame.Origin, ref walkable);
@@ -1857,11 +1880,16 @@ public class PhysicsObj
                 // compare: rabbits occasionally spawning in buildings in yaraq,
                 // vs. lich tower @ 3D31FFFF
 
-                var sortCell = LScape.get_landcell(newPos.ObjCellID) as SortCell;
+                var sortCell = LScape.get_landcell(newPos.ObjCellID, Instance) as SortCell;
                 if (sortCell == null || !sortCell.has_building())
                 {
                     // set to ground pos
-                    var landblock = LScape.get_landblock(newPos.ObjCellID);
+                    var landblock = LScape.get_landblock(newPos.ObjCellID, Instance);
+                    if (landblock == null)
+                    {
+                        continue;
+                    }
+
                     var groundZ = landblock.GetZ(newPos.Frame.Origin) + 0.05f;
 
                     if (Math.Abs(newPos.Frame.Origin.Z - groundZ) > ScatterThreshold_Z)
@@ -1897,7 +1925,12 @@ public class PhysicsObj
             }
             if (indoors)
             {
-                var landblock = LScape.get_landblock(newPos.ObjCellID);
+                var landblock = LScape.get_landblock(newPos.ObjCellID, Instance);
+                if (landblock == null)
+                {
+                    continue;
+                }
+
                 var envcells = landblock.get_envcells();
                 var found = false;
                 foreach (var envCell in envcells)
@@ -2575,6 +2608,13 @@ public class PhysicsObj
 
     public void add_obj_to_cell(ObjCell newCell, AFrame newFrame)
     {
+        // A static object made by a landblock belongs to the instance of the cell it is put in,
+        // and every cell lookup below has to happen in that instance
+        if (DatObject)
+        {
+            Instance = newCell.Instance;
+        }
+
         enter_cell(newCell);
 
         Position.Frame = newFrame;
@@ -2734,7 +2774,7 @@ public class PhysicsObj
         sphere.Center.Z = attackCone.Height * Scale;
         sphere.Radius = AttackManager.AttackRadius + attackCone.Radius * Scale;
 
-        var cellArray = new CellArray();
+        var cellArray = new CellArray { Instance = Instance };
         ObjCell.find_cell_list(Position, sphere, cellArray, null);
 
         var attackInfo = AttackManager.NewAttack(attackCone.PartIdx);
@@ -3156,6 +3196,30 @@ public class PhysicsObj
         }
     }
 
+    private static int instanceMismatchReports;
+
+    /// <summary>
+    /// A server object ended up in a cell that belongs to a different instance than the object.
+    /// That only happens when the cell was looked up in the wrong instance, so it is reported, with a stack trace, a few times.
+    /// </summary>
+    private void ReportInstanceMismatch(ObjCell newCell)
+    {
+        if (System.Threading.Interlocked.Increment(ref instanceMismatchReports) > 25)
+        {
+            return;
+        }
+
+        _log.Error(
+            "[INSTANCE] {Name} ({Id:X8}) in instance {Instance} entered cell {CellId:X8} of instance {CellInstance}. That cell was looked up in the wrong instance.\n{StackTrace}",
+            Name,
+            ID,
+            Instance,
+            newCell.ID,
+            newCell.Instance,
+            Environment.StackTrace
+        );
+    }
+
     public void enter_cell(ObjCell newCell)
     {
         if (PartArray == null)
@@ -3176,9 +3240,23 @@ public class PhysicsObj
             PartArray.SetCellID(newCell.ID);
         }
 
+        // A cell belongs to the instance of its landblock. Static objects made by a landblock join the instance of the cell they are put in.
+        // Anything else that ends up in a cell from a different instance had that cell looked up in the wrong instance.
+        if (newCell.Instance != Instance)
+        {
+            if (DatObject)
+            {
+                Instance = newCell.Instance;
+            }
+            else
+            {
+                ReportInstanceMismatch(newCell);
+            }
+        }
+
         if (!DatObject && newCell != null)
         {
-            CurLandblock = LScape.get_landblock(newCell.ID);
+            CurLandblock = LScape.get_landblock(newCell.ID, newCell.Instance);
             if (CurLandblock != null)
             {
                 CurLandblock.add_server_object(this);
@@ -3929,6 +4007,21 @@ public class PhysicsObj
         return obj;
     }
 
+    /// <summary>
+    /// Makes the object that direct line of sight is tested with, in the instance of the object that is looking.<para />
+    /// A transition looks up every cell in the instance of the object it moves, so a sight object left in the persistent world
+    /// would test against the persistent copy of an instanced landblock (loading it on demand), where the target never is.
+    /// </summary>
+    public static PhysicsObj makeSightObject(uint dataDID, uint instance)
+    {
+        var obj = makeObject(dataDID, 0, false, true);
+
+        obj.Instance = instance;
+        obj.State |= PhysicsState.Missile;
+
+        return obj;
+    }
+
     public static PhysicsObj makeParticleObject(int numParts, Sphere sortingSphere)
     {
         var particle = new PhysicsObj();
@@ -4617,9 +4710,10 @@ public class PhysicsObj
         Position.ObjCellID = newPos.ObjCellID;
         Position.Frame = new AFrame(newPos.Frame);
 
-        if (CurCell == null || CurCell.ID != Position.ObjCellID)
+        // a cell of another instance is a different cell, even if it has the same id
+        if (CurCell == null || CurCell.ID != Position.ObjCellID || CurCell.Instance != Instance)
         {
-            var newCell = LScape.get_landcell(newPos.ObjCellID);
+            var newCell = LScape.get_landcell(newPos.ObjCellID, Instance);
 
             if (WeenieObj.WorldObject is Player player && player.LastContact && newCell is LandCell landCell)
             {
@@ -5104,7 +5198,7 @@ public class PhysicsObj
 
         if (CurCell == null)
         {
-            CurCell = LScape.get_landcell(blockCellID);
+            CurCell = LScape.get_landcell(blockCellID, Instance);
             if (CurCell == null)
             {
                 return;
@@ -5113,7 +5207,7 @@ public class PhysicsObj
 
         if (cell == null)
         {
-            RequestPos.ObjCellID = RequestPos.GetCell(CurCell.ID);
+            RequestPos.ObjCellID = RequestPos.GetCell(CurCell.ID, Instance);
         }
         else
         {

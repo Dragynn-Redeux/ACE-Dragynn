@@ -109,6 +109,8 @@ partial class Player
 
         CheckRoadSpeedBuff(currentUnixTime);
 
+        UpdateStealthDetectionLevel(currentUnixTime);
+
         if (House != null && PropertyManager.GetBool("house_rent_enabled").Item)
         {
             if (houseRentWarnTimestamp > 0 && currentUnixTime > houseRentWarnTimestamp)
@@ -177,7 +179,7 @@ partial class Player
             return;
         }
 
-        var physLandblock = LScape.get_landblock(PhysicsObj.Position.ObjCellID);
+        var physLandblock = LScape.get_landblock(PhysicsObj.Position.ObjCellID, InstanceId);
         if (physLandblock == null)
         {
             RemoveRoadSpeedBuff();
@@ -250,7 +252,7 @@ partial class Player
             return;
         }
 
-        var physLandblock = LScape.get_landblock(PhysicsObj.Position.ObjCellID);
+        var physLandblock = LScape.get_landblock(PhysicsObj.Position.ObjCellID, InstanceId);
         if (physLandblock == null || !physLandblock.NearSnow(PhysicsObj.Position.Frame.Origin, 50f))
         {
             return;
@@ -737,11 +739,20 @@ partial class Player
 
             var success = true;
 
+            // anti-blink: set when the closed-door scan runs for this move, so the on-door-plane candidate it
+            // computes can be committed once (and only if) the move is actually accepted further down
+            var doorCheckRan = false;
+            uint onPlaneCandidate = 0;
+
             if (PhysicsObj != null)
             {
                 var distSq = Location.SquaredDistanceTo(newPosition);
 
-                if (distSq > PhysicsGlobals.EpsilonSq)
+                // A player who has been moved to another instance is still in a cell of the instance they left until the physics update runs.
+                // That has to happen even if they are moving to exactly the place they are at.
+                var inWrongInstance = PhysicsObj.CurCell != null && PhysicsObj.CurCell.Instance != InstanceId;
+
+                if (distSq > PhysicsGlobals.EpsilonSq || inWrongInstance)
                 {
                     /*var p = new Physics.Common.Position(newPosition);
                     var dist = PhysicsObj.Position.Distance(p);
@@ -777,9 +788,29 @@ partial class Player
                         {
                             verifyContact = true;
                         }
+
+                        // verify closed doors - a client plugin can delete a door from its own world and walk
+                        // through it. Player movement is client-authoritative (Location is assigned from
+                        // newPosition below, and update_object_server force-sets RequestPos over the transition
+                        // result), so this is the only place the server compares the requested path against door
+                        // state it owns. Cloaked staff are exempt.
+                        if (
+                            PropertyManager.GetBool("anti_blink_door_detection").Item
+                            && CloakStatus != CloakStatus.On
+                        )
+                        {
+                            var blockingDoor = CheckDoorCollision(Location, newPosition, out onPlaneCandidate);
+                            doorCheckRan = true;
+
+                            if (blockingDoor != null)
+                            {
+                                HandleBlinkDetection(blockingDoor, newPosition);
+                                return false;
+                            }
+                        }
                     }
 
-                    var curCell = LScape.get_landcell(newPosition.Cell);
+                    var curCell = LScape.get_landcell(newPosition.Cell, InstanceId);
                     if (curCell != null)
                     {
                         //if (PhysicsObj.CurCell == null || curCell.ID != PhysicsObj.CurCell.ID)
@@ -823,6 +854,17 @@ partial class Player
 
                         CheckMonsters();
                     }
+                    else if (!InstanceManager.CanEnter(InstanceId, newPosition.LandblockId))
+                    {
+                        // There is nothing there. The client walks by itself and knows the whole world, so it has gone past the edge of what
+                        // this instance is made of (or, in the persistent world, into a landblock that only exists in instances). Physics stops
+                        // at the edge, so the client has to be put back, the same way as when its height is not possible. If the position were
+                        // let through, the client would be somewhere the server does not have, it would throw away everything it was shown
+                        // (the server would still think it has it, and would not send it again), and the player would keep going.
+                        Sequences.GetNextSequence(SequenceType.ObjectForcePosition);
+                        SendUpdatePosition();
+                        return false;
+                    }
                 }
                 else
                 {
@@ -845,6 +887,14 @@ partial class Player
 
             Location = newPosition;
 
+            // newPosition is only committed to Location here, past every later rejection path above (the z-hack
+            // rubber-band, the instance-edge put-back, and `if (!success) return false;`) - so the on-door-plane
+            // candidate CheckDoorCollision computed for it is only now safe to commit.
+            if (doorCheckRan)
+            {
+                CommitOnDoorPlaneRecord(onPlaneCandidate);
+            }
+
             if (RecordCast.Enabled)
             {
                 RecordCast.Log($"CurPos: {Location.ToLOCString()}");
@@ -865,6 +915,12 @@ partial class Player
             if (!InUpdate)
             {
                 LandblockManager.RelocateObjectForPhysics(this, true);
+            }
+
+            // an instance can have a margin that players are turned back from, and has to know where they last were inside it
+            if (InstanceId != LScape.PersistentInstance && !Teleporting)
+            {
+                InstanceManager.OnPlayerMoved(this);
             }
 
             return landblockUpdate;
@@ -898,6 +954,307 @@ partial class Player
         }
     }
 
+    #region Anti-blink door detection
+
+    // Ported from ACE-DreamWeave (https://github.com/Awful-Waffle-Rofl/ACE-DreamWeave, AGPL-3.0). Differences from
+    // the original: the pure geometry lives in AntiBlinkGeometry (Player's static initializers need the world
+    // database, so tests cannot touch Player statics), instances are compared through WorldObject.InstanceId
+    // (Daralet does not carry an instance on Position), and Daralet's extra instance-edge rejection path in
+    // UpdatePlayerPosition is covered by the same commit-after-accept ordering as the others.
+
+    /// <summary>
+    /// Rate limit for the player-facing notice and the audit record, so a client that keeps re-sending a
+    /// rejected position cannot spam either. The rubber-band itself is never rate limited.
+    /// </summary>
+    private DateTime lastBlinkNoticeTime = DateTime.MinValue;
+
+    private static readonly TimeSpan BlinkNoticeCooldown = TimeSpan.FromSeconds(5);
+
+    /// <summary>Door whose plane the last ACCEPTED position sat on (within DoorPlaneTolerance), 0 if none.</summary>
+    private uint onDoorPlaneGuid;
+
+    /// <summary>Unix time the player first arrived on that door's plane. Compared against Door.CloseTimestamp.</summary>
+    private double onDoorPlaneSince;
+
+    /// <summary>
+    /// Returns the closed door the requested movement passes through, or null if it passes through none.
+    /// Also computes the on-door-plane candidate for the position movement is TARGETING, via
+    /// <paramref name="onPlaneCandidateGuid"/> (0 if none) - it does NOT write onDoorPlaneGuid/onDoorPlaneSince
+    /// itself, because this position is not yet accepted: UpdatePlayerPosition still has later rejection paths
+    /// after this call returns null (the z-hack rubber-band under verifyContact/IsJumping, the instance-edge
+    /// put-back, and `if (!success) return false;` after update_object_server), any of which would otherwise let
+    /// a rejected position stamp a stale timestamp that could later satisfy IsLegitimatelyOnDoorPlane for a door
+    /// the player never actually reached. The caller commits the candidate only once the move sticks, via
+    /// CommitOnDoorPlaneRecord. This scan only runs while anti_blink_door_detection is on, so the record goes
+    /// stale while the flag is off - toggling it back on while someone stands in a doorway enforces against them
+    /// once, which is acceptable.
+    /// </summary>
+    private Door CheckDoorCollision(
+        ACE.Entity.Position oldPosition,
+        ACE.Entity.Position newPosition,
+        out uint onPlaneCandidateGuid
+    )
+    {
+        onPlaneCandidateGuid = 0;
+
+        if (CurrentLandblock == null || oldPosition == null || newPosition == null || PhysicsObj?.ObjMaint == null)
+        {
+            return null;
+        }
+
+        var debug = PropertyManager.GetBool("anti_blink_debug").Item;
+        var doorWidth = (float)PropertyManager.GetDouble("anti_blink_door_width", 3.0).Item;
+        var zHeightLimit = (float)PropertyManager.GetDouble("anti_blink_z_height_limit", 2.0).Item;
+
+        var pathStart = AntiBlinkGeometry.GetGlobalPos(oldPosition);
+        var pathEnd = AntiBlinkGeometry.GetGlobalPos(newPosition);
+
+        var checkedDoors = 0;
+
+        Door blockingDoor = null;
+
+        // the visible set is built from this player's own landblock and cells, so it is already scoped to
+        // their instance; the InstanceId comparison below is belt-and-braces against another instance leaking in
+        foreach (var obj in PhysicsObj.ObjMaint.GetVisibleObjectsValues())
+        {
+            if (obj.WeenieObj?.WorldObject is not Door door)
+            {
+                continue;
+            }
+
+            // IsOpen goes false the instant Close() starts, but Ethereal only clears when the animation
+            // finishes in FinalizeClose - a player already in the doorway as it swings shut is not blinking
+            if (door.IsOpen || door.Ethereal == true)
+            {
+                continue;
+            }
+
+            var doorPos = door.Location;
+
+            if (doorPos == null || door.InstanceId != InstanceId)
+            {
+                continue;
+            }
+
+            // multi-floor guard: a door a storey above or below the lower end of this path is not on it
+            if (
+                !AntiBlinkGeometry.IsDoorWithinZ(
+                    doorPos.PositionZ,
+                    oldPosition.PositionZ,
+                    newPosition.PositionZ,
+                    zHeightLimit
+                )
+            )
+            {
+                continue;
+            }
+
+            checkedDoors++;
+
+            var doorSegment = AntiBlinkGeometry.GetDoorSegment(doorPos, doorWidth);
+
+            // If the player is ALREADY standing on this door's plane AND got there before it closed - they
+            // were in an open doorway when it swung shut - then every move they make crosses it, in both
+            // directions, and enforcing it would wedge them there permanently. A player who arrived on the
+            // plane after CloseTimestamp got there through a door their client had already deleted.
+            if (
+                AntiBlinkGeometry.DistanceToSegmentSq(pathStart, doorSegment.Start, doorSegment.End)
+                    < AntiBlinkGeometry.DoorPlaneToleranceSq
+                && AntiBlinkGeometry.IsLegitimatelyOnDoorPlane(
+                    onDoorPlaneGuid,
+                    onDoorPlaneSince,
+                    door.Guid.Full,
+                    door.CloseTimestamp
+                )
+            )
+            {
+                if (debug)
+                {
+                    _log.Information(
+                        "[BLINK DEBUG] {PlayerName} already on the plane of '{DoorName}' (0x{DoorGuid:X8}) since before it closed - not enforced",
+                        Name,
+                        door.Name,
+                        door.Guid.Full
+                    );
+                }
+
+                continue;
+            }
+
+            var intersection = AntiBlinkGeometry.GetSegmentIntersection(
+                pathStart,
+                pathEnd,
+                doorSegment.Start,
+                doorSegment.End
+            );
+
+            if (intersection == null)
+            {
+                continue;
+            }
+
+            if (debug)
+            {
+                _log.Information(
+                    "[BLINK DEBUG] {PlayerName} path crosses '{DoorName}' (0x{DoorGuid:X8}) at ({CrossX:F2}, {CrossY:F2})",
+                    Name,
+                    door.Name,
+                    door.Guid.Full,
+                    intersection.Value.X,
+                    intersection.Value.Y
+                );
+            }
+
+            blockingDoor = door;
+            break;
+        }
+
+        if (blockingDoor == null)
+        {
+            onPlaneCandidateGuid = FindOnDoorPlaneCandidate(
+                pathEnd,
+                oldPosition,
+                newPosition,
+                doorWidth,
+                zHeightLimit
+            );
+
+            if (debug)
+            {
+                _log.Information(
+                    "[BLINK DEBUG] {PlayerName} - {CheckedDoors} closed doors in range, no crossing, {From} -> {To}",
+                    Name,
+                    checkedDoors,
+                    oldPosition.ToLOCString(),
+                    newPosition.ToLOCString()
+                );
+            }
+        }
+
+        return blockingDoor;
+    }
+
+    /// <summary>
+    /// Finds the guid of the door (0 if none) whose plane the position movement is TARGETING would end up
+    /// standing on. Candidates include OPEN doors too (unlike CheckDoorCollision's blocking scan), since a
+    /// player can legitimately end up standing on the plane of a door that is currently open. Pure lookup -
+    /// does not touch onDoorPlaneGuid/onDoorPlaneSince; see CheckDoorCollision's doc comment for why.
+    /// </summary>
+    private uint FindOnDoorPlaneCandidate(
+        Vector2 pathEnd,
+        ACE.Entity.Position oldPosition,
+        ACE.Entity.Position newPosition,
+        float doorWidth,
+        float zHeightLimit
+    )
+    {
+        foreach (var obj in PhysicsObj.ObjMaint.GetVisibleObjectsValues())
+        {
+            if (obj.WeenieObj?.WorldObject is not Door door)
+            {
+                continue;
+            }
+
+            var doorPos = door.Location;
+
+            if (doorPos == null || door.InstanceId != InstanceId)
+            {
+                continue;
+            }
+
+            if (
+                !AntiBlinkGeometry.IsDoorWithinZ(
+                    doorPos.PositionZ,
+                    oldPosition.PositionZ,
+                    newPosition.PositionZ,
+                    zHeightLimit
+                )
+            )
+            {
+                continue;
+            }
+
+            var doorSegment = AntiBlinkGeometry.GetDoorSegment(doorPos, doorWidth);
+
+            if (
+                AntiBlinkGeometry.DistanceToSegmentSq(pathEnd, doorSegment.Start, doorSegment.End)
+                < AntiBlinkGeometry.DoorPlaneToleranceSq
+            )
+            {
+                return door.Guid.Full;
+            }
+        }
+
+        return 0;
+    }
+
+    /// <summary>
+    /// Commits an on-door-plane candidate computed by CheckDoorCollision, once the position it was computed
+    /// for has actually been accepted as the player's new Location. Applying NextOnDoorPlaneRecord here -
+    /// not inside CheckDoorCollision - is what keeps a later-rejected position from stamping
+    /// onDoorPlaneSince for a plane the player never reached.
+    /// </summary>
+    private void CommitOnDoorPlaneRecord(uint candidateGuid)
+    {
+        var next = AntiBlinkGeometry.NextOnDoorPlaneRecord(
+            onDoorPlaneGuid,
+            onDoorPlaneSince,
+            candidateGuid,
+            Time.GetUnixTime()
+        );
+
+        onDoorPlaneGuid = next.Guid;
+        onDoorPlaneSince = next.Since;
+    }
+
+    /// <summary>
+    /// Rubber-bands the player back to their last valid position and records the attempt.
+    /// </summary>
+    private void HandleBlinkDetection(Door door, ACE.Entity.Position rejectedPosition)
+    {
+        var now = DateTime.UtcNow;
+
+        if (now - lastBlinkNoticeTime >= BlinkNoticeCooldown)
+        {
+            lastBlinkNoticeTime = now;
+
+            var doorName = door.Name ?? "unknown door";
+            var doorLoc = door.Location?.ToLOCString() ?? "unknown";
+
+            _log.Warning(
+                "[BLINK] {PlayerName} (0x{PlayerGuid:X8}, account {AccountName}) crossed closed door '{DoorName}' at {DoorLoc} - rejected {From} -> {To}",
+                Name,
+                Guid.Full,
+                Account?.AccountName,
+                doorName,
+                doorLoc,
+                Location.ToLOCString(),
+                rejectedPosition.ToLOCString()
+            );
+
+            PlayerManager.BroadcastToAuditChannel(
+                null,
+                $"[BLINK] {Name} (account {Account?.AccountName}) crossed closed door '{doorName}' at {doorLoc}"
+            );
+
+            Session?.Network?.EnqueueSend(
+                new GameMessageSystemChat(
+                    "Blink detected, relocating to last known valid position",
+                    ChatMessageType.Broadcast
+                )
+            );
+        }
+
+        // Location is left exactly as it is, and that IS the rubber-band: the assignment from newPosition
+        // happens further down UpdatePlayerPosition, after this check has already returned false, so
+        // Location still holds the last position the server accepted. All that is needed is to bump the
+        // force-position sequence and tell the client to go back to where the server still has them.
+        Sequences.GetNextSequence(SequenceType.ObjectForcePosition);
+        SendUpdatePosition();
+    }
+
+    #endregion
+
     private static HashSet<uint> buggedCells = new HashSet<uint>() { 0xD6990112, 0xD599012C };
 
     public bool ValidateMovement(ACE.Entity.Position newPosition)
@@ -919,7 +1276,7 @@ partial class Player
 
             if (CurrentLandblock.IsDungeon)
             {
-                var destBlock = LScape.get_landblock(newPosition.Cell);
+                var destBlock = LScape.get_landblock(newPosition.Cell, InstanceId);
                 if (destBlock != null && destBlock.IsDungeon)
                 {
                     return false;

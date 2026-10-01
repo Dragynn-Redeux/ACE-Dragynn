@@ -93,6 +93,8 @@ public partial class ShardDbContext : DbContext
 
     public virtual DbSet<AccountWealthSnapshot> AccountWealthSnapshots { get; set; }
 
+    public virtual DbSet<BankActivity> BankActivities { get; set; }
+
     public DbSet<ResonanceZoneRow> ResonanceZoneEntries { get; set; }
 
     public virtual DbSet<PlayerMarketListing> PlayerMarketListings { get; set; } = null!;
@@ -1407,6 +1409,20 @@ public partial class ShardDbContext : DbContext
                 .HasColumnName("session_ip");
             entity.Property(e => e.LoginDateTime)
                 .HasColumnName("login_date_time");
+        });
+
+        modelBuilder.Entity<BankActivity>(entity =>
+        {
+            entity.ToTable("bank_activity_log");
+            entity.HasKey(e => e.Id).HasName("PRIMARY");
+            entity.HasIndex(e => new { e.AccountId, e.Id }, "idx_bank_activity_log_account_id");
+            entity.Property(e => e.Id).HasColumnName("id");
+            entity.Property(e => e.AccountId).HasColumnName("account_id");
+            entity.Property(e => e.CharacterId).HasColumnName("character_id");
+            entity.Property(e => e.CharacterName).HasColumnName("character_name").HasMaxLength(50);
+            entity.Property(e => e.Action).HasColumnName("action").HasMaxLength(20);
+            entity.Property(e => e.Details).HasColumnName("details").HasMaxLength(500);
+            entity.Property(e => e.CreatedAtUtc).HasColumnName("created_at_utc");
         });
 
         // Market listing

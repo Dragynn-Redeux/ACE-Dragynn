@@ -18,6 +18,11 @@ public class EncounterRemove
     )]
     public static void HandleRemoveEnc(Session session, params string[] parameters)
     {
+        if (RefusedInAnInstance(session))
+        {
+            return;
+        }
+
         var obj = CommandHandlerHelper.GetLastAppraisedObject(session);
 
         if (obj == null)

@@ -211,6 +211,7 @@ public static class WeenieExtensions
             case WeenieType.UpgradeKit:
             case WeenieType.TrophySolvent:
             case WeenieType.BezelTool:
+            case WeenieType.BezelFragment:
             case WeenieType.WeaponRelic:
 
                 return true;

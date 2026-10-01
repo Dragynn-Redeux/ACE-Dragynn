@@ -1,4 +1,3 @@
-using System;
 using System.Collections;
 using System.Collections.Generic;
 
@@ -29,24 +28,9 @@ class LandblockGroupSplitHelper : IEnumerable<Landblock>
     {
         foreach (var value in landblocks)
         {
-            var distance = Math.Max(
-                Math.Abs(value.Id.LandblockX - landblock.Id.LandblockX),
-                Math.Abs(value.Id.LandblockY - landblock.Id.LandblockY)
-            );
-
-            if (value.IsDormant || landblock.IsDormant)
+            if (LandblockGroup.CanShareGroup(value, landblock))
             {
-                if (distance < LandblockGroup.LandblockGroupMinSpacingWhenDormant)
-                {
-                    return true;
-                }
-            }
-            else
-            {
-                if (distance < LandblockGroup.LandblockGroupMinSpacing)
-                {
-                    return true;
-                }
+                return true;
             }
         }
 

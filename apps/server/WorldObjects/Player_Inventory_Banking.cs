@@ -1,6 +1,8 @@
 ﻿using System.Linq;
 using ACE.Entity.Enum;
+using ACE.Server.Entity;
 using ACE.Server.Managers;
+using ACE.Server.Network.GameMessages.Messages;
 using ACE.Server.WorldObjects.Logging;
 
 namespace ACE.Server.WorldObjects;
@@ -42,6 +44,8 @@ public partial class Player
             return;
         }
 
+        LogBankMove(item, item.StackSize ?? 1, sourceContainerRootOwner, targetContainerRootOwner);
+
         var bankLogPlayer = new BankLogPlayer(Name, Account.AccountId);
         var bankLogItem = new BankLogItem(item.Name, item.Guid.Full, item.StackSize, item.PlacementPosition);
         var bankLogSourceContainer = new BankLogContainer(sourceContainer.Name, sourceContainer.Guid.Full);
@@ -56,6 +60,12 @@ public partial class Player
             if (item is Container itemAsContainer)
             {
                 itemAsContainer.IsBankSideContainer = true;
+
+                // plain packs and Trophy Packs hold more in the bank; the client learns the new size from the object
+                if (BankPackExpansion.ApplyInBank(itemAsContainer))
+                {
+                    Session.Network.EnqueueSend(new GameMessageUpdateObject(itemAsContainer));
+                }
             }
 
             item.BankAccountId = Account.AccountId;
@@ -134,6 +144,12 @@ public partial class Player
             if (item is Container itemContainer)
             {
                 itemContainer.IsBankSideContainer = false;
+
+                // back to its own size (HandleActionPutItemInContainer_Verify refused it if it held more)
+                if (BankPackExpansion.Revert(itemContainer))
+                {
+                    Session.Network.EnqueueSend(new GameMessageUpdateObject(itemContainer));
+                }
             }
 
             item.BankAccountId = 0;
@@ -245,6 +261,8 @@ public partial class Player
             return;
         }
 
+        LogBankMove(item, item.StackSize ?? 1, sourceContainer as Storage ?? sourceContainer.Container as Storage, this);
+
         var bankLogPlayer = new BankLogPlayer(Name, Account.AccountId);
         var bankLogItem = new BankLogItem(item.Name, item.Guid.Full, item.StackSize, item.PlacementPosition);
         var bankLogSourceContainer = new BankLogContainer(sourceContainer.Name, sourceContainer.Guid.Full);
@@ -322,6 +340,8 @@ public partial class Player
         {
             return;
         }
+
+        LogBankMove(newStack, newStack.StackSize ?? 1, sourceContainerRootOwner, targetContainerRootOwner);
 
         var bankLogPlayer = new BankLogPlayer(Name, Account.AccountId);
         var bankLogSourceStack = new BankLogItem(
@@ -535,6 +555,7 @@ public partial class Player
     private void CheckForBankSplitAndMerge(
         WorldObject sourceStack,
         WorldObject targetStack,
+        int amount,
         Container sourceContainer,
         Container targetContainer,
         Container sourceStackRootOwner,
@@ -572,6 +593,8 @@ public partial class Player
         {
             return;
         }
+
+        LogBankMove(sourceStack, amount, sourceStackRootOwner, targetStackRootOwner);
 
         //  MERGE stack from PLAYER to BANK-MAIN
         if (

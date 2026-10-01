@@ -26,7 +26,7 @@ public class TeleTo
         // If the player is found, teleport the admin to the Player's location
         if (player != null)
         {
-            session.Player.Teleport(player.Location);
+            session.Player.Teleport(player.Location, instanceId: player.InstanceId);
         }
         else
         {

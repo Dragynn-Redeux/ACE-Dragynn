@@ -979,7 +979,7 @@ partial class Creature
 
         if (weapon == null || ((weapon.IgnoreShield ?? 0) == 0 && !weapon.IsTwoHanded))
         {
-            if (this is Player {PhalanxIsActive: true})
+            if (this is Player {PhalanxIsEffective: true})
             {
                 bypassShieldAngleCheck = true;
             }
@@ -1092,7 +1092,7 @@ partial class Creature
     /// <item>Spec - Perception: Up to 50% chance to avoid sneak attack.</item>
     /// <item>Spec - Deception: Up to 50% chance to sneak attack from the front.</item>
     /// <item>Spec - Thievery: Increased angle to land sneak attacks to up to 270 degrees.</item>
-    /// <item>Ability - Backstab: Increased sneak attack damage to 50%, to 100% if target has full health.</item>
+    /// <item>Ability - Backstab: your next sneak attack within the activation window deals 100% more damage instead of the normal bonus.</item>
     /// </list>
     /// </summary>
     public float GetSneakAttackMod(WorldObject target)
@@ -1143,32 +1143,37 @@ partial class Creature
             }
         }
 
-        if (this as Player is { IsAttackFromStealth: true})
+        if (this as Player is { IsAttackFromStealth: true } or { ShadowFlurryIsActive: true })
         {
             behind = true;
         }
 
         var multiplier = 1.25f;
 
-        // COMBAT ABILITY - Backstab: Sneak attack damage increased to 50% if nearby.
-        if (this as Player is { BackstabIsActive: true })
-        {
-            var targetIsNearby = GetDistance(creatureTarget) < 10;
-
-            if (targetIsNearby)
-            {
-                multiplier = 1.5f;
-            }
-        }
-
         if (behind)
         {
+            // COMBAT ABILITY - Backstab: your next sneak attack within the activation
+            // window deals 100% more damage, replacing the normal sneak attack bonus.
+            // A stealth attack instead gets its range-based 2.0x-3.0x bonus from
+            // GetStealthBackstabDamageMultiplier, so don't also apply the flat bonus here.
+            if (this as Player is { BackstabIsActive: true, BackstabSingleUseIsActive: true } player)
+            {
+                if (!player.IsAttackFromStealth)
+                {
+                    multiplier = 2.0f;
+                }
+
+                player.BackstabSingleUseIsActive = false;
+                player.CancelShadowFlurry();
+            }
+
             if (target is not Player targetPlayer)
             {
                 return multiplier;
             }
 
-            if (targetPlayer is {PhalanxIsActive: true} && (targetPlayer.GetEquippedShield() != null || targetPlayer.GetEquippedWeapon() is { IsTwoHanded: true}))
+            // COMBAT ABILITY - Phalanx: cannot be sneak attacked
+            if (targetPlayer is { PhalanxIsEffective: true })
             {
                 return 1.0f;
             }
@@ -2053,12 +2058,29 @@ partial class Creature
     /// </summary>
     public static float GetStealthBackstabDamageMultiplier(Player playerAttacker, Creature target)
     {
-        if (playerAttacker is not { BackstabIsActive: true, IsAttackFromStealth: true })
+        if (playerAttacker is null)
+        {
+            return 1.0f;
+        }
+
+        // Consume the flag here regardless of outcome - this is the one attack that
+        // followed the stealth break, so it shouldn't linger and grant this bonus to
+        // some unrelated later attack just because Backstab wasn't active yet this swing.
+        var wasAttackFromStealth = playerAttacker.IsAttackFromStealth;
+        playerAttacker.IsAttackFromStealth = false;
+
+        if (!wasAttackFromStealth || !playerAttacker.BackstabIsActive)
         {
             return 1.0f;
         }
 
         if (target is null || !playerAttacker.IsBehindTargetCreature(target))
+        {
+            return 1.0f;
+        }
+
+        // COMBAT ABILITY - Phalanx: cannot be sneak attacked, including backstabs from stealth
+        if (target is Player { PhalanxIsEffective: true })
         {
             return 1.0f;
         }
@@ -2093,7 +2115,6 @@ partial class Creature
             new GameMessageSystemChat(message, ChatMessageType.Broadcast)
         );
 
-        playerAttacker.IsAttackFromStealth = false;
         return multiplier;
     }
 }

@@ -132,6 +132,12 @@ public partial class Container : WorldObject
             UseRadius = 0.5f;
         }
 
+        // Side packs can be inscribed, so players can tag them for /bank: "weapons", "armor, jewelry", "keep", ...
+        if (WeenieType == WeenieType.Container && !Inscribable)
+        {
+            Inscribable = true;
+        }
+
         IsOpen = false;
     }
 
@@ -252,6 +258,25 @@ public partial class Container : WorldObject
                 SetProperty(PropertyInt.MerchandiseItemTypes, value.Value);
             }
         }
+    }
+
+    /// <summary>
+    /// SPECIALIZED PACKS: False if this container only takes some item types and the item is not one of them.
+    /// Ammunition counts as a fletching intermediate and salvage as a tinkering material.
+    /// </summary>
+    public bool CanHoldItemType(WorldObject item)
+    {
+        var containerValidTypes = (ItemType)(MerchandiseItemTypes ?? 0);
+        if (containerValidTypes == 0)
+        {
+            return true;
+        }
+
+        var itemType = item.WeenieType == WeenieType.Ammunition ? ItemType.CraftFletchingIntermediate
+            : item.WeenieType == WeenieType.Salvage ? ItemType.TinkeringMaterial
+            : item.ItemType;
+
+        return (itemType & containerValidTypes) != 0;
     }
 
     public int GetFreeInventorySlots(bool includeSidePacks = true)

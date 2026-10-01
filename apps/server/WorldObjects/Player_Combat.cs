@@ -40,8 +40,6 @@ partial class Player
 
     public DateTime NextRefillTime;
 
-    private DamageType LastHitReceivedDamageType;
-
     public double LastPkAttackTimestamp
     {
         get => GetProperty(PropertyFloat.LastPkAttackTimestamp) ?? 0;
@@ -436,10 +434,11 @@ partial class Player
     public override uint GetEffectiveAttackSkill()
     {
         var weapon = GetEquippedWeapon();
-        var attackSkill = GetCreatureSkill(GetCurrentWeaponSkill()).Current;
+        var weaponSkill = GetCurrentWeaponSkill();
+        var attackSkill = GetCreatureSkill(weaponSkill).Current;
         double? offenseMod = 1.0;
 
-        offenseMod = GetWeaponOffenseModifier(this) + GetArmorAttackMod();
+        offenseMod = GetWeaponOffenseModifier(this) + GetGearAttackModNotInCurrent(weaponSkill);
 
         var accuracyMod = GetAccuracySkillMod(weapon);
 
@@ -833,14 +832,6 @@ partial class Player
         return GetCombatType() == CombatType.Missile ? AccuracyLevel : PowerLevel;
     }
 
-    /// <summary>
-    /// Up to double proc chance based on power/accuracy bar amount
-    /// </summary>
-    public float ScaleWithPowerAccuracyBar(float value)
-    {
-        return 1.0f + GetPowerAccuracyBar();
-    }
-
     public Sound GetHitSound(WorldObject source, BodyPart bodyPart)
     {
         /*var creature = source as Creature;
@@ -1029,8 +1020,6 @@ partial class Player
             return (int)damageTaken;
         }
 
-        LastHitReceivedDamageType = damageType;
-
         if (!BodyParts.Indices.TryGetValue(bodyPart, out var iDamageLocation))
         {
             _log.Error(
@@ -1195,7 +1184,7 @@ partial class Player
             player.PlayParticleEffect(PlayScript.RestrictionEffectBlue, player.Guid, vfxIntensity);
             player.UpdateVitalDelta(player.Mana, (int)-Math.Round(manaDamage));
             player.UpdateVitalDelta(player.Health, (int)-finalAmount);
-            player.DamageHistory.Add(source, damageType, (uint)-finalAmount);
+            player.DamageHistory.Add(source, damageType, finalAmount);
         }
         // if not enough mana, barrier falls and player takes remainder of damage as health
         else
@@ -1220,7 +1209,7 @@ partial class Player
             finalAmount = (uint)((amount * (1 - manaBarrierDamageReduction)) + manaRemainder);
             player.UpdateVitalDelta(player.Mana, (int)-(player.Mana.Current - 1));
             player.UpdateVitalDelta(player.Health, (int)-(finalAmount));
-            player.DamageHistory.Add(source, damageType, (uint)-finalAmount);
+            player.DamageHistory.Add(source, damageType, finalAmount);
         }
 
         return finalAmount;
@@ -1372,7 +1361,7 @@ partial class Player
 
         // ability penalty mods are additive with each other
         var evasiveStancePenaltyMod = GetEvasiveStanceStaminaPenalty();
-        var phalanxPenaltyMod = PhalanxIsActive ? 0.25f : 0.0f;
+        var phalanxPenaltyMod = PhalanxIsEffective ? 0.25f : 0.0f;
         var provokePenaltyMod = ProvokeIsActive ? 0.25f : 0.0f;
         var ripostePenaltyMod = RiposteIsActive ? 0.25f : 0.0f;
         var furyPenaltyMod = FuryEnrageIsActive ? 0.25f : 0.0f;
@@ -1380,6 +1369,7 @@ partial class Player
         var steadyStrikePenaltyMod = SteadyStrikeIsActive ? 0.25f : 0.0f;
         var smokescreenPenaltyMod = SmokescreenIsActive ? 0.25f : 0.0f;
         var backstabPenaltyMod = BackstabIsActive ? 0.25f : 0.0f;
+        var shadowFlurryPenaltyMod = ShadowFlurryIsActive ? 0.25f : 0.0f;
         var abilityPenaltyMod = 1.0f
                                 + evasiveStancePenaltyMod
                                 + phalanxPenaltyMod
@@ -1389,7 +1379,8 @@ partial class Player
                                 + multiShotPenaltyMod
                                 + steadyStrikePenaltyMod
                                 + smokescreenPenaltyMod
-                                + backstabPenaltyMod;
+                                + backstabPenaltyMod
+                                + shadowFlurryPenaltyMod;
 
         baseCost *= staminaCostReductionMod * abilityPenaltyMod;
 

@@ -283,6 +283,9 @@ partial class Player
             );
 
             Session.Network.EnqueueSend(updateSkill, skillCredits, msg);
+
+            // weapon skills only carry the gear attack bonus while trained
+            UpdateArmorModBuffs();
         }
         else
         {

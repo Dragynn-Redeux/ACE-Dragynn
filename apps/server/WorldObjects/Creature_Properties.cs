@@ -559,7 +559,7 @@ partial class Creature
         var meleeDefSkill = GetCreatureSkill(Skill.PhysicalDefense);
         // Hardened Fortification (Diamond) is a ramping physical damage reduction applied in
         // DamageEvent.GetRatingHardenedDefenseDamageResistanceBonus(), not a defense-skill bonus.
-        var armorMeleeDefSkillMod = (GetArmorPhysicalDefMod() ?? 0) + 1;
+        var armorMeleeDefSkillMod = GetGearSkillModNotInCurrent(Skill.PhysicalDefense) + 1;
         var weaponPhysicalDefenseSkillMod = GetWeaponPhysicalDefenseModifier(this) - 1.0f;
         var tempMeleeDefSkill = meleeDefSkill.Current * (armorMeleeDefSkillMod + weaponPhysicalDefenseSkillMod);
         var moddedMeleeDefSkill = (uint)tempMeleeDefSkill;
@@ -589,7 +589,7 @@ partial class Creature
         // Nullification (Amethyst) is a ramping spell-damage reduction applied in
         // WorldObject_Magic.CheckForRatingNullificationBoostDefenseBonus() and the spell-projectile
         // absorb path, not a magic-defense-skill bonus.
-        var armorMagicDefSkillMod = (GetArmorMagicDefMod() ?? 0) + 1;
+        var armorMagicDefSkillMod = GetGearSkillModNotInCurrent(Skill.MagicDefense) + 1;
         var weaponMagicDefSkillMod = GetWeaponMagicDefenseModifier(this) - 1.0f;
         var tempMagicDefSkill = magicDefSkill.Current * (armorMagicDefSkillMod + weaponMagicDefSkillMod);
         var moddedMagicDefSkill = (uint)tempMagicDefSkill;
@@ -618,7 +618,7 @@ partial class Creature
     public uint GetModdedRunSkill()
     {
         var runSkill = GetCreatureSkill(Skill.Run);
-        var armorRunSkillMod = (GetArmorRunMod() ?? 0) + 1;
+        var armorRunSkillMod = GetGearSkillModNotInCurrent(Skill.Run) + 1;
         var tempRunSkill = runSkill.Current * armorRunSkillMod;
         var moddedRunSkill = (uint)tempRunSkill;
 
@@ -644,7 +644,7 @@ partial class Creature
     public uint GetModdedDualWieldSkill()
     {
         var dualWieldSkill = GetCreatureSkill(Skill.DualWield);
-        var armorDualWieldSkillMod = (GetArmorDualWieldMod() ?? 0) + 1;
+        var armorDualWieldSkillMod = GetGearSkillModNotInCurrent(Skill.DualWield) + 1;
         var tempDualWieldSkill = dualWieldSkill.Current * armorDualWieldSkillMod;
         var moddedDualWieldSkill = (uint)tempDualWieldSkill;
 
@@ -670,7 +670,7 @@ partial class Creature
     public uint GetModdedTwohandedCombatSkill()
     {
         var twohandedCombatSkill = GetCreatureSkill(Skill.TwoHandedCombat);
-        var armorTwohandedCombatSkillMod = (GetArmorTwohandedCombatMod() ?? 0) + 1;
+        var armorTwohandedCombatSkillMod = GetGearSkillModNotInCurrent(Skill.TwoHandedCombat) + 1;
         var tempTwohandedCombatSkill = twohandedCombatSkill.Current * armorTwohandedCombatSkillMod;
         var moddedTwohandedCombatSkill = (uint)tempTwohandedCombatSkill;
 
@@ -696,7 +696,7 @@ partial class Creature
     public uint GetModdedThieverySkill()
     {
         var thieverySkill = GetCreatureSkill(Skill.Thievery); // Thievery
-        var armorThieverySkillMod = (GetArmorThieveryMod() ?? 0) + 1;
+        var armorThieverySkillMod = GetGearSkillModNotInCurrent(Skill.Thievery) + 1;
         var tempThieverySkill = thieverySkill.Current * armorThieverySkillMod;
         var moddedThieverySkill = (uint)tempThieverySkill;
 
@@ -722,7 +722,7 @@ partial class Creature
     public uint GetModdedShieldSkill()
     {
         var shieldSkill = GetCreatureSkill(Skill.Shield);
-        var armorShieldSkillMod = (GetArmorShieldMod() ?? 0) + 1;
+        var armorShieldSkillMod = GetGearSkillModNotInCurrent(Skill.Shield) + 1;
         var tempShieldSkill = shieldSkill.Current * armorShieldSkillMod;
         var moddedShieldSkill = (uint)tempShieldSkill;
 
@@ -748,7 +748,7 @@ partial class Creature
     public uint GetModdedPerceptionSkill()
     {
         var assessSkill = GetCreatureSkill(Skill.Perception);
-        var armorAssessSkillMod = (GetArmorPerceptionMod() ?? 0) + 1;
+        var armorAssessSkillMod = GetGearSkillModNotInCurrent(Skill.Perception) + 1;
         var tempAssessSkill = assessSkill.Current * armorAssessSkillMod;
         var moddedAssessSkill = (uint)tempAssessSkill;
 
@@ -774,7 +774,7 @@ partial class Creature
     public uint GetModdedDeceptionSkill()
     {
         var deceptionSkill = GetCreatureSkill(Skill.Deception);
-        var armorDeceptionSkillMod = (GetArmorDeceptionMod() ?? 0) + 1;
+        var armorDeceptionSkillMod = GetGearSkillModNotInCurrent(Skill.Deception) + 1;
         var tempDeceptionSkill = deceptionSkill.Current * armorDeceptionSkillMod;
         var moddedDeceptionSkill = (uint)tempDeceptionSkill;
 
@@ -816,7 +816,7 @@ partial class Creature
     public uint GetModdedWarMagicSkill()
     {
         var warMagicSkill = GetCreatureSkill(Skill.WarMagic);
-        var warMagicSkillMod = (GetArmorWarMagicMod() + GetWeaponWarMagicMod() ?? 0) + 1;
+        var warMagicSkillMod = GetGearSkillModNotInCurrent(Skill.WarMagic) + 1;
         var tempWarMagicSkill = warMagicSkill.Current * warMagicSkillMod;
         var moddedWarMagicSkill = (uint)tempWarMagicSkill;
 
@@ -858,7 +858,7 @@ partial class Creature
     public uint GetModdedLifeMagicSkill()
     {
         var lifeMagicSkill = GetCreatureSkill(Skill.LifeMagic);
-        var lifeMagicSkillMod = (GetArmorLifeMagicMod() + GetWeaponLifeMagicMod() ?? 0) + 1;
+        var lifeMagicSkillMod = GetGearSkillModNotInCurrent(Skill.LifeMagic) + 1;
         var tempLifeMagicSkill = lifeMagicSkill.Current * lifeMagicSkillMod;
         var moddedLifeMagicSkill = (uint)tempLifeMagicSkill;
 

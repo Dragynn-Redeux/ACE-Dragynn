@@ -75,9 +75,9 @@ public static class PositionExtensions
     /// <summary>
     /// Gets the cell ID for a position within a landblock
     /// </summary>
-    public static uint GetCell(this Position p)
+    public static uint GetCell(this Position p, uint instance = LScape.PersistentInstance)
     {
-        var landblock = LScape.get_landblock(p.LandblockId.Raw);
+        var landblock = LScape.get_landblock(p.LandblockId.Raw, instance);
 
         // dungeons
         // TODO: investigate dungeons that are below actual traversable overworld terrain
@@ -85,12 +85,12 @@ public static class PositionExtensions
         //if (landblock.IsDungeon)
         if (p.Indoors)
         {
-            return GetIndoorCell(p);
+            return GetIndoorCell(p, instance);
         }
 
         // outside - could be on landscape, in building, or underground cave
         var cellID = GetOutdoorCell(p);
-        var landcell = LScape.get_landcell(cellID) as LandCell;
+        var landcell = LScape.get_landcell(cellID, instance) as LandCell;
 
         if (landcell == null)
         {
@@ -152,9 +152,14 @@ public static class PositionExtensions
     /// <summary>
     /// Gets an indoor cell ID for a position within a dungeon
     /// </summary>
-    private static uint GetIndoorCell(this Position p)
+    private static uint GetIndoorCell(this Position p, uint instance = LScape.PersistentInstance)
     {
-        var adjustCell = AdjustCell.Get(p.Landblock);
+        var adjustCell = AdjustCell.Get(p.Landblock, instance);
+        if (adjustCell == null)
+        {
+            return p.Cell;
+        }
+
         var envCell = adjustCell.GetCell(p.Pos);
         if (envCell != null)
         {
@@ -253,13 +258,13 @@ public static class PositionExtensions
             + eastWest;
     }
 
-    public static void AdjustMapCoords(this Position pos)
+    public static void AdjustMapCoords(this Position pos, uint instance = LScape.PersistentInstance)
     {
         // adjust Z to terrain height
-        pos.PositionZ = pos.GetTerrainZ();
+        pos.PositionZ = pos.GetTerrainZ(instance);
 
         // adjust to building height, if applicable
-        var sortCell = LScape.get_landcell(pos.Cell) as SortCell;
+        var sortCell = LScape.get_landcell(pos.Cell, instance) as SortCell;
         if (sortCell != null && sortCell.has_building())
         {
             var building = sortCell.Building;
@@ -271,7 +276,7 @@ public static class PositionExtensions
                 pos.PositionZ += minZ;
             }
 
-            pos.LandblockId = new LandblockId(pos.GetCell());
+            pos.LandblockId = new LandblockId(pos.GetCell(instance));
         }
     }
 
@@ -298,12 +303,12 @@ public static class PositionExtensions
         pos.PositionZ = envCell.Position.Origin.Z;
     }
 
-    public static float GetTerrainZ(this Position p)
+    public static float GetTerrainZ(this Position p, uint instance = LScape.PersistentInstance)
     {
-        var landblock = LScape.get_landblock(p.LandblockId.Raw);
+        var landblock = LScape.get_landblock(p.LandblockId.Raw, instance);
 
         var cellID = GetOutdoorCell(p);
-        var landcell = (LandCell)LScape.get_landcell(cellID);
+        var landcell = (LandCell)LScape.get_landcell(cellID, instance);
 
         if (landcell == null)
         {
@@ -325,14 +330,18 @@ public static class PositionExtensions
     /// <summary>
     /// Returns TRUE if outdoor position is located on walkable slope
     /// </summary>
-    public static bool IsWalkable(this Position p)
+    public static bool IsWalkable(this Position p, uint instance = LScape.PersistentInstance)
     {
         if (p.Indoors)
         {
             return true;
         }
 
-        var landcell = (LandCell)LScape.get_landcell(p.Cell);
+        var landcell = (LandCell)LScape.get_landcell(p.Cell, instance);
+        if (landcell == null)
+        {
+            return false;
+        }
 
         Physics.Polygon walkable = null;
         var terrainPoly = landcell.find_terrain_poly(p.Pos, ref walkable);

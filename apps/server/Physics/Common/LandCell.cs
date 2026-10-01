@@ -84,7 +84,12 @@ public class LandCell : SortCell
 
     public static new LandCell Get(uint cellID)
     {
-        return (LandCell)LScape.get_landcell(cellID);
+        return Get(cellID, LScape.PersistentInstance);
+    }
+
+    public static LandCell Get(uint cellID, uint instance)
+    {
+        return (LandCell)LScape.get_landcell(cellID, instance);
     }
 
     public new void Init()
@@ -254,7 +259,7 @@ public class LandCell : SortCell
                     continue;
                 }
 
-                var cell = LScape.get_landcell(cellID);
+                var cell = LScape.get_landcell(cellID, cellArray.Instance);
 
                 cellArray.add_cell(cellID, cell);
             }
@@ -269,10 +274,14 @@ public class LandCell : SortCell
         if (x >= 0 && y >= 0 && x < 2040 && y < 2040)
         {
             var cellID = (((y >> 3) | 32 * (x & 0xFFFFFFF8)) << 16) | ((y & 7) + 8 * (x & 7) + 1);
-            var landCell = Get(cellID);
+            var landCell = Get(cellID, cellArray.Instance);
             if (landCell != null)
             {
                 cellArray.add_cell(cellID, landCell);
+            }
+            else
+            {
+                cellArray.MissingOutdoorCell = true;
             }
         }
     }

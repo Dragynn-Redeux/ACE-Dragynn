@@ -319,3 +319,6 @@ docker-compose.arm64
 # never be committed.
 apps/market-api/appsettings.*.json
 !apps/market-api/appsettings.json
+
+# Claude Code local settings (per-developer permissions, machine-specific paths)
+.claude/settings.local.json

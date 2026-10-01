@@ -46,6 +46,13 @@ public class Fellowship
 
     public LandblockId? CapstoneDungeon;
 
+    /// <summary>
+    /// The dungeon mods (Landblock.LandblockMods names) the leader chose for CapstoneDungeon. The leader's DungeonModders are used up
+    /// when the fellowship first enters, so these are what the dungeon gets whenever it has to be set up again: when it's loaded again
+    /// after being unloaded (everyone was out of it for a while, running back from a lifestone), and for the second part of a dungeon.
+    /// </summary>
+    public List<string> CapstoneDungeonMods;
+
     public int TotalMembers
     {
         get
@@ -965,6 +972,12 @@ public class Fellowship
             return 1.0f;
         }
 
+        // Whoever is in another instance is not there, however close their coordinates are
+        if (earner.InstanceId != fellow.InstanceId)
+        {
+            return 0.0f;
+        }
+
         // https://asheron.fandom.com/wiki/Announcements_-_2004/01_-_Mirror,_Mirror#Rollout_Article
 
         // If they are indoors while you are outdoors, or vice-versa.
@@ -1014,6 +1027,12 @@ public class Fellowship
         foreach (var fellow in fellows.Values)
         {
             if (player == fellow && !includeSelf)
+            {
+                continue;
+            }
+
+            // Whoever is in another instance is not near, however close their coordinates are
+            if (player.InstanceId != fellow.InstanceId)
             {
                 continue;
             }

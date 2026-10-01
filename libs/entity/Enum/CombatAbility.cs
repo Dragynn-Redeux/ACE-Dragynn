@@ -22,7 +22,7 @@ public enum CombatAbility
     FocusedTaunt,
     AreaTaunt,
     FeignInjury,
-    Vanish,
+    ShadowFlurry,
     ExposePhysicalWeakness,
     ExposeMagicalWeakness,
     Multishot,

@@ -1169,6 +1169,37 @@ public class ContentCommandUtilities
         }
     }
 
+    /// <summary>
+    /// Why a command that changes the world database from where the admin stands can't be used in an instance, or null if it can:
+    /// a landblock in an instance has the coordinates of the real one, so the change would land on the persistent world.
+    /// </summary>
+    internal static string WhyNotInAnInstance(uint instanceId)
+    {
+        if (instanceId == ACE.Server.Entity.Landblock.PersistentInstance)
+        {
+            return null;
+        }
+
+        return $"You are in instance {instanceId}. This command changes the world database, and this landblock is a copy of the real one, so it would change the real one. Leave the instance first (/instance leave).";
+    }
+
+    /// <summary>
+    /// Says why, and returns true, if the admin is in an instance, where a command that changes the world database can't be used
+    /// </summary>
+    public static bool RefusedInAnInstance(Session session)
+    {
+        var reason = WhyNotInAnInstance(session.Player.InstanceId);
+
+        if (reason == null)
+        {
+            return false;
+        }
+
+        session.Network.EnqueueSend(new GameMessageSystemChat(reason, ChatMessageType.Broadcast));
+
+        return true;
+    }
+
     public static LandblockInstanceWriter LandblockInstanceWriter;
 
     /// <summary>
@@ -2304,8 +2335,8 @@ public class ContentCommandUtilities
             return;
         }
 
-        // ensure landblock instance
-        if (!obj.Guid.IsStatic())
+        // ensure landblock instance (a static object in an instance has a guid of its own, and isn't a row in the world db)
+        if (!obj.Guid.IsStatic() || obj.Guid.IsEphemeralStatic())
         {
             session.Network.EnqueueSend(
                 new GameMessageSystemChat(

@@ -180,6 +180,18 @@ public class Transition
         var newCell = ObjCell.EmptyCell; // null check?
         ObjCell.find_cell_list(CellArray, ref newCell, SpherePath);
 
+        // Nothing exists past the edge of what an instance is made of, so there is nowhere to move to: it is as solid as a wall.
+        // Without this an object walks out into cells that are not there, and is lost. The same goes for a landblock of the
+        // persistent world that only exists in instances. A landblock that is just not loaded yet is loaded when it is looked up,
+        // so in the persistent world nothing else is ever missing, except off the edge of the map, which stays as it was.
+        if (
+            CellArray.MissingOutdoorCell
+            || (CellArray.Instance != LScape.PersistentInstance && ReferenceEquals(newCell, ObjCell.EmptyCell))
+        )
+        {
+            return TransitionState.Collided;
+        }
+
         // If we use CellArray.Cells.Values directly, an InvalidOperationException is thrown if the
         // dictionary is modified during FindCollisions. Take a snapshot to avoid this.
         foreach (var cell in CellArray.Cells.Values.ToList())
@@ -726,6 +738,9 @@ public class Transition
     public void InitObject(PhysicsObj obj, ObjectInfoState objectState)
     {
         ObjectInfo.Init(obj, objectState);
+
+        // Transitions are reused, so the cells collected for this one must be looked up in the instance of the object it is now for
+        CellArray.Instance = obj.Instance;
     }
 
     public void InitPath(ObjCell beginCell, Position beginPos, Position endPos)

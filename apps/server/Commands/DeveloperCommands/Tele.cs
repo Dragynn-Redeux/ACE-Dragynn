@@ -53,6 +53,17 @@ public class Tele
 
         // Check if water block
         var landblock = LScape.get_landblock(aceParams[1].AsPosition.LandblockId.Raw);
+        if (landblock == null)
+        {
+            // the persistent world has no such landblock: it only exists as an instance
+            ChatPacket.SendServerMessage(
+                session,
+                $"Landblock 0x{aceParams[1].AsPosition.LandblockId.Landblock:X4} only exists as an instance, and can't be teleported to",
+                ChatMessageType.Broadcast
+            );
+            return;
+        }
+
         if (landblock.WaterType == LandDefs.WaterType.EntirelyWater)
         {
             ChatPacket.SendServerMessage(

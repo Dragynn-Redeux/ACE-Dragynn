@@ -396,6 +396,9 @@ public class GeneratorProfile
             {
                 //log.DebugFormat("{0}.Spawn({1})", _generator.Name, obj.Name);
 
+                // whatever a generator spawns belongs to the same instance as the generator
+                obj.InstanceId = Generator.InstanceId;
+
                 obj.Generator = Generator;
                 obj.GeneratorId = Generator.Guid.Full;
 
@@ -670,7 +673,7 @@ public class GeneratorProfile
     {
         if (
             !obj.Location.Indoors
-            && !obj.Location.IsWalkable()
+            && !obj.Location.IsWalkable(obj.InstanceId)
             && !VerifyWalkableSlopeExcludedLandblocks.Contains(obj.Location.LandblockId.Landblock)
         )
         {

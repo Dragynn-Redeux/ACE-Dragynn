@@ -103,7 +103,7 @@ public class Fumble
 
                 if (session.Player.CurrentLandblock?.AddWorldObject(item) ?? false)
                 {
-                    item.Location.LandblockId = new LandblockId(item.Location.GetCell());
+                    item.Location.LandblockId = new LandblockId(item.Location.GetCell(session.Player.InstanceId));
 
                     // try slide to new position
                     var transit = item.PhysicsObj.transition(

@@ -101,6 +101,9 @@ public class Pet : Creature
         // All pets don't leave corpses, this maybe should have been in data, but isn't so lets make sure its true.
         NoCorpse = true;
 
+        // a pet is in the same instance as its owner
+        InstanceId = player.InstanceId;
+
         var success = EnterWorld();
 
         if (!success)
@@ -231,6 +234,14 @@ public class Pet : Creature
             _log.Error(
                 $"{Name} ({Guid}).SlowTick() - P_PetOwner: {P_PetOwner}, P_PetOwner.PhysicsObj: {P_PetOwner?.PhysicsObj}"
             );
+            Destroy();
+            return;
+        }
+
+        // The owner is in another instance and the pet was left behind: it is not near them, whatever their coordinates say.
+        // (An owner who teleports away has always lost their pet, when it was too far from them.)
+        if (P_PetOwner.InstanceId != InstanceId)
+        {
             Destroy();
             return;
         }

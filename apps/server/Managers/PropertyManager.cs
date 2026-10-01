@@ -696,6 +696,8 @@ public static class DefaultPropertyManager
         ("allow_negative_rating_curve", new Property<bool>(true, "enables retail behavior where negative DRR from void dots didn't switch to the reverse rating formula, resulting in a possibly unintended curve that quickly ramps up as -rating goes down, eventually approaching infinity / divide by 0 for -100 rating. less than -100 rating would produce negative numbers.")),
         ("allow_pkl_bump", new Property<bool>(true, "enables retail behavior where /pkl checks for entry collisions, bumping the player position over if standing on another PKLite. This effectively enables /pkl door skipping from retail")),
         ("allow_summoning_killtask_multicredit", new Property<bool>(true, "enables retail behavior where a summoner can get multiple killtask credits from a monster")),
+        ("anti_blink_debug", new Property<bool>(false, "(non-retail function) If enabled, logs every anti-blink door check, including the ones that pass. Very noisy - for tuning anti_blink_door_width and anti_blink_z_height_limit only")),
+        ("anti_blink_door_detection", new Property<bool>(false, "(non-retail function) If enabled, rejects player movement whose path crosses a closed, non-ethereal door, rubber-bands the player back to their last valid position, and records the attempt on the audit channel. Counters client plugins that delete a door from the client's own world and walk through it. Cloaked players are exempt")),
         ("assess_creature_mod", new Property<bool>(false, "(non-retail function) If enabled, re-enables former skill formula, when assess creature skill is not trained or spec'ed")),
         ("attribute_augmentation_safety_cap", new Property<bool>(true, "if TRUE players are not able to use attribute augmentations if the innate value of the target attribute is >= 96. All normal restrictions to these augmentations still apply.")),
         ("chat_disable_general", new Property<bool>(false, "disable general global chat channel")),
@@ -784,6 +786,7 @@ public static class DefaultPropertyManager
         ("smite_uses_takedamage", new Property<bool>(false, "if enabled, smite applies damage via TakeDamage")),
         ("spellcast_recoil_queue", new Property<bool>(false, "if true, players can queue the next spell to cast during recoil animation")),
         ("spell_projectile_ethereal", new Property<bool>(true, "broadcasts all spell projectiles as ethereal to clients only, and manually send stop velocity on collision. can fix various issues with client missing target id.")),
+        ("starter_academy_instances", new Property<bool>(true, "if true, every player who logs in inside a training academy, which includes every new character, gets an instance of it of their own instead of sharing the one in the persistent world. It only affects logins: turning it off does not move anyone who is in an academy instance.")),
         ("suicide_instant_death", new Property<bool>(false, "if enabled, @die command kills player instantly. defaults to disabled, as in retail")),
         ("taboo_table", new Property<bool>(true, "if enabled, taboo table restricts player names during character creation")),
         ("tailoring_intermediate_uieffects", new Property<bool>(false, "If true, tailoring intermediate icons retain the magical/elemental highlight of the original item")),
@@ -812,6 +815,7 @@ public static class DefaultPropertyManager
         ("debug_level_scaling_system", new Property<bool>(false, "enable this to see level scaling system console logging")),
         ("debug_stabilization", new Property<bool>(false, "enable this to see stabilization system console logging")),
         ("banking_system_logging", new Property<bool>(true, "enable this to see banking system console logging")),
+        ("bank_pack_expansion", new Property<bool>(true, "plain packs and Trophy Packs hold bank_pack_expansion_capacity items while they are in the bank, and go back to their own size when taken out (which is refused while they hold more than that). Turning this off shrinks them back, as far as their contents allow, the next time the bank is opened")),
         ("bypass_crafting_checks", new Property<bool>(false, "enable this to allow players to succeed at crafting recipes without needing the skill.")),
         ("create_corpse_on_player_death", new Property<bool>(true, "disable this to prevent players from creating a corpse on death.")),
         ("pop_show_current", new Property<bool>(true, "")),
@@ -821,6 +825,7 @@ public static class DefaultPropertyManager
 
 
     public static readonly ReadOnlyDictionary<string, Property<long>> DefaultLongProperties = DictOf(
+        ("bank_pack_expansion_capacity", new Property<long>(100, "how many items a plain pack or Trophy Pack holds while it is in the bank, when bank_pack_expansion is on (at most 255; a pack's capacity is one byte)")),
         ("char_delete_time", new Property<long>(3600, "the amount of time in seconds a deleted character can be restored")),
         ("chat_requires_account_time_seconds", new Property<long>(0,"the amount of time in seconds an account is required to have existed for for global chat privileges")),
         ("chat_requires_player_age", new Property<long>(0, "the amount of time in seconds a player is required to have played for global chat privileges")),
@@ -836,6 +841,7 @@ public static class DefaultPropertyManager
         ("rares_max_seconds_between", new Property<long>(5256000, "for rares_real_time: the maximum number of seconds a player can go before a second chance at a rare is allowed on rare eligible creature kills that did not generate a rare")),
         ("summoning_killtask_multicredit_cap", new Property<long>(2, "if allow_summoning_killtask_multicredit is enabled, the maximum # of killtask credits a player can receive from 1 kill")),
         ("teleport_visibility_fix", new Property<long>(0, "Fixes some possible issues with invisible players and mobs. 0 = default / disabled, 1 = players only, 2 = creatures, 3 = all world objects")),
+        ("instance_empty_timeout_minutes", new Property<long>(15, "How long an instance stays open after the last player has left it, in minutes. When it runs out, the instance and everything in it is deleted.")),
         ("max_level", new Property<long>(275, "Set the max character level.")),
         ("soft_level_cap", new Property<long>(50, "Set the 'soft' level cap (current highest possible level of monsters)")),
         ("playtest_starting_level", new Property<long>(0, "Set the starting level for newly created characters. If above 1, also spawns new characters in Hotel Swank.")),
@@ -858,6 +864,8 @@ public static class DefaultPropertyManager
         ("legendary_cantrip_drop_rate", new Property<double>(1.0, "Scales the chance for legendary cantrips to drop, relative to other cantrip levels in the tier. Defaults to 1.0, as per end of retail")),
         ("advocate_fane_auto_bestow_level", new Property<double>(1, "the level that advocates are automatically bestowed by Advocate Fane if advocate_fane_auto_bestow is true")),
         ("aetheria_drop_rate", new Property<double>(1.0, "Modifier for Aetheria drop rate, 1 being normal")),
+        ("anti_blink_door_width", new Property<double>(3.0, "(non-retail function) Width in units of the blocking plane anti-blink builds across a closed door, centered on the door's origin and perpendicular to its facing. Raise for wide gates, lower if legitimate movement beside a door is being rejected")),
+        ("anti_blink_z_height_limit", new Property<double>(2.0, "(non-retail function) Anti-blink ignores closed doors whose Z differs from the lower end of the player's movement by more than this, so a door on the storey above or below is not tested against the path. A door origin sits at floor level and a jump clears about 1, so 2.0 still catches a blink through the door itself. (DreamWeave lowered this from 3.5 after a player on an upper floor 2.8 above a closed ground-floor door was falsely rubber-banded)")),
         ("chess_ai_start_time", new Property<double>(-1.0, "the number of seconds for the chess ai to start. defaults to -1 (disabled)")),
         ("encounter_delay", new Property<double>(1800, "the number of seconds a generator profile for regions is delayed from returning to free slots")),
         ("encounter_regen_interval", new Property<double>(600, "the number of seconds a generator for regions at which spawns its next set of objects")),
@@ -892,6 +900,7 @@ public static class DefaultPropertyManager
 
     public static readonly ReadOnlyDictionary<string, Property<string>> DefaultStringProperties = DictOf(
         ("content_folder", new Property<string>("Content", "for content creators to live edit weenies. defaults to Content folder found in same directory as ACE.Server.dll")),
+        ("capstone_instanced_dungeons", new Property<string>("*", "Capstone dungeons that open as a private instance for each fellowship, not as one of their numbered copies. * is every one (the default), or a comma separated list of dungeon names as they are in the AssignCapstoneDungeon emote. Empty means every dungeon uses its copies.")),
         ("dat_older_warning_msg", new Property<string>("Your DAT files are incomplete.\nThis server does not support dynamic DAT updating at this time.\nPlease visit https://emulator.ac/how-to-play to download the complete DAT files.", "Warning message displayed (if show_dat_warning is true) to player if client attempts DAT download from server")),
         ("dat_newer_warning_msg", new Property<string>("Your DAT files are newer than expected.\nPlease visit https://emulator.ac/how-to-play to download the correct DAT files.", "Warning message displayed (if show_dat_warning is true) to player if client connects to this server")),
         ("popup_header", new Property<string>("Welcome to Asheron's Call!", "Welcome message displayed when you log in")),

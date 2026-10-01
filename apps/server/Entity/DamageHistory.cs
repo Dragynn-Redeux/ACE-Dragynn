@@ -72,6 +72,22 @@ public class DamageHistory
     }
 
     /// <summary>
+    /// Returns the player who dealt the most damage,
+    /// counting damage from their combat pets and hotspots as their own
+    /// </summary>
+    public Player GetTopPlayerDamager()
+    {
+        return TotalDamage
+            .Values.Where(info => info.TotalDamage > 0)
+            .Select(info => (Player: info.TryGetPlayerOrOwner(), info.TotalDamage))
+            .Where(entry => entry.Player != null)
+            .GroupBy(entry => entry.Player)
+            .OrderByDescending(group => group.Sum(entry => entry.TotalDamage))
+            .Select(group => group.Key)
+            .FirstOrDefault();
+    }
+
+    /// <summary>
     /// Constructs a new DamageHistory for a Player / Creature
     /// </summary>
     public DamageHistory(Creature creature)

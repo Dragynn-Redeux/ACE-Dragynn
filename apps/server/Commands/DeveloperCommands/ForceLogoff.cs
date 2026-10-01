@@ -84,8 +84,11 @@ public class ForceLogoff
             var foundOnLandblock = false;
             if (player.CurrentLandblock != null)
             {
+                // in the instance the player is in, which is not necessarily the persistent world's landblock with the same id
                 foundOnLandblock =
-                    LandblockManager.GetLandblock(player.CurrentLandblock.Id, false).GetObject(player.Guid) != null;
+                    LandblockManager
+                        .TryGetLandblock(player.CurrentLandblock.Id, player.CurrentLandblock.Instance)
+                        ?.GetObject(player.Guid) != null;
             }
 
             msg += $"------- FoundOnLandblock: {foundOnLandblock}\n";

@@ -82,7 +82,7 @@ public class SkillFormula
         var targetAttackSkill = GetTargetAttackSkill(attackerSkill, attackerTier, level);
         var skillCheck = (float)SkillCheck.GetSkillChance((int)shieldLevel, (int)targetAttackSkill, 0.005f);
 
-        const float maxShieldMod = 0.5f;
+        const float maxShieldMod = 0.25f;
 
         //Console.WriteLine($"atk: {attackerSkill}, shield: {shieldLevel}, targetAttack: {targetAttackSkill}, mod: {1 - (skillCheck * maxShieldMod)}");
 

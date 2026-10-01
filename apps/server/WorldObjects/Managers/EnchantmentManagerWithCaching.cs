@@ -134,6 +134,13 @@ public class EnchantmentManagerWithCaching : EnchantmentManager
         return result;
     }
 
+    public override void SetStatModValue(PropertiesEnchantmentRegistry entry, float statModValue)
+    {
+        base.SetStatModValue(entry, statModValue);
+
+        ClearCache();
+    }
+
     /// <summary>
     /// Silently removes a spell from the enchantment registry, and sends the relevant network message for dispel
     /// </summary>

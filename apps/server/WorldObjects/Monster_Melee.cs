@@ -108,7 +108,8 @@ partial class Creature
                 this,
                 () =>
                 {
-                    if (AttackTarget == null || IsDead || target.IsDead)
+                    // the target may have left the instance during the swing
+                    if (AttackTarget == null || IsDead || target.IsDead || target.InstanceId != InstanceId)
                     {
                         return;
                     }
@@ -575,15 +576,14 @@ partial class Creature
         //Console.WriteLine("Armor Self: " + bodyArmorMod);
         effectiveAL += bodyArmorMod;
 
-        effectiveAL = effectiveAL * LevelScaling.GetPlayerArmorWardScalar(defender, this);
-
         // Armor Rending reduces physical armor too?
         if (effectiveAL > 0)
         {
             effectiveAL *= armorRendingMod;
         }
 
-        var armorMod = SkillFormula.CalcArmorMod(effectiveAL);
+        // level scaling scales the mitigation, not the armor level -- see LevelScaling.GetPlayerArmorWardModScalar()
+        var armorMod = SkillFormula.CalcArmorMod(effectiveAL) * LevelScaling.GetPlayerArmorWardModScalar(defender, this);
 
         //Console.WriteLine("Total AL: " + effectiveAL);
         //Console.WriteLine("Armor mod: " + armorMod);

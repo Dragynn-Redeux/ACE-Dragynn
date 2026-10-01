@@ -9,19 +9,12 @@ using ACE.Server.WorldObjects;
 
 namespace ACE.Server.Managers;
 
+/// <summary>
+/// Pyreal wealth is coins plus trade notes. Both are counted by Value, which for a trade note is its face value
+/// times its stack size (the way house payments count notes), so every denomination counts, 150k-250k included.
+/// </summary>
 public static class PlayerWealthCalculator
 {
-    private static readonly IReadOnlyDictionary<uint, int> TradeNoteValuesByWcid = new Dictionary<uint, int>
-    {
-        [(uint)WeenieClassName.W_TRADENOTE100000_CLASS] = 100000,
-        [(uint)WeenieClassName.W_TRADENOTE50000_CLASS] = 50000,
-        [(uint)WeenieClassName.W_TRADENOTE10000_CLASS] = 10000,
-        [(uint)WeenieClassName.W_TRADENOTE5000_CLASS] = 5000,
-        [(uint)WeenieClassName.W_TRADENOTE1000_CLASS] = 1000,
-        [(uint)WeenieClassName.W_TRADENOTE500_CLASS] = 500,
-        [(uint)WeenieClassName.W_TRADENOTE100_CLASS] = 100,
-    };
-
     public static (long rawPyrealCurrency, long trophyValue) GetAccountWealth(Player player)
     {
         if (player == null)
@@ -58,9 +51,9 @@ public static class PlayerWealthCalculator
                 continue;
             }
 
-            if (TradeNoteValuesByWcid.TryGetValue(item.WeenieClassId, out var noteValue))
+            if (item.IsTradeNote)
             {
-                raw += (long)noteValue * (item.StackSize ?? 1);
+                raw += item.Value ?? 0;
             }
 
             var tq = item.GetProperty(PropertyInt.TrophyQuality);
@@ -79,6 +72,18 @@ public static class PlayerWealthCalculator
     /// </summary>
     public static (long rawPyrealCurrency, long trophyValue) GetOfflineAndBankWealth(uint accountId)
     {
+        var (offlineRaw, offlineTrophies) = GetOfflineWealth(accountId);
+        var (bankRaw, bankTrophies) = GetBankWealth(accountId);
+
+        return (offlineRaw + bankRaw, offlineTrophies + bankTrophies);
+    }
+
+    /// <summary>
+    /// Wealth carried by the account's offline characters, via database queries.
+    /// Safe to call on a background thread — does not access any live WorldObjects.
+    /// </summary>
+    public static (long rawPyrealCurrency, long trophyValue) GetOfflineWealth(uint accountId)
+    {
         if (accountId == 0)
         {
             return (0, 0);
@@ -94,11 +99,21 @@ public static class PlayerWealthCalculator
             trophies += biotaTrophies;
         }
 
-        var (bankPyreal, bankTrophy) = DatabaseManager.Shard.BaseDatabase.GetBankWealthAggregate(accountId);
-        raw += bankPyreal;
-        trophies += bankTrophy;
-
         return (raw, trophies);
+    }
+
+    /// <summary>
+    /// Wealth in the account's bank, including the bank's side packs, as saved in the database.
+    /// Safe to call on a background thread — does not access any live WorldObjects.
+    /// </summary>
+    public static (long rawPyrealCurrency, long trophyValue) GetBankWealth(uint accountId)
+    {
+        if (accountId == 0)
+        {
+            return (0, 0);
+        }
+
+        return DatabaseManager.Shard.BaseDatabase.GetBankWealthAggregate(accountId);
     }
 
     /// <summary>
@@ -194,15 +209,14 @@ public static class PlayerWealthCalculator
             return (raw, trophies);
         }
 
-        if (TradeNoteValuesByWcid.TryGetValue(biota.WeenieClassId, out var noteValue))
+        if (
+            biota.PropertiesInt != null
+            && biota.PropertiesInt.TryGetValue(PropertyInt.ItemType, out var itemType)
+            && (ItemType)itemType == ItemType.PromissoryNote
+            && biota.PropertiesInt.TryGetValue(PropertyInt.Value, out var noteValue)
+        )
         {
-            var stackSize = 1;
-            if (biota.PropertiesInt != null && biota.PropertiesInt.TryGetValue(PropertyInt.StackSize, out var ss) && ss > 0)
-            {
-                stackSize = ss;
-            }
-
-            raw += (long)noteValue * stackSize;
+            raw += noteValue;
         }
 
         if (biota.PropertiesInt != null && biota.PropertiesInt.TryGetValue(PropertyInt.TrophyQuality, out var tq) && tq > 0)

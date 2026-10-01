@@ -1,5 +1,6 @@
 ﻿using ACE.Entity.Enum;
 using ACE.Server.Commands.Handlers;
+using ACE.Server.Managers;
 using ACE.Server.Network;
 using ACE.Server.Network.GameMessages.Messages;
 
@@ -21,7 +22,7 @@ public class GetInfo
         {
             session.Network.EnqueueSend(
                 new GameMessageSystemChat(
-                    $"GUID: {wo.Guid}\nWeenieClassId: {wo.WeenieClassId}\nWeenieClassName: {wo.WeenieClassName}",
+                    $"GUID: {wo.Guid}\nWeenieClassId: {wo.WeenieClassId}\nWeenieClassName: {wo.WeenieClassName}\nInstance: {InstanceManager.Describe(wo.InstanceId)}",
                     ChatMessageType.Broadcast
                 )
             );

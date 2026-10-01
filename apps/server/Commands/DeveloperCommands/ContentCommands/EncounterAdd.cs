@@ -22,6 +22,11 @@ public class EncounterAdd
     )]
     public static void HandleAddEncounter(Session session, params string[] parameters)
     {
+        if (RefusedInAnInstance(session))
+        {
+            return;
+        }
+
         var param = parameters[0];
 
         Weenie weenie = null;

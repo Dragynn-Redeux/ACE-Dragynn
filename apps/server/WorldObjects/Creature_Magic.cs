@@ -137,7 +137,7 @@ partial class Creature
 
         if (playerCaster is not null)
         {
-            var phalanxPenaltyMod = playerCaster.PhalanxIsActive ? 0.25f : 0.0f;
+            var phalanxPenaltyMod = playerCaster.PhalanxIsEffective ? 0.25f : 0.0f;
             var provokePenaltyMod = playerCaster.ProvokeIsActive ? 0.25f : 0.0f;
             var ripostePenaltyMod = playerCaster.RiposteIsActive ? 0.25f : 0.0f;
             var furyPenaltyMod = playerCaster.FuryEnrageIsActive ? 0.25f : 0.0f;
@@ -145,6 +145,7 @@ partial class Creature
             var steadyStrikePenaltyMod = playerCaster.SteadyStrikeIsActive ? 0.25f : 0.0f;
             var smokescreenPenaltyMod = playerCaster.SmokescreenIsActive ? 0.25f : 0.0f;
             var backstabPenaltyMod = playerCaster.BackstabIsActive ? 0.25f : 0.0f;
+            var shadowFlurryPenaltyMod = playerCaster.ShadowFlurryIsActive ? 0.25f : 0.0f;
 
             abilityPenaltyMod = phalanxPenaltyMod
                                 + provokePenaltyMod
@@ -153,7 +154,8 @@ partial class Creature
                                 + multiShotPenaltyMod
                                 + steadyStrikePenaltyMod
                                 + smokescreenPenaltyMod
-                                + backstabPenaltyMod;
+                                + backstabPenaltyMod
+                                + shadowFlurryPenaltyMod;
         }
 
         var manaCostMultiplierProp = PropertyManager.GetDouble("mana_cost_multiplier").Item;

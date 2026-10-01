@@ -213,6 +213,13 @@ public static partial class LootGenerationFactory
             MutateArmorModVsType(wo, profile);
 
             NormalizeProtectionLevels(wo);
+
+            // Snapshot after NormalizeProtectionLevels, which rescales ArmorLevel. Scouring Stone reverts
+            // ArmorLevel to BaseArmor, so a pre-normalization snapshot would drop AL below the rolled value.
+            if (wo.ArmorLevel != null)
+            {
+                wo.BaseArmor = wo.ArmorLevel;
+            }
         }
 
         // workmanship
@@ -935,10 +942,7 @@ public static partial class LootGenerationFactory
             return false;
         }
 
-        if (wo.ArmorLevel != null)
-        {
-            wo.BaseArmor = wo.ArmorLevel;
-        }
+        // BaseArmor is snapshotted in MutateArmor, after NormalizeProtectionLevels rescales ArmorLevel
 
         if (wo.WardLevel != null)
         {

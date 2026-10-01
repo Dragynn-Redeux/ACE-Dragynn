@@ -36,9 +36,11 @@ public class DamageEvent
     private float _backstabDamageMultiplier;
     private float _baseDamage;
     private BaseDamageMod _baseDamageMod;
+    private float _combatAbilityAegisDamageReduction;
     private float _combatAbilityFuryDamageBonus;
     private float _combatAbilityRelentlessDamagePenalty;
     private float _combatAbilityMultishotDamagePenalty;
+    private float _combatAbilityPhalanxDamageReduction;
     private float _combatAbilityProvokeDamageReduction;
     private Creature_BodyPart _creaturePart;
     private float _criticalChance;
@@ -208,6 +210,11 @@ public class DamageEvent
 
         PostDamageMitigationEffects(attacker, defender, damageSource);
 
+        if (defender.Invulnerable)
+        {
+            Damage = 0.0f;
+        }
+
         //DpsLogging();
 
         return Damage;
@@ -316,36 +323,26 @@ public class DamageEvent
             return;
         }
 
+        // COMBAT ABILITY - Aegis: attacks can't be evaded, fully or partially.
+        // The evade chance is still calculated because block and parry chances use the attack and defense skills it sets.
+        if (playerDefender is { AegisIsActive: true })
+        {
+            GetEvadeChance(attacker, defender);
+            return;
+        }
+
+        // COMBAT ABILITY - Evasive Stance: flat 25% chance to fully evade any attack, independent of defense skill.
+        if (playerDefender is { EvasiveStanceIsActive: true } && ThreadSafeRandom.Next(0.0f, 1.0f) < 0.25f)
+        {
+            Evaded = true;
+            PartialEvasion = PartialEvasion.All;
+            return;
+        }
+
         // Roll combat hit chance
         var attackRoll = ThreadSafeRandom.Next(0.0f, 1.0f);
         if (attackRoll > GetEvadeChance(attacker, defender))
         {
-            // If playerDefender has Phalanx active, 25-50% chance to convert a full hit into a partial hit, depending on shield size.
-            if (playerDefender is { PhalanxIsActive: true } && (playerDefender.GetEquippedShield() is not null || playerDefender.GetEquippedWeapon() is { IsTwoHanded: true}))
-            {
-                var phalanxChance = 0.25;
-
-                if (playerDefender.GetEquippedShield() is not null)
-                {
-                    phalanxChance = playerDefender.GetEquippedShield().ArmorStyle switch
-                    {
-                        (int)ArmorStyle.CovenantShield => 0.5f,
-                        (int)ArmorStyle.TowerShield => 0.45f,
-                        (int)ArmorStyle.LargeShield => 0.4f,
-                        (int)ArmorStyle.StandardShield => 0.35f,
-                        (int)ArmorStyle.SmallShield => 0.3f,
-                        (int)ArmorStyle.Buckler => 0.3f,
-                        _ => 0.25f
-                    };
-                }
-
-                if (ThreadSafeRandom.Next(0.0f, 1.0f) < phalanxChance)
-                {
-                    _evasionMod = 0.5f;
-                    PartialEvasion = PartialEvasion.Some;
-                }
-            }
-
             return;
         }
 
@@ -354,15 +351,6 @@ public class DamageEvent
         const float partialEvadeChance = fullEvadeChance * 2;
 
         var partialEvadeRoll = ThreadSafeRandom.Next(0.0f, 1.0f);
-
-        if (playerDefender is { EvasiveStanceIsActive: true })
-        {
-            var luckyRoll = ThreadSafeRandom.Next(0.0f, 1.0f);
-            if (luckyRoll < partialEvadeRoll)
-            {
-                partialEvadeRoll = luckyRoll;
-            }
-        }
 
         switch (partialEvadeRoll)
         {
@@ -376,34 +364,6 @@ public class DamageEvent
                 Evaded = false;
                 break;
             default:
-                // If playerDefender has Phalanx active, 50% chance to convert a full hit into a partial hit.
-                if (playerDefender is { PhalanxIsActive: true } && (playerDefender.GetEquippedShield() is not null || playerDefender.GetEquippedWeapon() is { IsTwoHanded: true}))
-                {
-                    var phalanxChance = 0.25;
-
-                    if (playerDefender.GetEquippedShield() is not null)
-                    {
-                        phalanxChance = playerDefender.GetEquippedShield().ArmorStyle switch
-                        {
-                            (int)ArmorStyle.CovenantShield => 0.5f,
-                            (int)ArmorStyle.TowerShield => 0.45f,
-                            (int)ArmorStyle.LargeShield => 0.4f,
-                            (int)ArmorStyle.StandardShield => 0.35f,
-                            (int)ArmorStyle.SmallShield => 0.3f,
-                            (int)ArmorStyle.Buckler => 0.3f,
-                            _ => 0.25f
-                        };
-                    }
-
-                    if (ThreadSafeRandom.Next(0.0f, 1.0f) < phalanxChance)
-                    {
-                        _evasionMod = 0.5f;
-                        PartialEvasion = PartialEvasion.Some;
-                        Evaded = false;
-                        break;
-                    }
-                }
-
                 _evasionMod = 1.0f;
                 PartialEvasion = PartialEvasion.None;
                 Evaded = false;
@@ -442,11 +402,14 @@ public class DamageEvent
     }
 
     /// <summary>
-    /// Attack cannot be evaded if Backstab ability activated when attacking from behind and stealthed
+    /// Attack cannot be evaded if Backstab ability activated when attacking from behind and stealthed.
+    /// Targets with Phalanx active cannot be sneak attacked, so they are never considered "behind".
     /// </summary>
     private bool CheckForCombatAbilityBackstabStealthNoEvade(Player playerAttacker, Creature creatureTarget)
     {
-        if (playerAttacker is {BackstabIsActive: true, IsAttackFromStealth: true} && playerAttacker.IsBehindTargetCreature(creatureTarget))
+        if (playerAttacker is {BackstabIsActive: true, IsAttackFromStealth: true}
+            && playerAttacker.IsBehindTargetCreature(creatureTarget)
+            && creatureTarget is not Player { PhalanxIsEffective: true })
         {
             Evaded = false;
             PartialEvasion = PartialEvasion.None;
@@ -462,10 +425,10 @@ public class DamageEvent
     /// check for and combine bonuses from Spec Physical Defense, Phalanx Ability, and Block Rating.
     /// Roll and set Blocked accordingly.
     /// <list type="bullet">
-    /// <item>Spec Bonus - Shield: Effective block angle is 270 degress instead of 180.</item>
+    /// <item>Spec Bonus - Shield: Effective block angle is 225 degrees instead of 180.</item>
     /// <item>Spec Bonus - Phys Def: Up to +50% increased block chance.</item>
     /// <item>Gear Block Rating: +X% increased block chance, equal to 10% + 0.5% per rating.</item>
-    /// <item>Phalanx Ability: Effective block angle is 360 degrees and all glancing blows become blocks.</item>
+    /// <item>Phalanx Ability: Effective block angle is 360 degrees and block chance is increased by 25-50%, based on shield size.</item>
     /// </list>
     /// </summary>
     private void SetBlocked(Creature attacker, Creature defender)
@@ -488,33 +451,11 @@ public class DamageEvent
         var effectiveAngle = 180.0f;
         effectiveAngle += GetSpecShieldEffectiveAngleBonus(playerDefender);
 
-        var blockableAngle = Math.Abs(defender.GetAngle(attacker)) < effectiveAngle / 2.0f || playerDefender is {PhalanxIsActive: true};
+        var blockableAngle = Math.Abs(defender.GetAngle(attacker)) < effectiveAngle / 2.0f || playerDefender is { PhalanxIsEffective: true };
 
-        if (playerDefender is { PhalanxIsActive: false } && !blockableAngle)
+        if (!blockableAngle)
         {
             return;
-        }
-
-        // If playerDefender has Phalanx active, up to 50% chance to convert partial hits into blocks/parries.
-        if (playerDefender is { PhalanxIsActive: true }
-            && PartialEvasion == PartialEvasion.Some)
-        {
-            var phalanxChance = playerDefender.GetEquippedShield().ArmorStyle switch
-            {
-                (int)ArmorStyle.CovenantShield => 0.5f,
-                (int)ArmorStyle.TowerShield => 0.45f,
-                (int)ArmorStyle.LargeShield => 0.4f,
-                (int)ArmorStyle.StandardShield => 0.35f,
-                (int)ArmorStyle.SmallShield => 0.3f,
-                (int)ArmorStyle.Buckler => 0.3f,
-                _ => 0.25f
-            };
-
-            if (ThreadSafeRandom.Next(0.0f, 1.0f) < phalanxChance)
-            {
-                Blocked = true;
-                return;
-            }
         }
 
         // base block/parry chance is 5%
@@ -536,6 +477,9 @@ public class DamageEvent
         }
 
         var blockChance = baseBlockChance * (1.0f + specPhysicalDefenseBlockChanceBonus + jewelBlockChanceBonus + riposteBlockChanceBonus);
+
+        // COMBAT ABILITY - Phalanx: block chance increased by 25-50%, based on shield size
+        blockChance *= playerDefender?.GetPhalanxBlockParryMod() ?? 1.0f;
 
         if ((ThreadSafeRandom.Next(0f, 1f) > blockChance))
         {
@@ -567,20 +511,10 @@ public class DamageEvent
         }
 
         const float effectiveAngle = 180.0f;
-        var parryAngle = Math.Abs(defender.GetAngle(attacker)) < effectiveAngle / 2.0f;
-        var twohandPhalanxActive = playerDefender is { PhalanxIsActive: true } && playerDefender.GetEquippedWeapon() is { IsTwoHanded: true };
+        var parryAngle = Math.Abs(defender.GetAngle(attacker)) < effectiveAngle / 2.0f || playerDefender is { PhalanxIsEffective: true };
 
-        if (!parryAngle && !twohandPhalanxActive)
+        if (!parryAngle)
         {
-            return;
-        }
-
-        // If playerDefender has Phalanx active, 50% chance to convert partial hits into blocks/parries.
-        if (playerDefender is { PhalanxIsActive: true }
-            && PartialEvasion == PartialEvasion.Some
-            && ThreadSafeRandom.Next(0.0f, 1.0f) > 0.25f)
-        {
-            Parried = true;
             return;
         }
 
@@ -598,6 +532,9 @@ public class DamageEvent
         var specPhysicalDefenseParryChanceBonus = GetSpecPhysicalDefenseBlockChanceBonus();
         var riposteActivatedBonus = playerDefender is { RiposteIsActive: true } ? 1.0f : 0.0f;
         var parryChance = maxBaseParryChance * (1.0 + specPhysicalDefenseParryChanceBonus + riposteActivatedBonus);
+
+        // COMBAT ABILITY - Phalanx: parry chance increased by 25% with two-handed weapons
+        parryChance *= playerDefender?.GetPhalanxBlockParryMod() ?? 1.0f;
 
         if ((ThreadSafeRandom.Next(0f, 1f) > parryChance))
         {
@@ -660,7 +597,7 @@ public class DamageEvent
         }
     }
 
-    private void SetDamageModifiers(Creature attacker, Creature defender, float? powerMod = null)
+    private void SetDamageModifiers(Creature attacker, Creature defender, float? powerMod = null, bool consumeSneakAttackBonuses = true)
     {
         var playerAttacker = attacker as Player;
         var playerDefender = defender as Player;
@@ -676,8 +613,21 @@ public class DamageEvent
         _combatAbilityRelentlessDamagePenalty = GetCombatAbilityRelentlessDamagePenalty(playerAttacker);
         _combatAbilitySteadyStrikeDamageBonus = GetCombatAbilitySteadySrikeDamageBonus(playerAttacker);
         _recklessnessMod = Creature.GetRecklessnessMod(attacker, defender);
-        SneakAttackMod = attacker.GetSneakAttackMod(defender);
-        _backstabDamageMultiplier = Creature.GetStealthBackstabDamageMultiplier(playerAttacker, defender);
+
+        // Sneak attack / Backstab bonuses (and their one-shot charges) should only be
+        // consumed by an attacker's own normal attack - not by ancillary reactive damage
+        // calculations like Thorns reflection or a Riposte counter-hit.
+        if (consumeSneakAttackBonuses)
+        {
+            SneakAttackMod = attacker.GetSneakAttackMod(defender);
+            _backstabDamageMultiplier = Creature.GetStealthBackstabDamageMultiplier(playerAttacker, defender);
+        }
+        else
+        {
+            SneakAttackMod = 1.0f;
+            _backstabDamageMultiplier = 1.0f;
+        }
+
         _attackHeightDamageBonus += GetHighAttackHeightBonus(playerAttacker);
         _ratingElementalDamageBonus = Jewel.HandleElementalBonuses(playerAttacker, DamageType);
         _ratingPierceResistanceBonus = GetRatingPierceResistanceBonus(defender, playerAttacker);
@@ -761,6 +711,32 @@ public class DamageEvent
     private float GetCombatAbilityProvokeDamageReduction(Player playerDefender)
     {
         return playerDefender is { ProvokeIsActive: true } ? 0.85f : 1.0f;
+    }
+
+    /// <summary>
+    /// COMBAT ABILITY - Aegis: Damage taken from weapon attacks reduced by 50%. Attacks can't be evaded while active (see SetEvaded).
+    /// </summary>
+    private float GetCombatAbilityAegisDamageReduction(Player playerDefender)
+    {
+        if (playerDefender is not { AegisIsActive: true } || Evaded)
+        {
+            return 1.0f;
+        }
+
+        return 1.0f - Player.AegisDamageReduction;
+    }
+
+    /// <summary>
+    /// COMBAT ABILITY - Phalanx: Damage taken from full hits reduced by 30%. Glancing blows are unaffected.
+    /// </summary>
+    private float GetCombatAbilityPhalanxDamageReduction(Player playerDefender)
+    {
+        if (playerDefender is null || Evaded || PartialEvasion != PartialEvasion.None)
+        {
+            return 1.0f;
+        }
+
+        return playerDefender.GetPhalanxFullHitDamageMod();
     }
 
     private void PostDamageMitigationEffects()
@@ -1004,6 +980,8 @@ public class DamageEvent
         ShieldMod = _defender.GetShieldMod(attacker, DamageType, Weapon);
 
         _combatAbilityProvokeDamageReduction = GetCombatAbilityProvokeDamageReduction(playerDefender);
+        _combatAbilityAegisDamageReduction = GetCombatAbilityAegisDamageReduction(playerDefender);
+        _combatAbilityPhalanxDamageReduction = GetCombatAbilityPhalanxDamageReduction(playerDefender);
 
         _ratingSelfHarm = 1.0f + Jewel.GetJewelEffectMod(playerAttacker, PropertyInt.GearSelfHarm);
         _ratingRedFury = 1.0f + Jewel.GetJewelRedFury(playerAttacker);
@@ -1027,6 +1005,8 @@ public class DamageEvent
                * _evasionMod
                * _specDefenseMod
                * _combatAbilityProvokeDamageReduction
+               * _combatAbilityAegisDamageReduction
+               * _combatAbilityPhalanxDamageReduction
                * _ratingDamageTypeWard
                * _ratingSelfHarm
                * _ratingRedFury
@@ -1240,6 +1220,7 @@ public class DamageEvent
 
         CheckForRatingPostDamageEffects(attacker, defender, damageSource, playerAttacker, playerDefender);
         CheckForCombatAbilityFuryBuildUpWhenDamaged(playerDefender);
+        CheckForCombatAbilityAegisRestoration(playerDefender);
         CheckForWeaponMasterEffects(playerAttacker, defender);
         CheckForEnchantedBlade(playerAttacker, defender, _attackHeight);
 
@@ -1344,7 +1325,10 @@ public class DamageEvent
 
         var spellCraft = weapon.ItemSpellcraft ?? 1;
 
-        player.TryCastSpell(spell, target, null, weapon, false, true, true, true, spellCraft);
+        // power bar adds +0% to +100% damage to enchanted blade spells
+        var powerBarDamageMultiplier = 1.0 + player.PowerLevel;
+
+        player.TryCastSpell(spell, target, null, weapon, false, true, true, true, spellCraft, powerBarDamageMultiplier);
 
         player.EnchantedBladeHighStoredSpell = null;
         player.EnchantedBladeMedStoredSpell = null;
@@ -1554,6 +1538,30 @@ public class DamageEvent
     }
 
     /// <summary>
+    /// COMBAT ABILITY - Aegis: Restore stamina and mana equal to 10% of the damage prevented by Aegis.
+    /// </summary>
+    private void CheckForCombatAbilityAegisRestoration(Player playerDefender)
+    {
+        // _combatAbilityAegisDamageReduction is 1.0 unless Aegis reduced this hit
+        if (playerDefender is null || _combatAbilityAegisDamageReduction is <= 0.0f or >= 1.0f)
+        {
+            return;
+        }
+
+        // Damage already includes the Aegis reduction, so this is the amount Aegis alone prevented
+        var damagePrevented = Damage / _combatAbilityAegisDamageReduction - Damage;
+        var restoreAmount = (int)Math.Round(damagePrevented * Player.AegisRestorationMod);
+
+        if (restoreAmount <= 0)
+        {
+            return;
+        }
+
+        playerDefender.UpdateVitalDelta(playerDefender.Stamina, restoreAmount);
+        playerDefender.UpdateVitalDelta(playerDefender.Mana, restoreAmount);
+    }
+
+    /// <summary>
     /// SPEC BONUS: Physical Defense
     /// </summary>
     private static float GetSpecDefenseMod(Creature attacker, Player playerDefender)
@@ -1566,9 +1574,12 @@ public class DamageEvent
             return 1.0f;
         }
 
-        var playerDefenderPhysicalDefense =
-            playerDefender.GetModdedPhysicalDefSkill()
-            * LevelScaling.GetPlayerDefenseSkillScalar(playerDefender, attacker);
+        // float, so the division below isn't integer division
+        var playerDefenderPhysicalDefense = (float)LevelScaling.GetScaledPlayerDefenseSkill(
+            playerDefender.GetModdedPhysicalDefSkill(),
+            playerDefender,
+            attacker
+        );
         var bonusAmount = Math.Min(playerDefenderPhysicalDefense, 500) / 50;
 
         return 0.9f - bonusAmount * 0.01f;
@@ -1815,7 +1826,7 @@ public class DamageEvent
 
         SetCombatSources(attacker, defender, defender.GetEquippedWeapon());
         SetBaseDamage(attacker, defender, damageSource);
-        SetDamageModifiers(attacker, defender);
+        SetDamageModifiers(attacker, defender, consumeSneakAttackBonuses: false);
 
         var damage = GetNonCriticalDamageBeforeMitigation();
 
@@ -1861,7 +1872,7 @@ public class DamageEvent
 
         SetCombatSources(defender, attacker, defender.GetEquippedWeapon());
         SetBaseDamage(defender, attacker, defender.GetEquippedWeapon());
-        SetDamageModifiers(defender, attacker);
+        SetDamageModifiers(defender, attacker, consumeSneakAttackBonuses: false);
 
         _powerMod = 1.0f;
         var baseDamage = GetNonCriticalDamageBeforeMitigation();
@@ -1939,11 +1950,13 @@ public class DamageEvent
         EffectiveAttackSkill = Convert.ToUInt32(EffectiveAttackSkill * CheckForCombatAbilitySteadyStrikeAttackSkillBonus(playerAttacker));
         EffectiveAttackSkill = Convert.ToUInt32(EffectiveAttackSkill * (1.0f + Jewel.GetJewelEffectMod(playerAttacker, PropertyInt.GearBravado, "Bravado", rampQuestSource: defender)));
 
-        _effectiveDefenseSkill = (uint)(defender.GetEffectiveDefenseSkill(CombatType) * LevelScaling.GetPlayerDefenseSkillScalar(playerDefender, attacker)
-        );
+        _effectiveDefenseSkill = defender.GetEffectiveDefenseSkill(CombatType);
 
         _effectiveDefenseSkill = Convert.ToUInt32(_effectiveDefenseSkill * CheckForAttackHeightLowDefenseSkillBonus(playerDefender, playerAttacker));
         _effectiveDefenseSkill = Convert.ToUInt32(_effectiveDefenseSkill * (1.0f + Jewel.GetJewelEffectMod(playerDefender, PropertyInt.GearFamiliarity, "Familiarity", rampQuestSource: attacker)));
+
+        // level scaling goes last, so the bonuses above are worth the same at every level (see GetScaledPlayerDefenseSkill)
+        _effectiveDefenseSkill = LevelScaling.GetScaledPlayerDefenseSkill(_effectiveDefenseSkill, playerDefender, attacker);
 
         var evadeChance = SkillCheck.GetSkillChance(_effectiveDefenseSkill, EffectiveAttackSkill);
         evadeChance = CheckForCombatAbilitySmokescreenEvadeChanceBonus(evadeChance, playerDefender);
@@ -2159,9 +2172,15 @@ public class DamageEvent
     /// <summary>
     /// SPEC BONUS - Physical Defense: Increase block/parry chance up to 50% (multiplicatively).
     /// Based on defender 'defense skill' and attacker 'attack skill'.
+    /// Players must have Physical Defense specialized. Monsters always receive this bonus.
     /// </summary>
     private float GetSpecPhysicalDefenseBlockChanceBonus()
     {
+        if (_playerDefender is not null && !IsSkillSpecialized(_playerDefender, Skill.PhysicalDefense))
+        {
+            return 0.0f;
+        }
+
         var blockChanceMod = SkillCheck.GetSkillChance(_effectiveDefenseSkill, EffectiveAttackSkill);
 
         return 0.5f * (float)blockChanceMod;

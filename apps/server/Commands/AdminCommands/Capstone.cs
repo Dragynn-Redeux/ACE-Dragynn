@@ -63,6 +63,18 @@ public class Capstone
                     session.Player.SendMessage(outputMsg, ChatMessageType.System);
                 }
             }
+            // the dungeons that are opened as a private instance for each fellowship, instead of as one of their copies
+            foreach (var instance in InstanceManager.GetInstances())
+            {
+                if (instance.Template.Name.StartsWith("capstone:"))
+                {
+                    session.Player.SendMessage(
+                        $"{instance.Template.Name.Substring("capstone:".Length)}:   instance {instance.Id}, {instance.MemberCount} player(s){(instance.IsClosing ? ", shutting down" : "")}\n",
+                        ChatMessageType.System
+                    );
+                }
+            }
+
             session.Player.SendMessage(
                 "For more detailed information about a specific dungeon, use @capstone followed by the dungeon name.",
                 ChatMessageType.System

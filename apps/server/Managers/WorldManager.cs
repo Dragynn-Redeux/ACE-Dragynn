@@ -31,6 +31,22 @@ public static class WorldManager
 {
     private static readonly ILogger _log = Log.ForContext(typeof(WorldManager));
 
+    /// <summary>
+    /// A place that always exists and is always safe to send a player to: Holtburg's lifestone. The last resort
+    /// for anywhere a player is meant to end up (on login, on leaving an instance, on death) when nothing else
+    /// usable is left: no location, no sanctuary, or a sanctuary that is no longer reachable.
+    /// </summary>
+    public static readonly Position DefaultFallbackPosition = new Position(
+        0xA9B40019,
+        84,
+        7.1f,
+        94,
+        0,
+        0,
+        -0.0784591f,
+        0.996917f
+    );
+
     private static readonly PhysicsEngine Physics;
 
     public static bool WorldActive { get; private set; }
@@ -212,6 +228,8 @@ public static class WorldManager
 
         Player.HandleCapstoneLandblockLogin(session, player);
 
+        InstanceManager.OnPlayerLogin(player);
+
         if (stripAdminProperties) // continue stripping properties
         {
             player.CloakStatus = CloakStatus.Undef;
@@ -275,7 +293,7 @@ public static class WorldManager
             }
             else
             {
-                session.Player.Location = new Position(0xA9B40019, 84, 7.1f, 94, 0, 0, -0.0784591f, 0.996917f); // ultimate fallback
+                session.Player.Location = new Position(DefaultFallbackPosition); // ultimate fallback
             }
         }
 
@@ -283,17 +301,23 @@ public static class WorldManager
             session.Player.IsOlthoiPlayer && character.TotalLogins >= 1 && session.Player.LoginAtLifestone;
         if (olthoiPlayerReturnedToLifestone)
         {
-            session.Player.Location = new Position(session.Player.Sanctuary);
+            session.Player.Location = new Position(InstanceManager.FirstEnterablePosition(session.Player.Sanctuary));
         }
+
+        // where every player has an instance of their own (the training academies, where every new character starts) they enter the world in it
+        InstanceManager.AssignPersonalInstance(session.Player);
 
         session.Player.PlayerEnterWorld();
 
         var success = LandblockManager.AddObject(session.Player, true);
         if (!success)
         {
-            // send to lifestone, or fallback location
-            var fixLoc =
-                session.Player.Sanctuary ?? new Position(0xA9B40019, 84, 7.1f, 94, 0, 0, -0.0784591f, 0.996917f);
+            // one who could not be put in the world in their own instance goes to the persistent world instead
+            InstanceManager.AbandonLoginInstance(session.Player);
+
+            // send to lifestone, or fallback location: never trust the sanctuary unchecked, since it can be on the very
+            // landblock that just refused this player (for instance, one that has since become instance only)
+            var fixLoc = InstanceManager.FirstEnterablePosition(session.Player.Sanctuary);
 
             _log.Error(
                 $"WorldManager.DoPlayerEnterWorld: failed to spawn {session.Player.Name}, relocating to {fixLoc.ToLOCString()}"
@@ -427,13 +451,14 @@ public static class WorldManager
         Player player,
         Position newPosition,
         IAction actionToFollowUpWith = null,
-        bool fromPortal = false
+        bool fromPortal = false,
+        uint? instanceId = null
     )
     {
         EnqueueAction(
             new ActionEventDelegate(() =>
             {
-                player.Teleport(newPosition, fromPortal);
+                player.Teleport(newPosition, fromPortal, instanceId);
 
                 if (actionToFollowUpWith != null)
                 {
@@ -610,6 +635,8 @@ public static class WorldManager
         ServerPerformanceMonitor.RestartEvent(ServerPerformanceMonitor.MonitorType.UpdateGameWorld_Entire);
 
         LandblockManager.Tick(Timers.PortalYearTicks);
+
+        InstanceManager.Tick();
 
         HouseManager.Tick();
         ResonanceManager.Tick(Timers.PortalYearTicks);

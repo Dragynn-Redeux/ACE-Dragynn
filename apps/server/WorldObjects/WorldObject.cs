@@ -69,6 +69,13 @@ public abstract partial class WorldObject : IActor
     /// </summary>
     public Landblock CurrentLandblock { get; internal set; }
 
+    /// <summary>
+    /// The instance this object belongs to, or will enter if it is not in a landblock yet.<para />
+    /// 0 is the persistent world. Landblock keeps this in sync whenever the object is added to it.
+    /// Anything that spawns an object next to another object must copy the spawner's InstanceId before calling EnterWorld().
+    /// </summary>
+    public uint InstanceId { get; set; }
+
     public bool IsBusy { get; set; }
     public bool IsShield
     {
@@ -216,7 +223,10 @@ public abstract partial class WorldObject : IActor
             return false;
         }
 
-        AdjustDungeon(Location);
+        // the physics object is placed in the instance this object belongs to
+        PhysicsObj.Instance = InstanceId;
+
+        AdjustDungeon(Location, InstanceId);
 
         // exclude linkspots from spawning
         if (WeenieClassId == 10762)
@@ -224,7 +234,7 @@ public abstract partial class WorldObject : IActor
             return true;
         }
 
-        var cell = LScape.get_landcell(Location.Cell);
+        var cell = LScape.get_landcell(Location.Cell, InstanceId);
         if (cell == null)
         {
             PhysicsObj.DestroyObject();
@@ -358,9 +368,7 @@ public abstract partial class WorldObject : IActor
             return false;
         }
 
-        var SightObj = PhysicsObj.makeObject(0x02000124, 0, false, true);
-
-        SightObj.State |= PhysicsState.Missile;
+        var SightObj = PhysicsObj.makeSightObject(0x02000124, PhysicsObj.Instance);
 
         var startPos = new Physics.Common.Position(PhysicsObj.Position);
         var targetPos = new Physics.Common.Position(wo.PhysicsObj.Position);
@@ -403,9 +411,7 @@ public abstract partial class WorldObject : IActor
             return false;
         }
 
-        var SightObj = PhysicsObj.makeObject(0x02000124, 0, false, true);
-
-        SightObj.State |= PhysicsState.Missile;
+        var SightObj = PhysicsObj.makeSightObject(0x02000124, PhysicsObj.Instance);
 
         var startPos = new Physics.Common.Position(PhysicsObj.Position);
         var targetPos = new Physics.Common.Position(pos);
@@ -904,21 +910,21 @@ public abstract partial class WorldObject : IActor
     }
 
     // todo: This should really be an extension method for Position, or a static method within Position or even AdjustPos
-    public static void AdjustDungeon(Position pos)
+    public static void AdjustDungeon(Position pos, uint instance = LScape.PersistentInstance)
     {
-        AdjustDungeonPos(pos);
-        AdjustDungeonCells(pos);
+        AdjustDungeonPos(pos, instance);
+        AdjustDungeonCells(pos, instance);
     }
 
     // todo: This should really be an extension method for Position, or a static method within Position or even AdjustPos
-    public static bool AdjustDungeonCells(Position pos)
+    public static bool AdjustDungeonCells(Position pos, uint instance = LScape.PersistentInstance)
     {
         if (pos == null)
         {
             return false;
         }
 
-        var landblock = LScape.get_landblock(pos.Cell);
+        var landblock = LScape.get_landblock(pos.Cell, instance);
         if (landblock == null || !landblock.HasDungeon)
         {
             return false;
@@ -926,7 +932,12 @@ public abstract partial class WorldObject : IActor
 
         var dungeonID = pos.Cell >> 16;
 
-        var adjustCell = AdjustCell.Get(dungeonID);
+        var adjustCell = AdjustCell.Get(dungeonID, instance);
+        if (adjustCell == null)
+        {
+            return false;
+        }
+
         var cellID = adjustCell.GetCell(pos.Pos);
 
         if (cellID != null && pos.Cell != cellID.Value)
@@ -938,14 +949,14 @@ public abstract partial class WorldObject : IActor
     }
 
     // todo: This should really be an extension method for Position, or a static method within Position, or even AdjustPos
-    public static bool AdjustDungeonPos(Position pos)
+    public static bool AdjustDungeonPos(Position pos, uint instance = LScape.PersistentInstance)
     {
         if (pos == null)
         {
             return false;
         }
 
-        var landblock = LScape.get_landblock(pos.Cell);
+        var landblock = LScape.get_landblock(pos.Cell, instance);
         if (landblock == null || !landblock.HasDungeon)
         {
             return false;
@@ -1127,6 +1138,11 @@ public abstract partial class WorldObject : IActor
             {
                 GuidManager.RecycleDynamicGuid(Guid);
             }
+        }
+        else if (Guid.IsEphemeralStatic())
+        {
+            // a static object in an instance has a guid of its own, which is given back once the instance is done with it
+            GuidManager.RecycleEphemeralStaticGuid(Guid);
         }
     }
 

@@ -233,7 +233,8 @@ partial class Creature
             this,
             () =>
             {
-                if (IsDead || AttackTarget == null || target.IsDead)
+                // the target may have left the instance during the windup
+                if (IsDead || AttackTarget == null || target.IsDead || target.InstanceId != InstanceId)
                 {
                     return;
                 }

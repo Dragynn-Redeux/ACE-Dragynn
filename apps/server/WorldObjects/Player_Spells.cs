@@ -698,12 +698,8 @@ partial class Player
                     continue;
                 }
 
-                if (
-                    spell.Id != (uint)SpellId.Ardence
-                    && spell.Id != (uint)SpellId.Vim
-                    && spell.Id != (uint)SpellId.Volition
-                    && spell.Id != (uint)SpellId.OntheRun
-                )
+                // gear mod bonuses are cast by the player, not an item, and are re-added by UpdateArmorModBuffs()
+                if (!GearModBuffSpellIds.Contains(spell.Id))
                 {
                     _log.Error(
                         $"{Name}.AuditItemSpells(): removing spell {spell.Name} from {(enchantment.HasSpellSetId ? "non-possessed" : "non-equipped")} item"
@@ -748,13 +744,7 @@ partial class Player
                         continue;
                     }
 
-                    if (
-                        inactiveSpell.Id != (uint)SpellId.Ardence
-                        && inactiveSpell.Id != (uint)SpellId.Vim
-                        && inactiveSpell.Id != (uint)SpellId.Volition
-                        && inactiveSpell.Id != (uint)SpellId.OntheRun
-                        && inactiveSpell.Id != (uint)SpellId.MireFoot
-                    )
+                    if (!GearModBuffSpellIds.Contains(inactiveSpell.Id) && inactiveSpell.Id != (uint)SpellId.MireFoot)
                     {
                         _log.Error(
                             $"{Name}.AuditItemSpells(): removing spell {inactiveSpell.Name} from {item.EquipmentSetId}"

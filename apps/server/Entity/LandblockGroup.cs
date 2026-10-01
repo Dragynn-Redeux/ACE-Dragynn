@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using ACE.Common.Performance;
+using ACE.Entity;
 using Serilog;
 
 namespace ACE.Server.Entity;
@@ -36,6 +37,13 @@ public class LandblockGroup : IEnumerable<Landblock>
     public const int LandblockGroupMinSpacingWhenDormant = 3;
 
     public bool IsDungeon { get; private set; }
+
+    /// <summary>
+    /// The instance every landblock in this group belongs to. A group never mixes instances:
+    /// each instance ticks on its own so it can run in parallel with the persistent world and with other instances,
+    /// and so that nothing in one instance is ever touched from another instance's thread.
+    /// </summary>
+    public uint Instance { get; private set; } = Landblock.PersistentInstance;
 
     public static readonly TimeSpan TrySplitInterval = Landblock.UnloadInterval;
 
@@ -96,6 +104,14 @@ public class LandblockGroup : IEnumerable<Landblock>
                 );
                 return false;
             }
+
+            if (landblock.Instance != Instance)
+            {
+                _log.Error(
+                    $"[LANDBLOCK GROUP] You cannot add a landblock ({landblock.Id}) from instance {landblock.Instance} to a LandblockGroup that belongs to instance {Instance}"
+                );
+                return false;
+            }
         }
 
         if (landblocks.Add(landblock))
@@ -105,6 +121,7 @@ public class LandblockGroup : IEnumerable<Landblock>
             if (landblocks.Count == 1)
             {
                 IsDungeon = landblock.IsDungeon;
+                Instance = landblock.Instance;
             }
 
             if (landblock.Id.LandblockX < XMin)
@@ -317,28 +334,46 @@ public class LandblockGroup : IEnumerable<Landblock>
     {
         foreach (var value in landblocks)
         {
-            var distance = Math.Max(
-                Math.Abs(value.Id.LandblockX - landblock.Id.LandblockX),
-                Math.Abs(value.Id.LandblockY - landblock.Id.LandblockY)
-            );
-
-            if (value.IsDormant || landblock.IsDormant)
+            if (CanShareGroup(value, landblock))
             {
-                if (distance < LandblockGroupMinSpacingWhenDormant)
-                {
-                    return true;
-                }
-            }
-            else
-            {
-                if (distance < LandblockGroupMinSpacing)
-                {
-                    return true;
-                }
+                return true;
             }
         }
 
         return false;
+    }
+
+    /// <summary>
+    /// Whether two landblocks are close enough to be ticked together in the same group.
+    /// Landblocks from different instances never share a group, however close their coordinates are.
+    /// </summary>
+    public static bool CanShareGroup(Landblock a, Landblock b)
+    {
+        return CanShareGroup(a.Instance, a.Id, a.IsDormant, b.Instance, b.Id, b.IsDormant);
+    }
+
+    /// <summary>
+    /// The pure rule behind <see cref="CanShareGroup(Landblock, Landblock)"/>, kept free of Landblock so it can be tested without DAT files.
+    /// </summary>
+    public static bool CanShareGroup(
+        uint instanceA,
+        LandblockId idA,
+        bool dormantA,
+        uint instanceB,
+        LandblockId idB,
+        bool dormantB
+    )
+    {
+        if (instanceA != instanceB)
+        {
+            return false;
+        }
+
+        var distance = Math.Max(Math.Abs(idA.LandblockX - idB.LandblockX), Math.Abs(idA.LandblockY - idB.LandblockY));
+
+        var minSpacing = dormantA || dormantB ? LandblockGroupMinSpacingWhenDormant : LandblockGroupMinSpacing;
+
+        return distance < minSpacing;
     }
 
     public override string ToString()

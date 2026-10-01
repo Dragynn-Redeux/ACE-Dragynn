@@ -261,7 +261,7 @@ public class UnlockerHelper
                                                     chest.LootQualityMod = bonus;
                                                 }
 
-                                                chest.Reset();
+                                                chest.RegenerateLoot(player);
 
                                                 chest.LootQualityMod = baseLootQualityMod;
 
@@ -274,6 +274,28 @@ public class UnlockerHelper
                                             }
                                         }
                                     }
+                                }
+                            }
+                            else if (unlocker is Key unlockerKey && target is Chest keyChest)
+                            {
+                                var keyLootQualityMod = unlockerKey.LootQualityMod;
+
+                                if (keyLootQualityMod != null)
+                                {
+                                    var baseLootQualityMod = keyChest.LootQualityMod;
+
+                                    keyChest.LootQualityMod = keyLootQualityMod;
+
+                                    keyChest.RegenerateLoot(player);
+
+                                    keyChest.LootQualityMod = baseLootQualityMod;
+
+                                    player.Session.Network.EnqueueSend(
+                                        new GameMessageSystemChat(
+                                            $"The key's enchantment infuses the {target.Name} with richer treasure!",
+                                            ChatMessageType.Broadcast
+                                        )
+                                    );
                                 }
                             }
                             SendUnlockResultMessage(

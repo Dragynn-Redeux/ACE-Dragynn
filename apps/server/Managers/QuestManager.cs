@@ -768,10 +768,59 @@ public class QuestManager
         }
     }
 
+    /// <summary>
+    /// Maps a one-time quest flag to one or more counter quests that should be incremented the
+    /// moment this player GENUINELY completes it for the first time - regardless of whether the
+    /// stamp arrived through a solo StampQuest action or through StampQuestForAllFellows' per-fellow
+    /// loop (EmoteManager.cs), which calls Stamp() once per fellow against each fellow's own
+    /// QuestManager. Content used to duplicate this via a paired IncrementQuest/
+    /// IncrementQuestForAllFellows action alongside every StampQuest, but IncrementQuestForAllFellows
+    /// has no equivalent of Stamp()'s own IsMaxSolves guard - it unconditionally increments every
+    /// present fellow's counter every time, even fellows who already completed that milestone,
+    /// silently inflating an uncapped counter (or, worse, permanently breaking an exact-range
+    /// InqQuestSolves convergence check reading it). Hooking Stamp() here instead guarantees exactly
+    /// one increment per player per milestone, however that player came to receive it.
+    /// </summary>
+    private static readonly Dictionary<string, string[]> QuestChains = new()
+    {
+        // Cragstone's Fists campaign - see world-db's
+        // Osteth - Northern/Olthoi North/Cragstones Fists Questline/Roadmap.md, Phase 0.5.
+        { "CragstonesFistIntroduced", new[] { "CragstonesFistsCampaignProgress" } },
+        { "CampReconComplete", new[] { "CragstonesFistsCampaignProgress" } },
+        { "AllScoutsFound", new[] { "CragstonesFistsCampaignProgress" } },
+        { "DeliveredMatronGuardClaw", new[] { "CragstonesFistsCampaignProgress" } },
+        { "YmmaVenomsIdentified", new[] { "CragstonesFistsCampaignProgress" } },
+        { "MerewinRoyalJellyDestroyed", new[] { "CragstonesFistsCampaignProgress" } },
+        { "JabirResonatorsAttuned", new[] { "CragstonesFistsCampaignProgress" } },
+        { "JabirLancerHillsCleared", new[] { "CragstonesFistsCampaignProgress" } },
+        { "CragArmorBuried", new[] { "CragstonesFistsCampaignProgress" } },
+        { "QueensLairAccess", new[] { "CragstonesFistsCampaignProgress" } },
+        { "OlthoiNorthQueenSlain", new[] { "CragstonesFistsCampaignProgress" } },
+        // Jabir's Lancer Hills sub-convergence - each hill is its own one-time flag, so this can
+        // never exceed 4 regardless of fellowship credit, safely replacing the old manual increment.
+        { "JabirLancerHill1Freed", new[] { "JabirLancerHillsCompletedCount" } },
+        { "JabirLancerHill2Freed", new[] { "JabirLancerHillsCompletedCount" } },
+        { "JabirLancerHill3Freed", new[] { "JabirLancerHillsCompletedCount" } },
+        { "JabirLancerHill4Freed", new[] { "JabirLancerHillsCompletedCount" } },
+    };
+
     public void Stamp(string questFormat)
     {
         var questName = GetQuestName(questFormat);
+
+        // Must check BEFORE Update() - this is what tells us whether this stamp is a genuine new
+        // completion for THIS player, or a no-op repeat (already at max_Solves).
+        var wasAlreadyMaxed = IsMaxSolves(questName);
+
         Update(questName); // ??
+
+        if (!wasAlreadyMaxed && QuestChains.TryGetValue(questName, out var chainedQuests))
+        {
+            foreach (var chainedQuest in chainedQuests)
+            {
+                Increment(chainedQuest);
+            }
+        }
 
         // Check if any contracts should be bestowed based on this quest stamp
         if (Creature is Player player)

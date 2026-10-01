@@ -34,6 +34,13 @@ public class ObjCell : PartCell, IEquatable<ObjCell>
     public Landblock CurLandblock;
 
     /// <summary>
+    /// The instance this cell belongs to. Set for both outdoor and indoor cells when they are created by their landblock,
+    /// and used to look up neighbouring cells in the same instance. 0 is the persistent world.<para />
+    /// This is separate from CurLandblock, which is only set for outdoor cells and is used for water lookups.
+    /// </summary>
+    public uint Instance;
+
+    /// <summary>
     /// Returns TRUE if this is a house cell that can be protected by a housing barrier
     /// </summary>
     public bool IsCellRestricted => RestrictionObj != 0;
@@ -153,7 +160,8 @@ public class ObjCell : PartCell, IEquatable<ObjCell>
             return false;
         }
 
-        return ID.Equals(objCell.ID);
+        // The same cell id in two instances is two different cells. Physics uses this to decide whether an object has changed cells.
+        return ID.Equals(objCell.ID) && Instance == objCell.Instance;
     }
 
     public virtual TransitionState FindCollisions(Transition transition)
@@ -261,6 +269,11 @@ public class ObjCell : PartCell, IEquatable<ObjCell>
 
     public static ObjCell GetVisible(uint cellID)
     {
+        return GetVisible(cellID, LScape.PersistentInstance);
+    }
+
+    public static ObjCell GetVisible(uint cellID, uint instance)
+    {
         if (cellID == 0)
         {
             return null;
@@ -271,7 +284,7 @@ public class ObjCell : PartCell, IEquatable<ObjCell>
            return EnvCell.get_visible(cellID);
         else
             return LandCell.Get(cellID);*/
-        return LScape.get_landcell(cellID);
+        return LScape.get_landcell(cellID, instance);
     }
 
     public void Init()
@@ -389,8 +402,9 @@ public class ObjCell : PartCell, IEquatable<ObjCell>
     {
         cellArray.NumCells = 0;
         cellArray.AddedOutside = false;
+        cellArray.MissingOutdoorCell = false;
 
-        var visibleCell = GetVisible(position.ObjCellID);
+        var visibleCell = GetVisible(position.ObjCellID, cellArray.Instance);
 
         if ((position.ObjCellID & 0xFFFF) >= 0x100)
         {
@@ -620,9 +634,18 @@ public class ObjCell : PartCell, IEquatable<ObjCell>
 
     public void release_shadow_objs()
     {
-        foreach (var shadowObj in ShadowObjectList)
+        // objects are still being added to and removed from a cell by other threads, if it is unloaded soon after it was loaded
+        readerWriterLockSlim.EnterReadLock();
+        try
         {
-            shadowObj.PhysicsObj.ShadowObjects.Remove(ID);
+            foreach (var shadowObj in ShadowObjectList)
+            {
+                shadowObj.PhysicsObj.ShadowObjects.Remove(ID);
+            }
+        }
+        finally
+        {
+            readerWriterLockSlim.ExitReadLock();
         }
     }
 

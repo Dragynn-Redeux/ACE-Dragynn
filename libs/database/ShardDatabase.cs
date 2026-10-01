@@ -98,6 +98,12 @@ public class ShardDatabase
         }
     }
 
+    /// <summary>
+    /// The pyreals (coins, and trade notes at face value) and trophy value in an account's bank.
+    /// That is the items in the bank itself, which carry the account's BankAccountId, and the items inside
+    /// the bank's side packs, which don't: the pack carries it for them.
+    /// A trade note's Value is its face value times its stack size, as house payments count it.
+    /// </summary>
     public virtual (long pyrealWealth, long trophyWealth) GetBankWealthAggregate(uint bankAccountId)
     {
         if (bankAccountId == 0)
@@ -118,32 +124,44 @@ public class ShardDatabase
         cmd.CommandText = @"
 SELECT
   COALESCE(SUM(CASE
-    WHEN b.weenie_Type = 14 THEN COALESCE(v.value, 0)
-    WHEN b.weenie_Class_Id = 20630 THEN COALESCE(ss.value, 1) * 100000
-    WHEN b.weenie_Class_Id = 20629 THEN COALESCE(ss.value, 1) * 50000
-    WHEN b.weenie_Class_Id = 20628 THEN COALESCE(ss.value, 1) * 10000
-    WHEN b.weenie_Class_Id = 20627 THEN COALESCE(ss.value, 1) * 5000
-    WHEN b.weenie_Class_Id = 20626 THEN COALESCE(ss.value, 1) * 1000
-    WHEN b.weenie_Class_Id = 20625 THEN COALESCE(ss.value, 1) * 500
-    WHEN b.weenie_Class_Id = 20624 THEN COALESCE(ss.value, 1) * 100
+    WHEN b.weenie_Type = @coin THEN COALESCE(v.value, 0)
+    WHEN it.value = @promissoryNote THEN COALESCE(v.value, 0)
     ELSE 0
   END), 0) AS pyreal_wealth,
   COALESCE(SUM(CASE
     WHEN tq.value IS NULL OR tq.value <= 0 THEN 0
     ELSE (tq.value * tq.value * 100)
   END), 0) AS trophy_wealth
-FROM biota b
-INNER JOIN biota_properties_i_i_d bank
-  ON bank.object_Id = b.id AND bank.type = 9007 AND bank.value = @acct
+FROM (
+  -- starts from the account's rows in type_value_idx, never a scan of biota
+  SELECT bank.object_Id AS id
+  FROM biota_properties_i_i_d bank
+  WHERE bank.type = @bankAccountProperty AND bank.value = @acct
+  UNION
+  SELECT inPack.object_Id
+  FROM biota_properties_i_i_d pack
+  INNER JOIN biota_properties_i_i_d inPack
+    ON inPack.type = @containerProperty AND inPack.value = pack.object_Id
+  WHERE pack.type = @bankAccountProperty AND pack.value = @acct
+) banked
+INNER JOIN biota b
+  ON b.id = banked.id
 LEFT JOIN biota_properties_int v
-  ON v.object_Id = b.id AND v.type = 19
-LEFT JOIN biota_properties_int ss
-  ON ss.object_Id = b.id AND ss.type = 12
+  ON v.object_Id = b.id AND v.type = @valueProperty
+LEFT JOIN biota_properties_int it
+  ON it.object_Id = b.id AND it.type = @itemTypeProperty
 LEFT JOIN biota_properties_int tq
-  ON tq.object_Id = b.id AND tq.type = 467;
+  ON tq.object_Id = b.id AND tq.type = @trophyQualityProperty;
 ";
 
         cmd.Parameters.Add(new MySqlParameter("@acct", bankAccountId));
+        cmd.Parameters.Add(new MySqlParameter("@coin", (int)WeenieType.Coin));
+        cmd.Parameters.Add(new MySqlParameter("@promissoryNote", (int)ItemType.PromissoryNote));
+        cmd.Parameters.Add(new MySqlParameter("@valueProperty", (ushort)PropertyInt.Value));
+        cmd.Parameters.Add(new MySqlParameter("@itemTypeProperty", (ushort)PropertyInt.ItemType));
+        cmd.Parameters.Add(new MySqlParameter("@trophyQualityProperty", (ushort)PropertyInt.TrophyQuality));
+        cmd.Parameters.Add(new MySqlParameter("@bankAccountProperty", (ushort)PropertyInstanceId.BankAccountId));
+        cmd.Parameters.Add(new MySqlParameter("@containerProperty", (ushort)PropertyInstanceId.Container));
 
         using var reader = cmd.ExecuteReader();
         if (!reader.Read())
@@ -1591,6 +1609,42 @@ LEFT JOIN biota_properties_int tq
             .GroupBy(a => a.SessionIp).Count();
 
         return count;
+    }
+
+    /// <summary>
+    /// Adds an entry to an account's bank log (bank_activity_log), then drops all but the account's newest keepPerAccount.
+    /// Throws if the database can't be reached or the table is missing; the caller decides how loudly to report it.
+    /// </summary>
+    public virtual void AddBankActivity(BankActivity entry, int keepPerAccount)
+    {
+        using var context = new ShardDbContext();
+
+        context.BankActivities.Add(entry);
+        context.SaveChanges();
+
+        // the newest entry past the ones kept goes, and everything older; nothing does while there are fewer
+        context.Database.ExecuteSqlInterpolated(
+            $@"DELETE FROM bank_activity_log
+              WHERE account_id = {entry.AccountId}
+                AND id <= (SELECT id FROM (
+                    SELECT id FROM bank_activity_log WHERE account_id = {entry.AccountId} ORDER BY id DESC LIMIT 1 OFFSET {keepPerAccount}
+                ) AS oldest_dropped)"
+        );
+    }
+
+    /// <summary>
+    /// An account's newest bank log entries, newest first. Throws if they can't be read.
+    /// </summary>
+    public virtual List<BankActivity> GetBankActivity(uint accountId, int count)
+    {
+        using var context = new ShardDbContext();
+
+        return context.BankActivities
+            .AsNoTracking()
+            .Where(e => e.AccountId == accountId)
+            .OrderByDescending(e => e.Id)
+            .Take(count)
+            .ToList();
     }
 
     public virtual void UpsertAccountWealthSnapshot(

@@ -77,9 +77,33 @@ public class DamageHistoryInfo
         {
             return TryGetPetOwner();
         }
+        else if (HotspotOwner != null)
+        {
+            return TryGetHotspotOwner();
+        }
         else
         {
             return TryGetAttacker();
+        }
+    }
+
+    /// <summary>
+    /// Returns the player responsible for this damage: the attacker itself,
+    /// or the owner of the combat pet or hotspot that dealt it
+    /// </summary>
+    public Player TryGetPlayerOrOwner()
+    {
+        if (PetOwner != null)
+        {
+            return TryGetPetOwner();
+        }
+        else if (HotspotOwner != null)
+        {
+            return TryGetHotspotOwner();
+        }
+        else
+        {
+            return TryGetAttacker() as Player;
         }
     }
 }

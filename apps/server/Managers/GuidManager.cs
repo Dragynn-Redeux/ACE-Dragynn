@@ -351,6 +351,13 @@ public static class GuidManager
     private static PlayerGuidAllocator playerAlloc;
     private static DynamicGuidAllocator dynamicAlloc;
 
+    // Nothing here is ever saved to the database, so unlike the others this doesn't need to read anything at startup
+    private static readonly EphemeralStaticGuidAllocator ephemeralStaticAlloc = new EphemeralStaticGuidAllocator(
+        ObjectGuid.EphemeralStaticMin,
+        ObjectGuid.EphemeralStaticMax,
+        EphemeralStaticGuidAllocator.DefaultHoldTime
+    );
+
     public static void Initialize()
     {
         playerAlloc = new PlayerGuidAllocator(ObjectGuid.PlayerMin, ObjectGuid.PlayerMax, "player");
@@ -373,6 +380,24 @@ public static class GuidManager
     public static ObjectGuid NewDynamicGuid()
     {
         return new ObjectGuid(dynamicAlloc.Alloc());
+    }
+
+    /// <summary>
+    /// A guid for a static object that only exists for as long as an instance does. The world db gives static objects a guid
+    /// per landblock, so every instance of a landblock would have the same ones, and they would collide.
+    /// These are static guids (they stay in the static range), but they are never saved, and they are never the same as one from the world db.
+    /// </summary>
+    public static ObjectGuid NewEphemeralStaticGuid()
+    {
+        return new ObjectGuid(ephemeralStaticAlloc.Alloc());
+    }
+
+    /// <summary>
+    /// Gives back the guid of a static object that only existed for as long as an instance did
+    /// </summary>
+    public static void RecycleEphemeralStaticGuid(ObjectGuid guid)
+    {
+        ephemeralStaticAlloc.Recycle(guid.Full);
     }
 
     /// <summary>

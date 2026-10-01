@@ -33,7 +33,8 @@ public class MoveTo
 
         var loot = WorldObjectFactory.CreateNewWorldObject(trainingWandTarget);
         loot.Location = session.Player.Location.InFrontOf((loot.UseRadius ?? 2) > 2 ? loot.UseRadius.Value : 2);
-        loot.Location.LandblockId = new LandblockId(loot.Location.GetCell());
+        loot.InstanceId = session.Player.InstanceId;
+        loot.Location.LandblockId = new LandblockId(loot.Location.GetCell(loot.InstanceId));
 
         loot.EnterWorld();
 

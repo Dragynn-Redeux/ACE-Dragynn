@@ -5,6 +5,7 @@ using ACE.Entity;
 using ACE.Entity.Enum;
 using ACE.Entity.Enum.Properties;
 using ACE.Entity.Models;
+using ACE.Server.Entity;
 using ACE.Server.Entity.Actions;
 using ACE.Server.Network.GameEvent.Events;
 using ACE.Server.Network.GameMessages;
@@ -18,7 +19,33 @@ public class Storage : Container
 {
     public static readonly List<Storage> BankChests = [];
 
-    private static Player _bankUser;
+    // Per chest: two players can have two different bank chests open at the same time.
+    private Player _bankUser;
+
+    /// <summary>
+    /// True once the viewer's bank items have been loaded from the database into this chest.
+    /// The load is asynchronous, so the chest is briefly open and empty after Open().
+    /// </summary>
+    public bool BankInventoryLoaded { get; private set; }
+
+    public const string BankCommandsHint =
+        "Type /bank to see what else I can do: deposit, withdraw and sort your items by kind, search your bank, combine salvage, "
+        + "count your pyreals, and inscribe your packs to say what goes in them.";
+
+    /// <summary>
+    /// The popup the bank shows the first time it is opened (and /bank intro): the basics, and "deposit" packs, which
+    /// work from the packs a player carries and which nothing else in game would tell them about.
+    /// The client's popup is a fixed size and doesn't scroll: about 18 lines of 58 characters show, the rest is cut off.
+    /// This is about 14; /bank has the rest.
+    /// </summary>
+    public const string BankIntro =
+        "Welcome to your bank\n\n"
+        + "It's shared by every character on your account. Type /bank for commands that deposit, withdraw, sort and search.\n\n"
+        + "\"Deposit\" packs\n"
+        + "Inscribe a pack you carry with \"deposit\" and use it as a drop box. "
+        + "Whenever you open your bank, it offers to bank everything in that pack at once.\n\n"
+        + "Inscribe packs with what they hold, like \"weapons\", and /bank files those items into them.\n\n"
+        + "/bank intro shows this again.";
 
     /// <summary>
     /// A new biota be created taking all of its values from weenie.
@@ -74,6 +101,8 @@ public class Storage : Container
 
         _bankUser = player;
 
+        BankInventoryLoaded = false;
+
         Translucency = 1f;
 
         PlayParticleEffect(PlayScript.Destroy, Guid);
@@ -86,6 +115,19 @@ public class Storage : Container
                 ChatMessageType.Tell
             )
         );
+
+        // Nothing else in game mentions /bank, so the bank does until the player has used it.
+        if (!player.BankCommandsUsed)
+        {
+            player.Session.Network.EnqueueSend(new GameEventTell(this, BankCommandsHint, player, ChatMessageType.Tell));
+        }
+
+        // The first time, a popup explains the basics.
+        if (!player.BankIntroSeen)
+        {
+            player.QuestManager.Stamp(Player.BankIntroSeenQuest);
+            player.Session.Network.EnqueueSend(new GameEventPopupString(player.Session, BankIntro));
+        }
 
         DatabaseManager.Shard.GetBankInventoryInParallel(
             Guid.Full,
@@ -172,7 +214,51 @@ public class Storage : Container
         EncumbranceVal = 0;
         Value = 0;
 
+        // Packs grow in the bank (BankPackExpansion). Doing it here covers packs banked before the feature,
+        // and follows the settings if they change. The CreateObject messages below carry the new sizes.
+        foreach (var pack in Inventory.Values.OfType<Container>())
+        {
+            BankPackExpansion.ApplyInBank(pack);
+        }
+
+        BankInventoryLoaded = true;
+
         SendBankVaultInventory(_bankUser);
+
+        if (_bankUser != null && IsOpen && Viewer == _bankUser.Guid.Full)
+        {
+            _bankUser.Session.Network.EnqueueSend(new GameEventTell(this, DescribeSpace(_bankUser), _bankUser, ChatMessageType.Tell));
+
+            // offer to empty the viewer's "deposit" packs into the bank
+            _bankUser.OfferDepositPacks(this);
+        }
+    }
+
+    /// <summary>
+    /// What the bank says about its space when it opens, e.g. "You're using 212 of your 300 bank slots,
+    /// and your packs here have room for 140 more items."
+    /// </summary>
+    private string DescribeSpace(Player player)
+    {
+        var (used, capacity, packFree) = player.GetBankSpace(this);
+        var free = capacity - used;
+
+        var text = $"You're using {used:N0} of your {capacity:N0} bank slots";
+
+        text += player.GetBankPacks(this).Count > 0
+            ? $", and your packs here have room for {packFree:N0} more {(packFree == 1 ? "item" : "items")}."
+            : ".";
+
+        if (free <= 0)
+        {
+            text += " My own slots are full.";
+        }
+        else if (free * 10 <= capacity)
+        {
+            text += $" Only {free:N0} {(free == 1 ? "slot is" : "slots are")} left.";
+        }
+
+        return text;
     }
 
     private void SendBankVaultInventory(Player player)
@@ -213,10 +299,10 @@ public class Storage : Container
 
         player.Session.Network.EnqueueSend(new GameEventViewContents(player.Session, this));
 
-        // send sub-containers
-        foreach (var container in Inventory.Values.Where(i => i is Container))
+        // send sub-containers, in slot order: the bank window seems to place a pack by when its list arrives
+        foreach (var container in Inventory.Values.OfType<Container>().OrderBy(c => c.PlacementPosition ?? int.MaxValue))
         {
-            player.Session.Network.EnqueueSend(new GameEventViewContents(player.Session, (Container)container));
+            player.Session.Network.EnqueueSend(new GameEventViewContents(player.Session, container));
         }
 
         player.Session.Network.EnqueueSend(itemsToSend.ToArray());

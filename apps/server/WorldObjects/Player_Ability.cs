@@ -3,6 +3,7 @@ using System.Linq;
 using ACE.Common;
 using ACE.Entity.Enum;
 using ACE.Server.Entity;
+using ACE.Server.Entity.Actions;
 using ACE.Server.Factories;
 using ACE.Server.Factories.Tables;
 using ACE.Server.Network.GameEvent.Events;
@@ -21,6 +22,15 @@ partial class Player
     private double ProvokeActivatedDuration = 10;
 
     public bool PhalanxIsActive;
+    public const float PhalanxDamageReduction = 0.3f;
+
+    /// <summary>
+    /// Phalanx only takes effect while a shield or two-handed weapon is equipped, so swapping to other
+    /// weapons after activating the stance does not keep its benefits.
+    /// </summary>
+    public bool PhalanxIsEffective => PhalanxIsActive && HasPhalanxEquipment;
+
+    private bool HasPhalanxEquipment => GetEquippedShield() is not null || GetEquippedWeapon() is { IsTwoHanded: true };
 
     public bool RiposteIsActive => LastRiposteActivated > Time.GetUnixTime() - RiposteActivatedDuration;
     private double LastRiposteActivated;
@@ -67,10 +77,15 @@ partial class Player
     public bool BackstabIsActive => LastBackstabActivated > Time.GetUnixTime() - BackstabActivatedDuration;
     private double LastBackstabActivated;
     private double BackstabActivatedDuration = 10;
+    public bool BackstabSingleUseIsActive;
 
     public bool SmokescreenIsActive => LastSmokescreenActivated > Time.GetUnixTime() - SmokescreenActivatedDuration;
     private double LastSmokescreenActivated;
     private double SmokescreenActivatedDuration = 10;
+
+    public bool ShadowFlurryIsActive => LastShadowFlurryActivated > Time.GetUnixTime() - ShadowFlurryActivatedDuration;
+    private double LastShadowFlurryActivated;
+    private double ShadowFlurryActivatedDuration = 10;
 
     // Sorcerer
     public bool OverloadDischargeIsActive => LastOverloadDischargeActivated > Time.GetUnixTime() - OverloadDischargeActivatedDuration;
@@ -89,13 +104,18 @@ partial class Player
 
     // Spellsword
     public bool ReflectIsActive => LastReflectActivated > Time.GetUnixTime() - ReflectActivatedDuration;
-    public bool ReflectFirstSpell = false;
+    public bool ReflectGuaranteedWindowActive => LastReflectActivated > Time.GetUnixTime() - ReflectGuaranteedWindowDuration;
+    public int ReflectGuaranteedCharges = 0;
     private double LastReflectActivated;
     private double ReflectActivatedDuration = 10;
+    private double ReflectGuaranteedWindowDuration = 1;
 
     public bool AegisIsActive => LastAegisActivated > Time.GetUnixTime() - AegisActivatedDuration;
     private double LastAegisActivated;
     private double AegisActivatedDuration = 10;
+    private const int AegisManaCostPerLevel = 1;
+    public const float AegisDamageReduction = 0.5f;
+    public const float AegisRestorationMod = 0.1f;
 
     public bool EnchantedWeaponIsActive => LastEnchantedWeaponActivated > Time.GetUnixTime() - EnchantedWeaponActivatedDuration;
     private double LastEnchantedWeaponActivated;
@@ -127,19 +147,20 @@ partial class Player
             return false;
         }
 
-        if (GetEquippedShield() is null && GetEquippedWeapon() is not { IsTwoHanded: true})
-        {
-            Session.Network.EnqueueSend(
-                new GameMessageSystemChat(
-                    $"Phalanx requires an equipped shield or two-handed weapon.",
-                    ChatMessageType.Broadcast
-                )
-            );
-            return false;
-        }
-
         if (!PhalanxIsActive)
         {
+            // only checked when activating, so the stance can always be lowered after swapping weapons
+            if (!HasPhalanxEquipment)
+            {
+                Session.Network.EnqueueSend(
+                    new GameMessageSystemChat(
+                        $"Phalanx requires an equipped shield or two-handed weapon.",
+                        ChatMessageType.Broadcast
+                    )
+                );
+                return false;
+            }
+
             PhalanxIsActive = true;
 
             Session.Network.EnqueueSend(
@@ -161,6 +182,40 @@ partial class Player
         PlayParticleEffect(PlayScript.DispelLife, Guid);
 
         return true;
+    }
+
+    /// <summary>
+    /// COMBAT ABILITY - Phalanx: Damage taken from full hits is reduced by 30%.
+    /// Returns the damage multiplier for a full hit (1.0 while Phalanx is not in effect).
+    /// </summary>
+    public float GetPhalanxFullHitDamageMod()
+    {
+        return PhalanxIsEffective ? 1.0f - PhalanxDamageReduction : 1.0f;
+    }
+
+    /// <summary>
+    /// COMBAT ABILITY - Phalanx: Block and parry chance is increased by 25-50%, based on shield size.
+    /// Two-handed weapons receive the smallest bonus. Returns the multiplier for block/parry chance.
+    /// </summary>
+    public float GetPhalanxBlockParryMod()
+    {
+        if (!PhalanxIsEffective)
+        {
+            return 1.0f;
+        }
+
+        var bonus = GetEquippedShield()?.ArmorStyle switch
+        {
+            (int)ACE.Entity.Enum.ArmorStyle.CovenantShield => 0.5f,
+            (int)ACE.Entity.Enum.ArmorStyle.TowerShield => 0.45f,
+            (int)ACE.Entity.Enum.ArmorStyle.LargeShield => 0.4f,
+            (int)ACE.Entity.Enum.ArmorStyle.StandardShield => 0.35f,
+            (int)ACE.Entity.Enum.ArmorStyle.SmallShield => 0.3f,
+            (int)ACE.Entity.Enum.ArmorStyle.Buckler => 0.3f,
+            _ => 0.25f
+        };
+
+        return 1.0f + bonus;
     }
 
     public bool TryUseProvoke(WorldObject ability)
@@ -482,6 +537,7 @@ partial class Player
         }
 
         LastBackstabActivated = Time.GetUnixTime();
+        BackstabSingleUseIsActive = true;
 
         PlayParticleEffect(PlayScript.EnchantUpGreen, Guid);
 
@@ -529,38 +585,29 @@ partial class Player
             target.PlayParticleEffect(PlayScript.VisionDownBlack, target.Guid);
         }
 
+        TryVanishFromSmokescreen();
+
         return true;
     }
 
-    public bool TryUseVanish(WorldObject ability)
+    /// <summary>
+    /// Vanish's former effect, now folded into Smokescreen: attempts to slip away from anyone
+    /// currently attacking the player, entering stealth if every attacker is fooled.
+    /// Silently does nothing if the player is already stealthed or untrained in Thievery,
+    /// since Smokescreen's threat-reduction effect above still applies either way.
+    /// </summary>
+    private void TryVanishFromSmokescreen()
     {
-        if (!VerifyCombatFocus(CombatAbility.Vanish))
-        {
-            return false;
-        }
-
         if (IsStealthed)
         {
-            Session.Network.EnqueueSend(
-                new GameMessageSystemChat(
-                    $"You cannot use Vanish while stealthed.",
-                    ChatMessageType.Broadcast
-                )
-            );
-            return false;
+            return;
         }
 
         var thieverySkill = GetCreatureSkill(Skill.Thievery);
 
         if (thieverySkill.AdvancementClass < SkillAdvancementClass.Trained)
         {
-            Session.Network.EnqueueSend(
-                new GameMessageSystemChat(
-                    $"Vanish requires trained Thievery.",
-                    ChatMessageType.Broadcast
-                )
-            );
-            return false;
+            return;
         }
 
         var nearbyMonsters = GetNearbyMonsters(50);
@@ -573,12 +620,13 @@ partial class Player
             if (smoke != null)
             {
                 smoke.Location = Location;
+                smoke.InstanceId = InstanceId;
                 smoke.EnterWorld();
             }
 
             LastVanishActivated = Time.GetUnixTime();
             BeginStealth();
-            return true;
+            return;
         }
 
         // Calculate total stamina cost: average monster level + (1/10th of each monster level, rounded down)
@@ -603,7 +651,7 @@ partial class Player
                     ChatMessageType.Broadcast
                 )
             );
-            return false;
+            return;
         }
 
         var fooledMonsters = 0;
@@ -639,6 +687,7 @@ partial class Player
         if (smoke != null)
         {
             smoke.Location = Location;
+            smoke.InstanceId = InstanceId;
             smoke.EnterWorld();
         }
 
@@ -675,8 +724,68 @@ partial class Player
                 )
             );
         }
+    }
+
+    /// <summary>
+    /// While active: all attacks count as sneak attacks from behind, the player becomes
+    /// translucent like when Stealthed, and threat generated from attacks is halved.
+    /// </summary>
+    public bool TryUseShadowFlurry(WorldObject ability)
+    {
+        if (!VerifyCombatFocus(CombatAbility.ShadowFlurry))
+        {
+            return false;
+        }
+
+        if (ShadowFlurryIsActive)
+        {
+            return false;
+        }
+
+        LastShadowFlurryActivated = Time.GetUnixTime();
+
+        Session.Network.EnqueueSend(
+            new GameMessageSystemChat(
+                $"You melt into the shadows, striking from every angle!",
+                ChatMessageType.Broadcast
+            )
+        );
+
+        EnqueueBroadcast(new GameMessageScript(Guid, PlayScript.StealthBegin));
+        PlayParticleEffect(PlayScript.EnchantUpPurple, Guid);
+
+        var actionChain = new ActionChain();
+        actionChain.AddDelaySeconds(ShadowFlurryActivatedDuration);
+        actionChain.AddAction(
+            this,
+            () =>
+            {
+                EnqueueBroadcast(new GameMessageScript(Guid, PlayScript.StealthEnd));
+            }
+        );
+        actionChain.EnqueueChain();
 
         return true;
+    }
+
+    /// <summary>
+    /// Ends Shadow Flurry early. Called when a Backstab-boosted hit lands, since landing
+    /// that opening is the payoff and shouldn't also let the flurry keep running.
+    /// </summary>
+    public void CancelShadowFlurry()
+    {
+        if (!ShadowFlurryIsActive)
+        {
+            return;
+        }
+
+        LastShadowFlurryActivated = 0;
+
+        Session.Network.EnqueueSend(
+            new GameMessageSystemChat("You return from the shadows.", ChatMessageType.Broadcast)
+        );
+
+        EnqueueBroadcast(new GameMessageScript(Guid, PlayScript.StealthEnd));
     }
 
     public bool TryUseOverload(Gem gem)
@@ -900,33 +1009,20 @@ partial class Player
             weaponDamageType = SlashThrustToggle ? DamageType.Pierce : DamageType.Slash;
         }
 
+        // Attack height determines which effect is stored:
+        //   War  - High: Blast,        Medium: Bolt,        Low: Volley
+        //   Life - High: Drain Health, Medium: Harm Other,  Low: Heal Self
         var baseSpellHighAttack = magicSchool is MagicSchool.WarMagic
             ? GetLevelOneBlastOfDamageType(weaponDamageType)
-            : new Spell(SpellId.HealSelf1);
+            : new Spell(SpellId.DrainHealth1);
 
         var baseSpellMedAttack = magicSchool is MagicSchool.WarMagic
             ? GetLevelOneBoltOfDamageType(weaponDamageType)
-            : new Spell(SpellId.RevitalizeSelf1);
+            : new Spell(SpellId.HarmOther1);
 
         var baseSpellLowAttack = magicSchool is MagicSchool.WarMagic
             ? GetLevelOneVolleyOfDamageType(weaponDamageType)
-            : new Spell(SpellId.ManaBoostSelf1);
-
-        if (true) // TODO: If player has upgraded Enchanted Blade to use advanced spells, prevent this block from running
-        {
-            if (magicSchool is MagicSchool.WarMagic)
-            {
-                baseSpellHighAttack = GetLevelOneBoltOfDamageType(weaponDamageType);
-                baseSpellMedAttack = GetLevelOneBoltOfDamageType(weaponDamageType);
-                baseSpellLowAttack = GetLevelOneBoltOfDamageType(weaponDamageType);
-            }
-            else
-            {
-                baseSpellHighAttack = new Spell(SpellId.HealSelf1);
-                baseSpellMedAttack = new Spell(SpellId.HealSelf1);
-                baseSpellLowAttack = new Spell(SpellId.HealSelf1);
-            }
-        }
+            : new Spell(SpellId.HealSelf1);
 
         if (baseSpellHighAttack is null || baseSpellMedAttack is null || baseSpellLowAttack is null)
         {
@@ -941,7 +1037,7 @@ partial class Player
         magicSkill += (uint)(weaponSpellcraft * 0.1);
 
         var roll = Convert.ToInt32(ThreadSafeRandom.Next(magicSkill * 0.5f, magicSkill));
-        int[] diff = [50, 100, 200, 300, 350, 400, 450];
+        int[] diff = [20, 150, 200, 250, 300, 350, 400];
         var closest = diff.MinBy(x => Math.Abs(x - roll));
         var level = Array.IndexOf(diff, closest);
 
@@ -953,7 +1049,7 @@ partial class Player
         EnchantedBladeMedStoredSpell = new Spell(finalMedSpellId);
         EnchantedBladeLowStoredSpell = new Spell(finalLowSpellId);
 
-        var manaCost = (int)EnchantedBladeHighStoredSpell.BaseMana;
+        var manaCost = (int)(EnchantedBladeHighStoredSpell.BaseMana * 0.5f);
         if (Mana.Current < manaCost)
         {
             Session.Network.EnqueueSend(
@@ -1056,16 +1152,23 @@ partial class Player
 
         LastReflectActivated = Time.GetUnixTime();
 
-        if (GetCreatureSkill(Skill.MagicDefense).AdvancementClass is SkillAdvancementClass.Specialized)
+        ReflectGuaranteedCharges = GetCreatureSkill(Skill.MagicDefense).AdvancementClass switch
         {
-            ReflectFirstSpell = true;
-        }
+            SkillAdvancementClass.Specialized => 2,
+            SkillAdvancementClass.Trained => 1,
+            _ => 0
+        };
 
         PlayParticleEffect(PlayScript.SkillUpPurple, Guid);
 
         return true;
     }
 
+    /// <summary>
+    /// COMBAT ABILITY - Aegis: For 10 seconds, damage taken from weapon attacks is reduced by 50%, but those attacks
+    /// can't be evaded, fully or partially. Each hit restores stamina and mana equal to 10% of the damage prevented.
+    /// Costs mana equal to character level. Recasting while active refreshes the duration.
+    /// </summary>
     public bool TryUseAegis(Gem gem)
     {
         if (!VerifyCombatFocus(CombatAbility.Aegis))
@@ -1073,64 +1176,31 @@ partial class Player
             return false;
         }
 
-        if (AegisIsActive)
-        {
-            return false;
-        }
+        var manaCost = (Level ?? 1) * AegisManaCostPerLevel;
 
-        var baseSpell = LastHitReceivedDamageType switch
-        {
-            DamageType.Slash => new Spell(SpellId.BladeProtectionSelf1),
-            DamageType.Pierce => new Spell(SpellId.PiercingProtectionSelf1),
-            DamageType.Bludgeon => new Spell(SpellId.BludgeonProtectionSelf1),
-            DamageType.Cold => new Spell(SpellId.ColdProtectionSelf1),
-            DamageType.Fire => new Spell(SpellId.FireProtectionSelf1),
-            DamageType.Acid => new Spell(SpellId.AcidProtectionSelf1),
-            DamageType.Electric => new Spell(SpellId.LightningProtectionSelf1),
-            _ => null
-        };
-
-        if (baseSpell is null)
-        {
-            _log.Error("TryUseAegis() - baseSpell is null");
-            return false;
-        }
-
-        var equippedWeapon = GetEquippedWeapon();
-        if (equippedWeapon is null)
+        if (Mana.Current < manaCost)
         {
             Session.Network.EnqueueSend(
                 new GameMessageSystemChat(
-                    $"Aegis can only be used while a weapon is equipped.",
+                    $"You do not have enough mana to raise your Aegis. ({manaCost} mana required)",
                     ChatMessageType.Broadcast
                 )
             );
             return false;
         }
 
-        var weaponSpellcraft = equippedWeapon.ItemSpellcraft;
-        if (weaponSpellcraft is null)
-        {
-            Session.Network.EnqueueSend(
-                new GameMessageSystemChat(
-                    $"Aegis can only be used with a weapon that has spellcraft.",
-                    ChatMessageType.Broadcast
-                )
-            );
-
-            return false;
-        }
-
-        var roll = Convert.ToInt32(ThreadSafeRandom.Next(weaponSpellcraft.Value * 0.5f, weaponSpellcraft.Value));
-        int[] diff = [50, 100, 200, 300, 350, 400, 450];
-        var closest = diff.MinBy(x => Math.Abs(x - roll));
-        var level = Array.IndexOf(diff, closest);
-
-        var finalSpellId = SpellLevelProgression.GetSpellAtLevel((SpellId)baseSpell.Id, level + 1);
-
-        TryCastSpell(new Spell(finalSpellId), this);
+        UpdateVitalDelta(Mana, -manaCost);
 
         LastAegisActivated = Time.GetUnixTime();
+
+        Session.Network.EnqueueSend(
+            new GameMessageSystemChat(
+                $"You raise your Aegis! For the next {AegisActivatedDuration} seconds, weapon attacks deal {Math.Round(AegisDamageReduction * 100)}% less damage to you, but you can't evade them.",
+                ChatMessageType.Broadcast
+            )
+        );
+
+        PlayParticleEffect(PlayScript.ShieldUpPurple, Guid);
 
         return true;
     }
@@ -1481,11 +1551,11 @@ partial class Player
         {
             var mostRecentAttackEventTime = LastAttackTime > LastAttackReceivedTime ? LastAttackTime : LastAttackReceivedTime;
 
-            if (Time.GetUnixTime() - mostRecentAttackEventTime < 10.0)
+            if (Time.GetUnixTime() - mostRecentAttackEventTime < 5.0)
             {
                 Session.Network.EnqueueSend(
                     new GameMessageSystemChat(
-                        $"You cannot use Stealth if you have attacked, or received an attack, within the last 10 seconds.",
+                        $"You cannot use Stealth if you have attacked, or received an attack, within the last 5 seconds.",
                         ChatMessageType.Broadcast
                     )
                 );
@@ -1739,12 +1809,12 @@ partial class Player
                     return false;
                 }
                 break;
-            case CombatAbility.Vanish:
+            case CombatAbility.ShadowFlurry:
                 if (GetEquippedCombatFocus() is not {CombatFocusTypeId: (int)CombatFocusType.Vagabond})
                 {
                     Session.Network.EnqueueSend(
                         new GameMessageSystemChat(
-                            $"Vanish can only be used with a Vagabond Focus.",
+                            $"Shadow Flurry can only be used with a Vagabond Focus.",
                             ChatMessageType.Broadcast
                         )
                     );

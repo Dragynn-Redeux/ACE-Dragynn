@@ -42,7 +42,7 @@ public class TeleAllTo
 
             player.SetPosition(PositionType.TeleportedCharacter, new Position(player.Location));
 
-            player.Teleport(new Position(destinationPlayer.Location));
+            player.Teleport(new Position(destinationPlayer.Location), instanceId: destinationPlayer.InstanceId);
         }
 
         PlayerManager.BroadcastToAuditChannel(

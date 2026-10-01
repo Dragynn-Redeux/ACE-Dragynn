@@ -50,10 +50,27 @@ public class Landblock : IActor
     public static float MaxObjectRange { get; } = 192f;
     public static float MaxObjectGhostRange { get; } = 250f;
 
+    /// <summary>
+    /// The instance id of the persistent world. Every landblock that isn't part of an instance lives here.
+    /// </summary>
+    public const uint PersistentInstance = 0;
+
     public LandblockId Id { get; }
 
     /// <summary>
-    /// Flag indicates if this landblock is permanently loaded (for example, towns on high-traffic servers)
+    /// Which instance this landblock belongs to. Several landblocks can share the same Id as long as they belong to
+    /// different instances. They never see each other: objects, adjacencies and tick groups are all per instance.
+    /// </summary>
+    /// <remarks>
+    /// Landblocks in a non-zero instance are made by InstanceManager.Create(), which knows which landblocks an instance is made of.
+    /// Nothing in an instance is ever saved.
+    /// </remarks>
+    public uint Instance { get; }
+
+    /// <summary>
+    /// Flag indicates if this landblock is permanently loaded (for example, towns on high-traffic servers).
+    /// It is never unloaded, and in the persistent world it never goes dormant either. An instance keeps all of its landblocks
+    /// loaded for as long as it lasts with this, but the ones that nobody is near still go dormant.
     /// </summary>
     public bool Permaload = false;
 
@@ -186,11 +203,12 @@ public class Landblock : IActor
 
     public List<uint> PlayerAccountIds = new List<uint>();
 
-    public Landblock(LandblockId id)
+    public Landblock(LandblockId id, uint instance = PersistentInstance)
     {
         //log.DebugFormat("Landblock({0:X8})", (id.Raw | 0xFFFF));
 
         Id = id;
+        Instance = instance;
 
         CellLandblock = DatManager.CellDat.ReadFromDat<CellLandblock>(Id.Raw | 0xFFFF);
         LandblockInfo = DatManager.CellDat.ReadFromDat<LandblockInfo>((uint)Id.Landblock << 16 | 0xFFFE);
@@ -198,7 +216,7 @@ public class Landblock : IActor
         lastActiveTime = DateTime.UtcNow;
 
         var cellLandblock = DBObj.GetCellLandblock(Id.Raw | 0xFFFF);
-        PhysicsLandblock = new Physics.Common.Landblock(cellLandblock);
+        PhysicsLandblock = new Physics.Common.Landblock(cellLandblock) { Instance = instance };
     }
 
     public void Init(bool reload = false)
@@ -257,8 +275,14 @@ public class Landblock : IActor
     private void CreateWorldObjects()
     {
         var objects = DatabaseManager.World.GetCachedInstancesByLandblock(Id.Landblock);
-        var shardObjects = DatabaseManager.Shard.BaseDatabase.GetStaticObjectsByLandblock(Id.Landblock);
-        var factoryObjects = WorldObjectFactory.CreateNewWorldObjects(objects, shardObjects);
+
+        // Nothing in an instance is restored from the shard. Its objects are made from the world db, and only exist for as long as the instance does.
+        var shardObjects =
+            Instance == PersistentInstance
+                ? DatabaseManager.Shard.BaseDatabase.GetStaticObjectsByLandblock(Id.Landblock)
+                : new List<ACE.Database.Models.Shard.Biota>();
+
+        var factoryObjects = WorldObjectFactory.CreateNewWorldObjects(objects, shardObjects, instanceId: Instance);
 
         actionQueue.EnqueueAction(
             new ActionEventDelegate(() =>
@@ -342,6 +366,12 @@ public class Landblock : IActor
     /// </summary>
     private void SpawnDynamicShardObjects()
     {
+        // what is saved for a landblock (corpses and the like) belongs to the persistent world, not to its instances
+        if (Instance != PersistentInstance)
+        {
+            return;
+        }
+
         var dynamics = DatabaseManager.Shard.BaseDatabase.GetDynamicObjectsByLandblock(Id.Landblock);
         var factoryShardObjects = WorldObjectFactory.CreateWorldObjects(dynamics);
 
@@ -448,7 +478,7 @@ public class Landblock : IActor
 
                     wo.Location = new Position(pos.ObjCellID, pos.Frame.Origin, pos.Frame.Orientation);
 
-                    var sortCell = LScape.get_landcell(pos.ObjCellID) as SortCell;
+                    var sortCell = LScape.get_landcell(pos.ObjCellID, Instance) as SortCell;
                     if (sortCell != null && sortCell.has_building())
                     {
                         wo.Destroy();
@@ -459,7 +489,7 @@ public class Landblock : IActor
                     {
                         // Avoid some less than ideal locations
                         if (
-                            !wo.Location.IsWalkable()
+                            !wo.Location.IsWalkable(Instance)
                             || PhysicsLandblock.OnRoad(new Vector3(xPos, yPos, pos.Frame.Origin.Z))
                         )
                         {
@@ -777,7 +807,12 @@ public class Landblock : IActor
                 }
             }
 
-            if (!Permaload && HasNoKeepAliveObjects)
+            // A landblock that is kept loaded (Permaload) is kept active too, except in an instance. An instance keeps all of the landblocks it is made of
+            // loaded for as long as it lasts, but the ones that no player is near still go dormant, like any others: without that every monster
+            // in a big island would keep running for nobody, for as long as the instance exists.
+            var keptActive = Permaload && Instance == PersistentInstance;
+
+            if (!keptActive && HasNoKeepAliveObjects)
             {
                 if (lastActiveTime + dormantInterval < thisHeartBeat)
                 {
@@ -794,7 +829,7 @@ public class Landblock : IActor
                     IsDormant = true;
                 }
 
-                if (lastActiveTime + UnloadInterval < thisHeartBeat)
+                if (!Permaload && lastActiveTime + UnloadInterval < thisHeartBeat)
                 {
                     LandblockManager.AddToDestructionQueue(this);
                 }
@@ -1191,6 +1226,7 @@ public class Landblock : IActor
         }
 
         wo.CurrentLandblock = this;
+        wo.InstanceId = Instance;
 
         if (wo.PhysicsObj == null)
         {
@@ -1298,13 +1334,6 @@ public class Landblock : IActor
                     corpse.TimeToRot = Corpse.EmptyDecayTime;
                 }
             }
-        }
-
-        if (wo is Creature creature and not Player)
-        {
-            creature.SetLethalityModFromDungeonMod();
-            creature.SetHealthFromDungeonMod();
-            creature.SetSkillsFromDungeonMod();
         }
 
         return true;
@@ -1493,6 +1522,17 @@ public class Landblock : IActor
     }
 
     /// <summary>
+    /// The object that a guid from the world database is for, such as the activation target of a weenie.<para />
+    /// In the persistent world that is the object with that guid. In an instance the static objects have guids of their own
+    /// (the same landblock exists more than once), so it is the copy of the object that is in this instance.
+    /// A guid that is not one of those is looked up as it is: objects made in the instance have the same guid wherever it comes from.
+    /// </summary>
+    public WorldObject GetObjectFromWorldGuid(uint worldGuid)
+    {
+        return GetObject(new ObjectGuid(InstanceManager.TranslateWorldGuid(Instance, worldGuid)));
+    }
+
+    /// <summary>
     /// This will return null if the object was not found in the current or adjacent landblocks.
     /// </summary>
     public WorldObject GetObject(ObjectGuid guid, bool searchAdjacents = true)
@@ -1633,7 +1673,7 @@ public class Landblock : IActor
         actionQueue.Clear();
 
         // remove physics landblock
-        LScape.unload_landblock(landblockID);
+        LScape.unload_landblock(landblockID, Instance);
 
         PhysicsLandblock.release_shadow_objs();
     }
@@ -1691,6 +1731,12 @@ public class Landblock : IActor
 
     private void SaveDB()
     {
+        // Nothing in an instance is ever saved. It would come back in the persistent world, where the same landblock is loaded from the same rows.
+        if (Instance != PersistentInstance)
+        {
+            return;
+        }
+
         var biotas = new Collection<(Biota biota, ReaderWriterLockSlim rwLock)>();
 
         foreach (var wo in worldObjects.Values)
@@ -1939,16 +1985,129 @@ public class Landblock : IActor
 
         var fellowship = player.Fellowship;
 
+        // a dungeon that is instanced doesn't need its copies: every fellowship gets a private instance of the original
+        if (IsCapstoneInstanced(dungeonName))
+        {
+            AssignInstancedCapstoneDungeon(player, dungeonName, dungeonLandblocks[0]);
+            return;
+        }
+
         if (fellowship.CapstoneDungeon.HasValue && dungeonLandblocks.Contains((LandblockId)fellowship.CapstoneDungeon))
         {
             var landblock = LandblockManager.GetLandblock((LandblockId)fellowship.CapstoneDungeon, false);
 
-            CapstoneTeleport(player, landblock);
+            // The dungeon is unloaded a while after everyone has left it (UnloadInterval), and comes back without the fellowship
+            // or its mods. Take it back, with the same mods.
+            if (landblock.CapstoneFellowship == null)
+            {
+                landblock.CapstoneFellowship = fellowship;
+                landblock.SetLandblockMods(fellowship, dungeonName);
+            }
+
+            if (landblock.CapstoneFellowship == fellowship)
+            {
+                CapstoneTeleport(player, landblock);
+                return;
+            }
+
+            // another fellowship got it after it was unloaded, so this one gets another copy, with its mods
         }
-        else
+
+        FindOpenInstanceFellowship(player, dungeonLandblocks, dungeonName);
+    }
+
+    private static readonly Dictionary<string, InstanceTemplate> capstoneInstanceTemplates =
+        new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Whether a capstone dungeon is opened as an instance of its original landblock rather than as one of its numbered copies.
+    /// This is set with the capstone_instanced_dungeons server property, which has every capstone dungeon by default.
+    /// </summary>
+    private static bool IsCapstoneInstanced(string dungeonName)
+    {
+        return IsListedAsCapstoneInstanced(PropertyManager.GetString("capstone_instanced_dungeons").Item, dungeonName);
+    }
+
+    /// <summary>
+    /// Whether a dungeon is in the value of capstone_instanced_dungeons: a comma separated list of names, or * for every dungeon
+    /// </summary>
+    internal static bool IsListedAsCapstoneInstanced(string names, string dungeonName)
+    {
+        if (string.IsNullOrWhiteSpace(names))
         {
-            FindOpenInstanceFellowship(player, dungeonLandblocks, dungeonName);
+            return false;
         }
+
+        var listed = names.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+
+        return listed.Contains("*") || listed.Contains(dungeonName, StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// What the value of capstone_instanced_dungeons comes to, for the log at startup
+    /// </summary>
+    internal static string DescribeCapstoneInstancing(string names)
+    {
+        if (string.IsNullOrWhiteSpace(names))
+        {
+            return "empty, so every capstone dungeon opens as one of its numbered copies";
+        }
+
+        var listed = names.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+
+        return listed.Contains("*")
+            ? "*, so every capstone dungeon opens as an instance"
+            : $"{listed.Length} name(s), so only those capstone dungeons open as instances and the others as their numbered copies";
+    }
+
+    /// <summary>
+    /// Opens the dungeon as a private instance of the original landblock for the player's fellowship, or takes the player
+    /// into the one their fellowship already has. The instance is deleted a while after everyone has left it.
+    /// </summary>
+    private static void AssignInstancedCapstoneDungeon(Player player, string dungeonName, LandblockId original)
+    {
+        var fellowship = player.Fellowship;
+
+        InstanceTemplate template;
+
+        lock (capstoneInstanceTemplates)
+        {
+            if (!capstoneInstanceTemplates.TryGetValue(dungeonName, out template))
+            {
+                // no return position: a player who logs out in here, or is still inside when it ends, goes to their sanctuary,
+                // the same as HandleCapstoneLandblockLogin does for the copies
+                template = new InstanceTemplate(
+                    $"capstone:{dungeonName}",
+                    new[] { original },
+                    CapstoneTeleportLocations[original]
+                );
+                capstoneInstanceTemplates.Add(dungeonName, template);
+            }
+        }
+
+        // one step, so two members of the fellowship who come through the portal at the same moment don't make one each
+        var instance = InstanceManager.FindOrCreate(template, fellowship, out var created);
+
+        if (created)
+        {
+            // set it up the way FindOpenInstanceFellowship does for a copy: which fellowship opened it, and the modifiers its leader chose
+            var landblock = LandblockManager.TryGetLandblock(original, instance.Id);
+
+            if (landblock != null)
+            {
+                landblock.CapstoneFellowship = fellowship;
+                landblock.SetLandblockMods(fellowship, dungeonName);
+            }
+        }
+
+        fellowship.CapstoneDungeon = original;
+        player.CapstoneDungeon = original;
+
+        var destination = new Position(template.EntryPosition);
+        WorldObject.AdjustDungeon(destination, instance.Id);
+
+        // a capstone entrance's emote does its teleport (Portal.IsCapstoneEntrance)
+        InstanceManager.Enter(player, instance, destination, fromPortal: true);
     }
 
     private static void FindOpenInstanceFellowship(
@@ -1969,9 +2128,11 @@ public class Landblock : IActor
             }
 
             landblock.CapstoneFellowship = fellowship;
-            fellowship.CapstoneDungeon = landblockId;
 
+            // before CapstoneDungeon is changed, since that's how SetLandblockMods knows which dungeon the fellowship's mods are for
             landblock.SetLandblockMods(fellowship, dungeonName);
+
+            fellowship.CapstoneDungeon = landblockId;
 
             CapstoneTeleport(player, landblock);
             return;
@@ -1987,75 +2148,49 @@ public class Landblock : IActor
         WorldManager.ThreadSafeTeleport(player, player.Sanctuary);
     }
 
+    /// <summary>
+    /// Sets the dungeon mods for a fellowship's run of a dungeon. The first time the fellowship enters the dungeon, they're the mods
+    /// its leader has active (from DungeonModders), which are used up. The fellowship keeps them (Fellowship.CapstoneDungeonMods), and
+    /// they're what the dungeon gets from then on: when it's loaded again after being unloaded, and for the second part of a dungeon.
+    /// Must be called before the fellowship's CapstoneDungeon is changed to this landblock.
+    /// </summary>
     private void SetLandblockMods(Fellowship fellowship, string dungeonName)
     {
-        LandblockLootQualityMod = 0.0;
+        if (fellowship.CapstoneDungeonMods != null && HasCapstoneDungeon(fellowship, dungeonName))
+        {
+            ApplyLandblockMods(fellowship.CapstoneDungeonMods);
+            return;
+        }
+
+        var modNames = new List<string>();
+
+        // a new run of a dungeon starts with the mods found here, even if there are none, so the last run's don't carry over
+        fellowship.CapstoneDungeonMods = modNames;
 
         var playerLeaderGuid = fellowship.FellowshipLeaderGuid;
 
         // must be fellowship leader
         if (!fellowship.GetFellowshipMembers().TryGetValue(playerLeaderGuid, out var playerLeader))
         {
+            ApplyLandblockMods(modNames);
             return;
         }
 
-        if (dungeonName is "Lugian Mines2" or "Beyond the Mines")
+        foreach (var (modName, modInfo) in LandblockMods)
         {
-            var previousLandblock = LandblockManager.GetLandblock(GetPartOneDungeon(Id), false);
+            var landblockModSpell = playerLeader.EnchantmentManager.GetEnchantment((uint)modInfo.SpellId);
 
-            var previousLandblockMods = previousLandblock.LandblockMods;
-            var previousLandblockLootQuality = previousLandblock.LandblockLootQualityMod;
-
-            foreach (var kvp in previousLandblockMods)
+            if (landblockModSpell is null)
             {
-                LandblockMods[kvp.Key] = kvp.Value;
+                continue;
             }
 
-            LandblockLootQualityMod = previousLandblockLootQuality;
+            modNames.Add(modName);
 
-            return;
+            playerLeader.EnchantmentManager.Dispel(landblockModSpell);
         }
-        else
-        {
-            var leaderLandblockModSpells = new List<PropertiesEnchantmentRegistry>();
 
-            foreach (var landblockMod in LandblockMods)
-            {
-                leaderLandblockModSpells.Add(
-                    playerLeader.EnchantmentManager.GetEnchantment((uint)landblockMod.Value.SpellId));
-            }
-
-            if (leaderLandblockModSpells.Count == 0)
-            {
-                return;
-            }
-
-            var distinctLandblockMoSpellsActive = leaderLandblockModSpells.Distinct();
-
-            foreach (var landblockModSpell in distinctLandblockMoSpellsActive)
-            {
-                if (landblockModSpell is null)
-                {
-                    continue;
-                }
-
-                LandblockModsSpellToName.TryGetValue(landblockModSpell.SpellId, out var modName);
-
-                if (modName is null)
-                {
-                    continue;
-                }
-
-                var modInfo = LandblockMods[modName];
-                modInfo.Active = true;
-
-                LandblockMods[modName] = modInfo;
-
-                LandblockLootQualityMod += LandblockMods[modName].LootQualityBonus;
-
-                playerLeader.EnchantmentManager.Dispel(landblockModSpell);
-            }
-        }
+        ApplyLandblockMods(modNames);
 
         foreach (var fellowshipMember in playerLeader.Fellowship.GetFellowshipMembers())
         {
@@ -2089,12 +2224,12 @@ public class Landblock : IActor
                 }
 
                 fellowPlayer.Session.Network.EnqueueSend(new GameMessageSystemChat(
-                    $" -{activeLandblockMod.Key}: +{activeLandblockMod.Value.LootQualityBonus * 100}%",
+                    $" -{activeLandblockMod.Key}: +{Math.Round(activeLandblockMod.Value.LootQualityBonus * 100, 1)}%",
                     ChatMessageType.Broadcast
                 ));
             }
 
-            var totalBonus = baseBonus + completionBonus + Math.Round(LandblockLootQualityMod * 100);
+            var totalBonus = baseBonus + completionBonus + Math.Round(LandblockLootQualityMod * 100, 1);
             var diminishedRoll = (float)(1 - Math.Exp(-1 * totalBonus / 100));
 
             fellowPlayer.Session.Network.EnqueueSend(new GameMessageSystemChat(
@@ -2104,52 +2239,157 @@ public class Landblock : IActor
         }
     }
 
-    public Dictionary<string, (bool Active, int SpellId, double LootQualityBonus)> LandblockMods { get; private set; }
+    /// <summary>
+    /// True if the fellowship is already doing this dungeon (its CapstoneDungeon is one of the dungeon's landblocks), or has done the
+    /// first part of it
+    /// </summary>
+    private static bool HasCapstoneDungeon(Fellowship fellowship, string dungeonName)
+    {
+        if (fellowship.CapstoneDungeon is not { } capstoneDungeon)
+        {
+            return false;
+        }
+
+        var partOneName = dungeonName switch
+        {
+            "Lugian Mines2" => "Lugian Mines",
+            "Beyond the Mines" => "Mines of Despair",
+            _ => null
+        };
+
+        return (CapstoneDungeonLists(dungeonName)?.Contains(capstoneDungeon) ?? false)
+               || (partOneName != null && CapstoneDungeonLists(partOneName).Contains(capstoneDungeon));
+    }
+
+    /// <summary>
+    /// Makes the named mods the ones that are active in this landblock, and gives them to the creatures that are already in it
+    /// </summary>
+    private void ApplyLandblockMods(ICollection<string> modNames)
+    {
+        LandblockLootQualityMod = 0.0;
+
+        foreach (var modName in LandblockMods.Keys.ToList())
+        {
+            var modInfo = LandblockMods[modName];
+
+            modInfo.Active = modNames.Contains(modName);
+
+            LandblockMods[modName] = modInfo;
+
+            if (modInfo.Active)
+            {
+                LandblockLootQualityMod += modInfo.LootQualityBonus;
+            }
+        }
+
+        // A creature gets the mods when it's placed (Creature.ApplyArchetypeSystem), so the ones that were placed before they were set
+        // have to be done again: the landblock can have been loaded before the fellowship got it, with its creatures already in it.
+        // A capstone portal takes the player to the dungeon's original landblock (the first copy) before its AssignCapstoneDungeon
+        // emote sends them on to their own, so that one is loaded by everyone who goes in. That's done on the landblock's own thread,
+        // since this is called from the thread of the player going into the dungeon.
+        EnqueueAction(new ActionEventDelegate(ApplyLandblockModsToCreatures));
+    }
+
+    private void ApplyLandblockModsToCreatures()
+    {
+        foreach (var wo in worldObjects.Values.Concat(pendingAdditions.Values).ToList())
+        {
+            // not one that's dying: this gives it full health
+            if (wo is Creature { IsDead: false } creature and not Player)
+            {
+                creature.ApplyArchetypeSystem();
+            }
+        }
+    }
+
+    /// <summary>
+    /// The dungeon mods the fellowship leader can choose (by using a DungeonModder), keyed by the name shown to the fellowship.
+    /// DifficultyTier is 1-20 for the Dungeon: Difficulty mods and 0 for the rest.
+    /// </summary>
+    public Dictionary<string, (bool Active, int SpellId, double LootQualityBonus, int DifficultyTier)> LandblockMods { get; private set; }
+
+    /// <summary>
+    /// What each tier of Dungeon: Difficulty adds to the enemies in the dungeon
+    /// </summary>
+    public const double DifficultyDamageBonusPerTier = 0.25;
+    public const double DifficultyHealthBonusPerTier = 0.10;
+    public const double DifficultySkillBonusPerTier = 0.02;
 
     private void SetActiveMods()
     {
-        LandblockMods = new Dictionary<string, (bool Active, int SpellId, double LootQualityBonus)>
+        LandblockMods = new Dictionary<string, (bool Active, int SpellId, double LootQualityBonus, int DifficultyTier)>
         {
-            { "Lethality 50%", (false, 6416, 0.05) },
-            { "Lethality 100%", (false, 6417, 0.1) },
-            { "Lethality 150%", (false, 6418, 0.15) },
-            { "Lethality 200%", (false, 6419, 0.2) },
-            { "Lethality 250%", (false, 6420, 0.25) },
-            { "Lethality 300%", (false, 6421, 0.3) },
-            { "Lethality 350%", (false, 6422, 0.35) },
-            { "Lethality 400%", (false, 6423, 0.4) },
-            { "Lethality 450%", (false, 6424, 0.45) },
-            { "Lethality 500%", (false, 6425, 0.5) },
-            { "Titans", (false, 6426, 0.05) },
-            { "Drained", (false, 6427, 0.05) },
-            { "Explosive", (false, 6428, 0.05) },
-            { "Skilled", (false, 6429, 0.05) },
-            { "Fester", (false, 6430, 0.05) },
-            { "Enraged", (false, 6431, 0.05) },
-            { "Inspired", (false, 6432, 0.05) },
+            { "Difficulty I", (false, (int)SpellId.DungeonDifficulty1, 0.025, 1) },
+            { "Difficulty II", (false, (int)SpellId.DungeonDifficulty2, 0.05, 2) },
+            { "Difficulty III", (false, (int)SpellId.DungeonDifficulty3, 0.075, 3) },
+            { "Difficulty IV", (false, (int)SpellId.DungeonDifficulty4, 0.1, 4) },
+            { "Difficulty V", (false, (int)SpellId.DungeonDifficulty5, 0.125, 5) },
+            { "Difficulty VI", (false, (int)SpellId.DungeonDifficulty6, 0.15, 6) },
+            { "Difficulty VII", (false, (int)SpellId.DungeonDifficulty7, 0.175, 7) },
+            { "Difficulty VIII", (false, (int)SpellId.DungeonDifficulty8, 0.2, 8) },
+            { "Difficulty IX", (false, (int)SpellId.DungeonDifficulty9, 0.225, 9) },
+            { "Difficulty X", (false, (int)SpellId.DungeonDifficulty10, 0.25, 10) },
+            { "Difficulty XI", (false, (int)SpellId.DungeonDifficulty11, 0.275, 11) },
+            { "Difficulty XII", (false, (int)SpellId.DungeonDifficulty12, 0.3, 12) },
+            { "Difficulty XIII", (false, (int)SpellId.DungeonDifficulty13, 0.325, 13) },
+            { "Difficulty XIV", (false, (int)SpellId.DungeonDifficulty14, 0.35, 14) },
+            { "Difficulty XV", (false, (int)SpellId.DungeonDifficulty15, 0.375, 15) },
+            { "Difficulty XVI", (false, (int)SpellId.DungeonDifficulty16, 0.4, 16) },
+            { "Difficulty XVII", (false, (int)SpellId.DungeonDifficulty17, 0.425, 17) },
+            { "Difficulty XVIII", (false, (int)SpellId.DungeonDifficulty18, 0.45, 18) },
+            { "Difficulty XIX", (false, (int)SpellId.DungeonDifficulty19, 0.475, 19) },
+            { "Difficulty XX", (false, (int)SpellId.DungeonDifficulty20, 0.5, 20) },
+            { "Titans", (false, (int)SpellId.DungeonTitans, 0.05, 0) },
+            { "Drained", (false, (int)SpellId.DungeonDrained, 0.05, 0) },
+            { "Explosive", (false, (int)SpellId.DungeonExplosive, 0.05, 0) },
+            { "Skilled", (false, (int)SpellId.DungeonSkilled, 0.05, 0) },
+            { "Fester", (false, (int)SpellId.DungeonFester, 0.05, 0) },
+            { "Enraged", (false, (int)SpellId.DungeonEnraged, 0.05, 0) },
+            { "Inspired", (false, (int)SpellId.DungeonInspired, 0.05, 0) },
         };
     }
 
-    private static readonly Dictionary<int, string> LandblockModsSpellToName = new()
+    /// <summary>
+    /// The tier (1-20) of the Dungeon: Difficulty mod active in this landblock, or 0 if there is none
+    /// </summary>
+    public int GetDifficultyTier()
     {
-        {6416, "Lethality 50%"},
-        {6417, "Lethality 100%"},
-        {6418, "Lethality 150%"},
-        {6419, "Lethality 200%"},
-        {6420, "Lethality 250%"},
-        {6421, "Lethality 300%"},
-        {6422, "Lethality 350%"},
-        {6423, "Lethality 400%"},
-        {6424, "Lethality 450%"},
-        {6425, "Lethality 500%"},
-        {6426, "Titans"},
-        {6427, "Drained"},
-        {6428, "Explosive"},
-        {6429, "Skilled"},
-        {6430, "Fester"},
-        {6431, "Enraged"},
-        {6432, "Inspired"},
-    };
+        var tier = 0;
+
+        foreach (var landblockMod in LandblockMods.Values)
+        {
+            if (landblockMod.Active && landblockMod.DifficultyTier > tier)
+            {
+                tier = landblockMod.DifficultyTier;
+            }
+        }
+
+        return tier;
+    }
+
+    /// <summary>
+    /// Extra damage for the enemies in this landblock from Dungeon: Difficulty (0.25 = +25%)
+    /// </summary>
+    public double GetLandblockLethalityMod()
+    {
+        return GetDifficultyTier() * DifficultyDamageBonusPerTier;
+    }
+
+    /// <summary>
+    /// Extra max health for the enemies in this landblock from Dungeon: Difficulty (0.1 = +10%)
+    /// </summary>
+    public double GetLandblockHealthMod()
+    {
+        return GetDifficultyTier() * DifficultyHealthBonusPerTier;
+    }
+
+    /// <summary>
+    /// Extra skill for the enemies in this landblock from Dungeon: Difficulty (0.02 = +2%)
+    /// </summary>
+    public double GetLandblockSkillMod()
+    {
+        return GetDifficultyTier() * DifficultySkillBonusPerTier;
+    }
 
     public static void CapstoneTeleport(Player player, Landblock landblock)
     {
@@ -2161,7 +2401,9 @@ public class Landblock : IActor
         }
 
         WorldObject.AdjustDungeon(destination);
-        WorldManager.ThreadSafeTeleport(player, destination);
+
+        // a capstone entrance's emote does its teleport (Portal.IsCapstoneEntrance)
+        WorldManager.ThreadSafeTeleport(player, destination, fromPortal: true);
     }
 
     public static List<LandblockId> CapstoneDungeonLists(string dungeonName)
@@ -2250,22 +2492,6 @@ public class Landblock : IActor
             return landblockIds;
         }
         return null;
-    }
-
-    public static LandblockId GetPartOneDungeon(LandblockId dungeonId)
-    {
-        if (CapstoneDungeonLists("Lugian Mines2").Contains(dungeonId))
-        {
-            var index = CapstoneDungeonLists("Lugian Mines2").IndexOf(dungeonId);
-
-            return CapstoneDungeonLists("Lugian Mines")[index];
-        }
-        else
-        {
-            var index = CapstoneDungeonLists("Beyond the Mines").IndexOf(dungeonId);
-
-            return CapstoneDungeonLists("Mines of Despair")[index];
-        }
     }
 
 
@@ -2536,23 +2762,5 @@ public class Landblock : IActor
                 }
             }
         }
-    }
-
-    public double GetLandblockLethalityMod()
-    {
-        return true switch
-        {
-            _ when LandblockMods["Lethality 500%"].Active => 5.0,
-            _ when LandblockMods["Lethality 450%"].Active => 4.5,
-            _ when LandblockMods["Lethality 400%"].Active => 4.0,
-            _ when LandblockMods["Lethality 350%"].Active => 3.5,
-            _ when LandblockMods["Lethality 300%"].Active => 3.0,
-            _ when LandblockMods["Lethality 250%"].Active => 2.5,
-            _ when LandblockMods["Lethality 200%"].Active => 2.0,
-            _ when LandblockMods["Lethality 150%"].Active => 1.5,
-            _ when LandblockMods["Lethality 100%"].Active => 1.0,
-            _ when LandblockMods["Lethality 50%"].Active => 0.5,
-            _ => 0.0
-        };
     }
 }

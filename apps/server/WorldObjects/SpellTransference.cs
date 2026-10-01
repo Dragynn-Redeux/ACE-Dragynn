@@ -634,8 +634,7 @@ public class SpellTransference : Stackable
 
                         if (isProc)
                         {
-                            var animLength = WeaponAnimationLength.GetWeaponAnimLength(target) / 100;
-                            var procRate = animLength + (animLength * LootGenerationFactory.GetDiminishingRoll());
+                            var procRate = LootGenerationFactory.RollProcSpellRate(target);
 
                             target.ProcSpellRate = procRate;
                             target.ProcSpell = (uint)spellToAddId;

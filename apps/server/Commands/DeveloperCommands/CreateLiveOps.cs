@@ -366,7 +366,8 @@ public class CreateLiveOps
             obj.Location = session.Player.Location.InFrontOf(dist);
         }
 
-        obj.Location.LandblockId = new LandblockId(obj.Location.GetCell());
+        obj.InstanceId = session.Player.InstanceId; // it appears where the admin is, which can be an instance
+        obj.Location.LandblockId = new LandblockId(obj.Location.GetCell(obj.InstanceId));
 
         LastSpawnPos = obj.Location;
 

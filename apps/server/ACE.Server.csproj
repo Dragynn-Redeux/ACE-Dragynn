@@ -235,6 +235,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="ACE.Server.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Discord.Net" Version="3.16.0" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="8.0.0" />
     <PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" Version="8.0.0" />
@@ -284,6 +288,12 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>
+
+  <!-- instances.json is the server's own configuration. The build puts the one that comes with the server next to it when there is none there yet,
+       and leaves one that is already there alone, so that a rebuild can't undo what has been edited. Delete it and build to get the default back. -->
+  <Target Name="CopyInstancesJsonOnce" AfterTargets="CopyFilesToOutputDirectory">
+    <Copy SourceFiles="instances.json" DestinationFolder="$(OutDir)" Condition="!Exists('$(OutDir)instances.json')" />
+  </Target>
 
   <ItemGroup>
     <Content Include="recipe_use_emote_whitelist.json">

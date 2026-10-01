@@ -901,7 +901,7 @@ public class AppraiseInfo
         SetGearRatingText(wo, PropertyInt.GearPhysicalWard, "Black Bulwark", $"Grants 10%% protection against Slashing, Bludgeoning, and Piercing damage types, plus an additional 0.5% per equipped rating ((ONE) total).", 0.5f, 1.0f, 10, 0, true);
         SetGearRatingText(wo, PropertyInt.GearMagicFind, "Seeker", $"Grants a 5% bonus to monster loot quality, plus an additional 0.25% per equipped rating ((ONE) total).", 0.25f, 1.0f, 5, 0, true);
         SetGearRatingText(wo, PropertyInt.GearBlock, "Stalwart Defense", $"Grants a 10% bonus to block attacks, plus an additional 0.5% per equipped rating ((ONE) total).", 0.5f, 1.0f, 10, 0, true);
-        SetGearRatingText(wo, PropertyInt.GearItemManaUsage, "Thrifty Scholar", $"Grants a 20% cost reduction to mana consumed by equipped items, plus an additional 1% per equipped rating ((ONE) total).", 1.0f, 1.0f, 20, 0, true);
+        SetGearRatingText(wo, PropertyInt.GearItemManaUsage, "Meticulous Magus", $"Grants a 20% cost reduction to mana consumed by equipped items, plus an additional 1% per equipped rating ((ONE) total).", 1.0f, 1.0f, 20, 0, true);
         SetGearRatingText(wo, PropertyInt.GearThorns, "Swift Retribution", $"Deflect 10% of a blocked attack's damage back to a close-range attacker, plus an additional 0.5% per equipped rating ((ONE) total).", 0.5f, 1.0f, 10, 0, true);
         SetGearRatingText(wo, PropertyInt.GearVitalsTransfer, "Tilted Scales", $"Grants a 10% bonus to your Vitals Transfer spells, plus an additional 0.5% per equipped rating ((ONE) total). Receive an equivalent reduction in the effectiveness of your other Restoration spells.", 0.5f, 1.0f, 10, 0, true);
         SetGearRatingText(wo, PropertyInt.GearRedFury, "Red Fury", $"Grants increased damage as you lose health, up to a maximum bonus of 20% at 0 health, plus an additional 1% per equipped rating ((ONE) total).", 1.0f, 1.0f, 20, 0, true);
@@ -924,7 +924,7 @@ public class AppraiseInfo
         SetGearRatingText(wo, PropertyInt.GearAcid, "Devouring Mist", $"Grants a 10% bonus to Acid damage, plus an additional 0.5% per equipped rating ((ONE) total). Also grants a 2% chance on hit to surround your target with acidic mist, plus an additional 0.1% per equipped rating ((TWO) total).", 0.5f, 0.1f, 10, 2, true);
         SetGearRatingText(wo, PropertyInt.GearLightning, "Astyrrian's Rage", $"Grants a 10% bonus to Lightning damage, plus an additional 0.5% per equipped rating ((ONE) total). Also grants a 2% chance on hit to electrify the ground beneath your target, plus an additional 0.1% per equipped rating ((TWO) total).", 0.5f, 0.1f, 10, 2, true);
         SetGearRatingText(wo, PropertyInt.GearHealBubble, "Purified Soul", $"Grants a 10% bonus to your restoration spells, plus an additional 0.5% per equipped rating ((ONE) total). Also grants a 2% chance to create a sphere of healing energy on top of your target when casting a restoration spell, plus an additional 0.1% per equipped rating ((ONE) total).", 0.5f, 0.1f, 10, 2, true);
-        SetGearRatingText(wo, PropertyInt.GearCompBurn, "Meticulous Magus", $"Grants a 20% reduction to your chance to burn spell components, plus an additional 1% per equipped rating ((ONE) total).", 1.0f, 1.0f, 20, 0, true);
+        SetGearRatingText(wo, PropertyInt.GearCompBurn, "Thrifty Scholar", $"Grants a 20% reduction to your chance to burn spell components, plus an additional 1% per equipped rating ((ONE) total).", 1.0f, 1.0f, 20, 0, true);
         SetGearRatingText(wo, PropertyInt.GearPyrealFind, "Prosperity", $"Grants a 5% chance for a monster to drop an extra item, plus an additional 0.25% per equipped rating ((ONE) total).", 0.25f, 1.0f, 5, 0, true);
         SetGearRatingText(wo, PropertyInt.GearNullification, "Nullification", $"Grants up to 20% reduced magic damage taken, plus an additional 1% per equipped rating ((ONE) total). The amount builds up from 0%, based on how often you have been hit with a damaging spell.", 1.0f, 1.0f, 20, 0, true);
         SetGearRatingText(wo, PropertyInt.GearWardPen, "Ruthless Discernment", $"Grants up to 20% ward penetration, plus an additional 1% per equipped rating ((ONE) total). The Amount builds up from 0%, based on how often you have hit your target.", 1.0f, 1.0f, 20, 0, true);
@@ -1757,11 +1757,41 @@ public class AppraiseInfo
             return;
         }
 
-        var wielder = (Creature)wo.Wielder;
-
         _extraPropertiesText += $"Cast on strike chance: {Math.Round(procSpellRate * 100, 1)}%\n";
 
         _hasExtraPropertiesText = true;
+
+        SetSpellProcRateLongText(wo, procSpellRate);
+    }
+
+    private void SetSpellProcRateLongText(WorldObject wo, double procSpellRate)
+    {
+        var spell = new Spell(wo.ProcSpell.Value);
+
+        if (spell.NotFound)
+        {
+            return;
+        }
+
+        // matches GetMagicSkillProcChanceBonus, which treats every non-war proc as life magic
+        var school = spell.School == MagicSchool.WarMagic ? "War Magic" : "Life Magic";
+        var amountFormatted = Math.Round(procSpellRate * 100, 1);
+
+        var rangeText = "";
+
+        // only loot-generated weapons roll their proc rate; quest weapons use a fixed value
+        if (wo.Workmanship != null)
+        {
+            var (rangeMin, rangeMax) = LootGenerationFactory.GetProcSpellRateRange(wo);
+
+            rangeText =
+                $"Roll range is based on the weapon's attacks per second ({Math.Round(rangeMin * 100, 1)}% to {Math.Round(rangeMax * 100, 1)}%). ";
+        }
+
+        _additionalPropertiesLongDescriptionsText +=
+            $"~ Cast on Strike Chance: Grants a {amountFormatted}% chance on attack to cast {spell.Name}. " +
+            rangeText +
+            $"Chance is increased by attack power, {school} skill, and {school} specialization.\n";
     }
 
     private void SetAdditionalPropertiesUseText(WorldObject wo)

@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using ACE.Entity.Enum;
 using ACE.Entity.Enum.Properties;
 using ACE.Entity.Models;
@@ -18,8 +20,6 @@ partial class Creature
     private static readonly int[] enemyStaminaManaRegen = { 1, 2, 5, 10, 15, 20, 25, 30, 50 };
 
     private static readonly int[] enemyArmorWard = { 10, 20, 45, 68, 101, 152, 228, 342, 513 };
-    private static readonly int[] enemyAttack = { 10, 60, 100, 150, 175, 200, 250, 350, 500 };
-    private static readonly int[] enemyDefense = { 10, 60, 100, 150, 175, 200, 250, 350, 500 };
     private static readonly int[] enemyAssessDeception = { 10, 60, 100, 150, 175, 200, 250, 350, 500 };
     private static readonly int[] enemyRun = { 10, 100, 150, 200, 250, 300, 400, 500, 600 };
 
@@ -30,8 +30,16 @@ partial class Creature
     private static readonly float[] avgPlayerLifeProtReduction = { 1.0f, 1.0f, 0.9f, 0.9f, 0.85f, 0.8f, 0.8f, 0.75f, 0.75f };
     private static readonly int[] avgPlayerPhysicalMagicDefense = { 10, 60, 90, 120, 150, 180, 225, 300, 500 };
 
-    private int _tier;
-    private float _statWeight;
+    // Monster attack and defense are a flat EnemySkillGap above the average player's skill, which is the same for attack and
+    // defense (avgPlayerPhysicalMagicDefense, and LevelScaling's AvgPlayerAttackSkillPerTier/AvgPlayerDefenseSkillPerTier).
+    // Evade rolls (SkillCheck.GetSkillChance) depend on the difference between the two skills, not their ratio, so a flat
+    // gap gives the same evade odds at every tier. At 50, monsters evade ~82% of the average player's attacks (50% at even
+    // skill), which makes them ~27% slower to kill. Monster damage is tuned to how often it hits (GetNewBaseDamage), so the
+    // gap on attack changes how often monsters hit the average player, not how much damage they deal to them.
+    // Declared after avgPlayerPhysicalMagicDefense, since static fields are initialized in order.
+    private const int EnemySkillGap = 50;
+    private static readonly int[] enemyAttack = avgPlayerPhysicalMagicDefense.Select(skill => skill + EnemySkillGap).ToArray();
+    private static readonly int[] enemyDefense = avgPlayerPhysicalMagicDefense.Select(skill => skill + EnemySkillGap).ToArray();
 
     private void SetSkills(
         int tier,
@@ -40,8 +48,7 @@ partial class Creature
         double physicality,
         double dexterity,
         double magic,
-        double intelligence,
-        double multiplier
+        double intelligence
     )
     {
         if (DebugArchetypeSystem)
@@ -59,8 +66,6 @@ partial class Creature
             {
                 var newSkill = GetNewMeleeAttackSkill(tier, statWeight, physicality, dexterity);
 
-                newSkill = ApplyMultiplier(multiplier, newSkill);
-
                 var skillType = Skill.MartialWeapons;
 
                 var propertiesSkill = new PropertiesSkill()
@@ -75,8 +80,6 @@ partial class Creature
             // Unarmed Attack Skill
             {
                 var newSkill = GetNewUnarmedCombatSkill(tier, statWeight, physicality, dexterity);
-
-                newSkill = ApplyMultiplier(multiplier, newSkill);
 
                 var skillType = Skill.UnarmedCombat;
 
@@ -93,8 +96,6 @@ partial class Creature
             {
                 var newSkill = GetNewDaggerSkill(tier, statWeight, physicality, dexterity);
 
-                newSkill = ApplyMultiplier(multiplier, newSkill);
-
                 var skillType = Skill.Dagger;
 
                 var propertiesSkill = new PropertiesSkill()
@@ -109,8 +110,6 @@ partial class Creature
             // Staff Skill
             {
                 var newSkill = GetNewStaffSkill(tier, statWeight, physicality, dexterity);
-
-                newSkill = ApplyMultiplier(multiplier, newSkill);
 
                 var skillType = Skill.Staff;
 
@@ -127,8 +126,6 @@ partial class Creature
             {
                 var newSkill = GetNewMissileAttackSkill(tier, statWeight, dexterity);
 
-                newSkill = ApplyMultiplier(multiplier, newSkill);
-
                 var skillType = Skill.Bow;
 
                 var propertiesSkill = new PropertiesSkill()
@@ -143,8 +140,6 @@ partial class Creature
             // Thrown Weapons Skill
             {
                 var newSkill = GetNewMissileAttackSkill(tier, statWeight, dexterity);
-
-                newSkill = ApplyMultiplier(multiplier, newSkill);
 
                 var skillType = Skill.ThrownWeapon;
 
@@ -161,8 +156,6 @@ partial class Creature
             {
                 var newSkill = GetNewWarMagicSkill(tier, statWeight, magic);
 
-                newSkill = ApplyMultiplier(multiplier, newSkill);
-
                 var skillType = Skill.WarMagic;
 
                 var propertiesSkill = new PropertiesSkill()
@@ -178,8 +171,6 @@ partial class Creature
             {
                 var newSkill = GetNewLifeMagicSkill(tier, statWeight, magic);
 
-                newSkill = ApplyMultiplier(multiplier, newSkill);
-
                 var skillType = Skill.LifeMagic;
 
                 var propertiesSkill = new PropertiesSkill()
@@ -194,8 +185,6 @@ partial class Creature
             // Physical Defense
             {
                 var newSkill = GetNewPhysicalDefenseSkill(tier, statWeight, physicality, dexterity);
-
-                newSkill = ApplyMultiplier(multiplier, newSkill);
 
                 var skillType = Skill.PhysicalDefense;
 
@@ -223,8 +212,6 @@ partial class Creature
             {
                 var newSkill = GetNewMagicDefenseSkill(tier, statWeight, magic);
 
-                newSkill = ApplyMultiplier(multiplier, newSkill);
-
                 var skillType = Skill.MagicDefense;
 
                 var propertiesSkill = new PropertiesSkill()
@@ -239,8 +226,6 @@ partial class Creature
             // Perception
             {
                 var newSkill = GetNewPerceptionSkill(tier, statWeight, intelligence);
-
-                newSkill = ApplyMultiplier(multiplier, newSkill);
 
                 var skillType = Skill.Perception;
 
@@ -257,8 +242,6 @@ partial class Creature
             {
                 var newSkill = GetNewDeceptionSkill(tier, statWeight, intelligence);
 
-                newSkill = ApplyMultiplier(multiplier, newSkill);
-
                 var skillType = Skill.Deception;
 
                 var propertiesSkill = new PropertiesSkill()
@@ -273,8 +256,6 @@ partial class Creature
             // Run
             {
                 var newSkill = GetNewRunSkill(tier, statWeight, dexterity);
-
-                newSkill = ApplyMultiplier(multiplier, newSkill);
 
                 var skillType = Skill.Run;
 
@@ -295,20 +276,6 @@ partial class Creature
     {
         var candidate = ((value + 2) / 5) * 5;
         return candidate > value ? candidate - 5 : candidate;
-    }
-
-    private static uint ApplyMultiplier(double multiplier, uint newSkill)
-    {
-        var multipliedSkill = newSkill * multiplier;
-
-        multipliedSkill = multipliedSkill switch
-        {
-            < uint.MinValue => uint.MinValue,
-            > uint.MaxValue => uint.MaxValue,
-            _ => Convert.ToUInt32(multipliedSkill)
-        };
-
-        return (uint)multipliedSkill;
     }
 
     private void SetVitals(
@@ -403,9 +370,6 @@ partial class Creature
             Console.WriteLine($"\n-- SetDamageArmorAegus() for {Name} ({WeenieClassId}) (statWeight: {statWeight}) --");
         }
 
-        _tier = tier;
-        _statWeight = statWeight;
-
         // Damage + Armor
         {
             // Armor Level
@@ -445,10 +409,9 @@ partial class Creature
             // Set Body Parts
             if (Weenie != null)
             {
-                var bodyParts = GetBodyParts(this);
-                if (bodyParts.Weenie.PropertiesBodyPart != null)
+                if (Weenie.PropertiesBodyPart != null)
                 {
-                    foreach (var kvp in bodyParts.Weenie.PropertiesBodyPart)
+                    foreach (var kvp in GetOwnBodyParts())
                     {
                         var bodyPart = kvp.Value;
 
@@ -509,6 +472,23 @@ partial class Creature
 
             WardLevel = tweakedWard;
         }
+    }
+
+    /// <summary>
+    /// A creature made from a weenie shares the weenie's body part table with every other creature of its wcid
+    /// (WeenieConverter.ConvertToBiota, referenceWeenieCollectionsForCommonProperties). The archetype system sets
+    /// damage and armor per creature, so writing them into the shared table would let the last creature of a wcid
+    /// to spawn anywhere decide the damage and armor of all of them - dungeon mods and frigid bonuses included.
+    /// This gives the creature its own copy the first time it's needed.
+    /// </summary>
+    private IDictionary<CombatBodyPart, PropertiesBodyPart> GetOwnBodyParts()
+    {
+        if (ReferenceEquals(Biota.PropertiesBodyPart, Weenie?.PropertiesBodyPart))
+        {
+            Biota.PropertiesBodyPart = Weenie.PropertiesBodyPart.ToDictionary(kvp => kvp.Key, kvp => kvp.Value.Clone());
+        }
+
+        return Biota.PropertiesBodyPart;
     }
 
     private void SetXp(double difficltyMod)
@@ -1355,119 +1335,149 @@ partial class Creature
         };
     }
 
-    public void SetLethalityModFromDungeonMod()
+    /// <summary>
+    /// Adds the dungeon mods the fellowship leader chose for this creature's landblock (Landblock.SetLandblockMods)
+    /// to its archetype values. Only the values passed in are changed, not the creature's own Archetype properties,
+    /// so the mods can't be overwritten by a later recalculation or applied twice.
+    /// </summary>
+    private void ApplyDungeonMods(
+        ref double toughness,
+        ref double lethality,
+        ref double healthMultiplier,
+        ref double skillMultiplier
+    )
     {
-        if (CurrentLandblock is null)
+        var landblock = CurrentLandblock;
+
+        // the mods make the dungeon's enemies stronger, not the fellowship's pets
+        if (landblock?.LandblockMods is null || this is CombatPet)
         {
             return;
         }
 
-        if (UseArchetypeSystem is not true)
+        // Dungeon: Difficulty I-XX
+        lethality *= 1.0 + landblock.GetLandblockLethalityMod();
+        healthMultiplier *= 1.0 + landblock.GetLandblockHealthMod();
+        skillMultiplier *= 1.0 + landblock.GetLandblockSkillMod();
+
+        if (landblock.LandblockMods["Titans"].Active && MonsterRank >= 4)
         {
-            return;
+            toughness *= 2;
         }
 
-        if (WeenieClassId == 1020001)
+        if (landblock.LandblockMods["Skilled"].Active)
         {
-            return;
+            skillMultiplier *= 1.1;
         }
-
-        var archetypeLethality = ArchetypeLethality ?? 1.0;
-
-        var landblockLethalityMod = true switch
-        {
-            _ when CurrentLandblock.LandblockMods["Lethality 500%"].Active => 5.0,
-            _ when CurrentLandblock.LandblockMods["Lethality 450%"].Active => 4.5,
-            _ when CurrentLandblock.LandblockMods["Lethality 400%"].Active => 4.0,
-            _ when CurrentLandblock.LandblockMods["Lethality 350%"].Active => 3.5,
-            _ when CurrentLandblock.LandblockMods["Lethality 300%"].Active => 3.0,
-            _ when CurrentLandblock.LandblockMods["Lethality 250%"].Active => 2.5,
-            _ when CurrentLandblock.LandblockMods["Lethality 200%"].Active => 2.0,
-            _ when CurrentLandblock.LandblockMods["Lethality 150%"].Active => 1.5,
-            _ when CurrentLandblock.LandblockMods["Lethality 100%"].Active => 1.0,
-            _ when CurrentLandblock.LandblockMods["Lethality 50%"].Active => 0.5,
-            _ => 0.0
-        };
-
-        var adjustment = archetypeLethality * landblockLethalityMod;
-
-        ArchetypeLethality = adjustment + archetypeLethality;
-
-        SetSkills(_tier,
-            _statWeight,
-            ArchetypeToughness ?? 1.0,
-            ArchetypePhysicality ?? 1.0,
-            ArchetypeDexterity ?? 1.0,
-            ArchetypeMagic ?? 1.0,
-            ArchetypeIntelligence ?? 1.0,
-            1.0);
-
-        SetDamageArmorWard(_tier,
-            _statWeight,
-            ArchetypeToughness ?? 1.0,
-            ArchetypePhysicality ?? 1.0,
-            ArchetypeMagic ?? 1.0,
-            ArchetypeLethality ?? 1.0);
-
-        //Console.WriteLine($"{Name}: BaseLethality = {archetypeLethality}, LbLethality = {CurrentLandblock.LandblockLethalityMod}, Adjustment = {adjustment}, Total: {adjustment + archetypeLethality}");
     }
 
-    public void SetHealthFromDungeonMod()
+    /// <summary>
+    /// Multiplies the creature's finished max health. Done on the result rather than through toughness, so it
+    /// doesn't also raise armor, ward and regen, and so creatures with hand-set health (OverrideArchetypeHealth,
+    /// which skips the archetype health calculation) get it too.
+    /// </summary>
+    private void ApplyHealthMultiplier(double healthMultiplier)
     {
-        if (CurrentLandblock is null)
+        if (healthMultiplier == 1.0)
         {
             return;
         }
 
-        if (UseArchetypeSystem is not true)
-        {
-            return;
-        }
+        var maxHealth = Vitals[PropertyAttribute2nd.MaxHealth];
 
-        if (!CurrentLandblock.LandblockMods["Titans"].Active)
-        {
-            return;
-        }
-
-        if (MonsterRank < 4)
-        {
-            return;
-        }
-
-        ArchetypeToughness *= 2;
-
-    SetVitals(_tier,
-            _statWeight,
-            ArchetypeToughness ?? 1.0,
-            ArchetypePhysicality ?? 1.0,
-            ArchetypeDexterity ?? 1.0,
-            ArchetypeMagic ?? 1.0);
+        maxHealth.StartingValue += (uint)Math.Round(maxHealth.Base * (healthMultiplier - 1.0));
     }
 
-    public void SetSkillsFromDungeonMod()
+    /// <summary>
+    /// The skills the dungeon mods raise: the ones SetSkills() sets
+    /// </summary>
+    private static readonly Skill[] DungeonModSkills =
     {
-        if (CurrentLandblock is null)
+        Skill.MartialWeapons,
+        Skill.UnarmedCombat,
+        Skill.Dagger,
+        Skill.Staff,
+        Skill.Bow,
+        Skill.ThrownWeapon,
+        Skill.WarMagic,
+        Skill.LifeMagic,
+        Skill.PhysicalDefense,
+        Skill.MagicDefense,
+        Skill.Perception,
+        Skill.Deception,
+        Skill.Run,
+    };
+
+    /// <summary>
+    /// Multiplies the creature's finished skills. Done on the result, like health, so the part of a skill that comes from
+    /// attributes is raised too (SetSkills only sets the rest, about half of it), and so creatures with hand-set skills
+    /// (OverrideArchetypeSkills, which skips SetSkills) get it too.
+    /// </summary>
+    private void ApplySkillMultiplier(double skillMultiplier)
+    {
+        if (skillMultiplier == 1.0)
         {
             return;
         }
 
-        if (UseArchetypeSystem is not true)
+        foreach (var skill in DungeonModSkills)
         {
+            if (Skills.TryGetValue(skill, out var creatureSkill))
+            {
+                creatureSkill.InitLevel += (uint)Math.Round(creatureSkill.Base * (skillMultiplier - 1.0));
+            }
+        }
+    }
+
+    /// <summary>
+    /// The values ApplyArchetypeSystem() builds on without setting them itself: the kill xp mod, and the max health and
+    /// skills of a creature that has them hand-set (OverrideArchetypeHealth, OverrideArchetypeSkills). Null until it first runs.
+    /// </summary>
+    private (double? KillXpMod, uint MaxHealth, Dictionary<Skill, uint> SkillLevels)? archetypeStartingValues;
+
+    /// <summary>
+    /// Saves the values ApplyArchetypeSystem() builds on the first time it runs, and puts them back each time after that,
+    /// so running it again starts over instead of multiplying its xp, health and skill bonuses in twice.
+    /// </summary>
+    private void RestoreArchetypeStartingValues()
+    {
+        var maxHealth = Vitals[PropertyAttribute2nd.MaxHealth];
+
+        if (archetypeStartingValues is not { } startingValues)
+        {
+            // SetSkills sets all of them for the others
+            Dictionary<Skill, uint> skillLevels = null;
+
+            if (OverrideArchetypeSkills ?? false)
+            {
+                skillLevels = new Dictionary<Skill, uint>();
+
+                foreach (var skill in DungeonModSkills)
+                {
+                    if (Skills.TryGetValue(skill, out var creatureSkill))
+                    {
+                        skillLevels[skill] = creatureSkill.InitLevel;
+                    }
+                }
+            }
+
+            archetypeStartingValues = (KillXpMod, maxHealth.StartingValue, skillLevels);
             return;
         }
 
-        if (!CurrentLandblock.LandblockMods["Skilled"].Active)
+        KillXpMod = startingValues.KillXpMod;
+        maxHealth.StartingValue = startingValues.MaxHealth;
+
+        if (startingValues.SkillLevels != null)
         {
-            return;
+            foreach (var (skill, initLevel) in startingValues.SkillLevels)
+            {
+                GetCreatureSkill(skill).InitLevel = initLevel;
+            }
         }
 
-        SetSkills(_tier,
-            _statWeight,
-            ArchetypeToughness ?? 1.0,
-            ArchetypePhysicality ?? 1.0,
-            ArchetypeDexterity ?? 1.0,
-            ArchetypeMagic ?? 1.0,
-            ArchetypeIntelligence ?? 1.0,
-            1.1);
+        // nearby player scaling works from the stats it found when it was first needed, which are about to change
+        SkillsSet = false;
+        LastNumberOfNearbyPlayers = 0;
     }
 }

@@ -142,7 +142,7 @@ public class EnvCell : ObjCell, IEquatable<EnvCell>
                 continue;
             }
 
-            var cell = (EnvCell)LScape.get_landcell(blockCellID);
+            var cell = (EnvCell)LScape.get_landcell(blockCellID, Instance);
             VisibleCells.Add(visibleCellID, cell);
         }
     }
@@ -308,6 +308,7 @@ public class EnvCell : ObjCell, IEquatable<EnvCell>
     public EnvCell add_visible_cell(uint cellID)
     {
         var envCell = DBObj.GetEnvCell(cellID);
+        envCell.Instance = Instance;
         VisibleCells.Add(cellID, envCell);
         return envCell;
     }
@@ -519,6 +520,12 @@ public class EnvCell : ObjCell, IEquatable<EnvCell>
 
     public override bool point_in_cell(Vector3 point)
     {
+        // A cell that isn't in the cell dat has no CellStructure, and can't contain anything
+        if (CellStructure == null)
+        {
+            return false;
+        }
+
         var localPoint = Pos.Frame.GlobalToLocal(point);
         return CellStructure.point_in_cell(localPoint);
     }
@@ -538,7 +545,8 @@ public class EnvCell : ObjCell, IEquatable<EnvCell>
             return false;
         }
 
-        return ID == envCell.ID;
+        // The same cell id in two instances is two different cells
+        return ID == envCell.ID && Instance == envCell.Instance;
     }
 
     public override int GetHashCode()

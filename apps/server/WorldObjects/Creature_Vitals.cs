@@ -74,10 +74,35 @@ partial class Creature
     }
 
     /// <summary>
+    /// When true, all damage this creature receives is reduced to 0.
+    /// </summary>
+    public bool Invulnerable
+    {
+        get => GetProperty(PropertyBool.Invulnerable) ?? false;
+        set
+        {
+            if (!value)
+            {
+                RemoveProperty(PropertyBool.Invulnerable);
+            }
+            else
+            {
+                SetProperty(PropertyBool.Invulnerable, value);
+            }
+        }
+    }
+
+    /// <summary>
     /// Updates a vital relative to current value
     /// </summary>
     public int UpdateVitalDelta(CreatureVital vital, int delta)
     {
+        // invulnerable creatures cannot lose health from any source
+        if (delta < 0 && Invulnerable && vital == Health)
+        {
+            delta = 0;
+        }
+
         var newVital = (int)vital.Current + delta;
 
         return UpdateVital(vital, newVital);
@@ -176,7 +201,7 @@ partial class Creature
 
             if (this is not Player)
             {
-                vitalTypeBaseMod *= 0.1f;
+                vitalTypeBaseMod *= 0.2f;
             }
         }
         else if (vital == Stamina)

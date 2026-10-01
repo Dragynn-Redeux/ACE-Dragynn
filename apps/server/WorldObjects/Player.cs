@@ -831,6 +831,10 @@ public partial class Player : Creature, IPlayer
     private void FinalizeLogout()
     {
         CurrentLandblock?.RemoveWorldObject(Guid, false);
+
+        // someone who logs out inside an instance is saved in the persistent world, where the instance sends players
+        InstanceManager.OnPlayerLoggingOut(this);
+
         SetPropertiesAtLogOut();
         SavePlayerToDatabase();
         PlayerManager.SwitchPlayerFromOnlineToOffline(this);

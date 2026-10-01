@@ -209,8 +209,8 @@ public class Confirmation_CraftInteration : Confirmation
             case WeenieType.ResonanceEnergyStorageDevice:
                 ResonanceEnergyStorageDevice.UseObjectOnTarget(player, source, target, true);
                 break;
-            case WeenieType.BezelTool:
-                BezelTool.UseObjectOnTarget(player, source, target, true);
+            case WeenieType.BezelFragment:
+                BezelFragment.UseObjectOnTarget(player, source, target, true);
                 break;
             case WeenieType.DungeonModder:
                 source.ActOnUse(player);

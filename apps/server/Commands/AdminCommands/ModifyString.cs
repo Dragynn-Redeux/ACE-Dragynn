@@ -1,4 +1,5 @@
-﻿using ACE.Entity.Enum;
+using System.Linq;
+using ACE.Entity.Enum;
 using ACE.Server.Commands.Handlers;
 using ACE.Server.Managers;
 using ACE.Server.Network;
@@ -17,12 +18,14 @@ public class ModifyString
     )]
     public static void HandleModifyServerStringProperty(Session session, params string[] parameters)
     {
-        if (PropertyManager.ModifyString(parameters[0], parameters[1]))
+        var value = ValueOf(parameters);
+
+        if (PropertyManager.ModifyString(parameters[0], value))
         {
             CommandHandlerHelper.WriteOutputInfo(session, "String property successfully updated!");
             PlayerManager.BroadcastToAuditChannel(
                 session?.Player,
-                $"Successfully changed server string property {parameters[0]} to {parameters[1]}"
+                $"Successfully changed server string property {parameters[0]} to {value}"
             );
         }
         else
@@ -32,5 +35,14 @@ public class ModifyString
                 "Unknown string property was not updated. Type showprops for a list of properties."
             );
         }
+    }
+
+    /// <summary>
+    /// Everything after the name of the property, as one value, so that a value with spaces doesn't need quotes
+    /// (without this only its first word was stored)
+    /// </summary>
+    internal static string ValueOf(string[] parameters)
+    {
+        return string.Join(" ", parameters.Skip(1));
     }
 }

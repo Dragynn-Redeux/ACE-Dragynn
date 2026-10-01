@@ -336,6 +336,9 @@ public class SkillAlterationDevice : WorldObject
                 }
                 break;
         }
+
+        // weapon skills only carry the gear attack bonus while trained
+        player.UpdateArmorModBuffs();
     }
 
     /// <summary>

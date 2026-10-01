@@ -6,15 +6,25 @@ using ACE.Server.WorldObjects;
 
 namespace ACE.Server.Managers;
 
+/// <summary>
+/// An account's pyreals (coins and trade notes) across every character and the bank, and the bank's share.
+/// </summary>
+public readonly record struct AccountWealth(long TotalPyreals, long BankPyreals);
+
 public static class AccountWealthTracker
 {
     private static readonly ConcurrentDictionary<uint, long> WealthByAccountId = new();
 
-    public static void Update(Player player)
+    /// <param name="onUpdated">
+    /// Optional. Called once the update finishes, usually on a background thread, with the new figures, or with null
+    /// if it failed. Get back on the world thread (WorldManager.EnqueueAction) before touching game state.
+    /// </param>
+    public static void Update(Player player, Action<AccountWealth?> onUpdated = null)
     {
         var accountId = player?.Session?.AccountId ?? 0;
         if (accountId == 0)
         {
+            onUpdated?.Invoke(null);
             return;
         }
 
@@ -28,11 +38,14 @@ public static class AccountWealthTracker
         // to a background thread so the landblock thread is never stalled by database I/O.
         _ = Task.Run(() =>
         {
+            AccountWealth? result = null;
+
             try
             {
-                var (dbRaw, dbTrophies) = PlayerWealthCalculator.GetOfflineAndBankWealth(accountId);
-                var totalRaw = inMemRaw + dbRaw;
-                var totalTrophies = inMemTrophies + dbTrophies;
+                var (offlineRaw, offlineTrophies) = PlayerWealthCalculator.GetOfflineWealth(accountId);
+                var (bankRaw, bankTrophies) = PlayerWealthCalculator.GetBankWealth(accountId);
+                var totalRaw = inMemRaw + offlineRaw + bankRaw;
+                var totalTrophies = inMemTrophies + offlineTrophies + bankTrophies;
 
                 WealthByAccountId[accountId] = totalRaw;
 
@@ -43,11 +56,15 @@ public static class AccountWealthTracker
                     totalTrophies,
                     DateTime.UtcNow
                 );
+
+                result = new AccountWealth(totalRaw, bankRaw);
             }
             catch (Exception ex)
             {
                 Serilog.Log.Error(ex, "[WEALTH] Background wealth update failed for account {AccountId}", accountId);
             }
+
+            onUpdated?.Invoke(result);
         });
     }
 

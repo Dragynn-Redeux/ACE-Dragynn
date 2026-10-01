@@ -892,10 +892,10 @@ public enum PropertyInt : ushort
     WeaponRelicApplyCount = 523,
 
     /// <summary>
-    /// A plain shared tag identifying valid beneficial-cast partners for EmoteType.CastSpellOnCohort.
-    /// See WorldObject.Cohort for the full explanation of why this is separate from FriendType.
+    /// The wcid of the armor piece an Armor Style Template's style was copied from.
     /// </summary>
-    Cohort = 524,
+    [ServerOnly]
+    ArmorStyleTemplateWcid = 524,
 
     /// <summary>
     /// Generic, content-driven state value - not tied to any specific mechanic or encounter.
@@ -905,6 +905,12 @@ public enum PropertyInt : ushort
     /// </summary>
     [ServerOnly]
     SequenceState = 525,
+
+    /// <summary>
+    /// A plain shared tag identifying valid beneficial-cast partners for EmoteType.CastSpellOnCohort.
+    /// See WorldObject.Cohort for the full explanation of why this is separate from FriendType.
+    /// </summary>
+    Cohort = 526,
 
     [ServerOnly]
     PCAPRecordedAutonomousMovement = 8007,

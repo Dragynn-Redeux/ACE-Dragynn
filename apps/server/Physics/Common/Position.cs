@@ -249,12 +249,12 @@ public class Position : IEquatable<Position>
         return heading(position) - Frame.get_heading();
     }
 
-    public uint GetCell(uint blockCellID)
+    public uint GetCell(uint blockCellID, uint instance = LScape.PersistentInstance)
     {
         // is originating cell indoor or outdoor?
         if ((blockCellID & 0xFFFF) >= 0x100)
         {
-            return GetIndoorCell(blockCellID);
+            return GetIndoorCell(blockCellID, instance);
         }
         else
         {
@@ -276,11 +276,11 @@ public class Position : IEquatable<Position>
         //return cellID;
     }
 
-    public uint GetIndoorCell(uint blockCellID)
+    public uint GetIndoorCell(uint blockCellID, uint instance = LScape.PersistentInstance)
     {
         var dungeonID = blockCellID >> 16;
 
-        var adjustCell = AdjustCell.Get(dungeonID);
+        var adjustCell = AdjustCell.Get(dungeonID, instance);
         if (adjustCell == null)
         {
             //Console.WriteLine("Position: couldn't find ObjCellID for indoor cell " + blockCellID.ToString("X8"));

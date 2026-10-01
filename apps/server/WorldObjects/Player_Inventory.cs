@@ -561,7 +561,7 @@ partial class Player
         {
             foreach (var enchantment in allEnchantments)
             {
-                enchantment.StatModValue = 10 + totalRating;
+                EnchantmentManager.SetStatModValue(enchantment, 10 + totalRating);
                 enchantment.Duration = -1;
                 Session.Network.EnqueueSend(
                     new GameEventMagicUpdateEnchantment(Session, new Enchantment(this, enchantment)));
@@ -597,7 +597,7 @@ partial class Player
         {
             foreach (var enchantment in allEnchantments)
             {
-                enchantment.StatModValue = baseAmount + totalRating;
+                EnchantmentManager.SetStatModValue(enchantment, baseAmount + totalRating);
                 enchantment.Duration = -1;
                 Session.Network.EnqueueSend(
                     new GameEventMagicUpdateEnchantment(Session, new Enchantment(this, enchantment)));
@@ -1411,6 +1411,11 @@ partial class Player
                 Session.Network.EnqueueSend(new GameEventInventoryServerSaveFailed(Session, itemGuid));
                 return false;
             }
+
+            if (!CanTakePackOutOfBank(item, itemRootOwner, container))
+            {
+                return false;
+            }
         }
 
         if (
@@ -1929,11 +1934,13 @@ partial class Player
     {
         //Console.WriteLine($"-> DoHandleActionPutItemInContainer({item.Name}, {itemRootOwner?.Name}, {itemWasEquipped}, {container?.Name}, ContainerRootOwner: {containerRootOwner?.Name}, {placement})");
 
-        var containerValidTypes = (ItemType)(container.MerchandiseItemTypes ?? 0);
-        var itemType = item.WeenieType == WeenieType.Ammunition ? ItemType.CraftFletchingIntermediate
-            : item.WeenieType == WeenieType.Salvage ? ItemType.TinkeringMaterial
-            : item.ItemType;
-        if (containerValidTypes != 0 && (itemType & containerValidTypes) == 0)
+        // checked again here, as a pickup can wait on walking to the bank after _Verify passed
+        if (!CanTakePackOutOfBank(item, itemRootOwner, container))
+        {
+            return false;
+        }
+
+        if (!container.CanHoldItemType(item))
         {
             Session.Network.EnqueueSend(
                 new GameEventCommunicationTransientString(
@@ -2076,6 +2083,16 @@ partial class Player
     /// </summary>
     public void HandleActionDropItem(uint itemGuid)
     {
+        // Nothing dropped in an instance would survive it
+        if (InstanceId != Landblock.PersistentInstance)
+        {
+            Session.Network.EnqueueSend(
+                new GameEventCommunicationTransientString(Session, "You can't drop items here.")
+            );
+            Session.Network.EnqueueSend(new GameEventInventoryServerSaveFailed(Session, itemGuid));
+            return;
+        }
+
         if (IsBusy || Teleporting || suicideInProgress)
         {
             Session.Network.EnqueueSend(new GameEventWeenieError(Session, WeenieError.YoureTooBusy));
@@ -2848,7 +2865,15 @@ partial class Player
                 );
                 landblockReturn.EnqueueChain();
             }
-            else if (itemRootOwner == null || !itemRootOwner.TryAddToInventory(item))
+            // fromSplit: `item` here is a freshly-created split-off stack fragment that was never
+            // added to itemRootOwner's inventory in the first place (see the `!fromSplit &&` guard
+            // on the TryRemoveFromInventory call above), and the split caller already restores the
+            // original stack's size on failure (AdjustStack(stack, +amount, ...)). Falling through
+            // to TryAddToInventory(item) here as well would duplicate the split amount - the
+            // original stack gets bumped back up AND this fragment gets added as a second, separate
+            // stack. Skip this recovery entirely for the split case; the caller's own restore is
+            // both correct and sufficient.
+            else if (!fromSplit && (itemRootOwner == null || !itemRootOwner.TryAddToInventory(item)))
             {
                 _log.Error(
                     $"{Name}.DoHandleActionGetAndWieldItem({item.Name} ({item.Guid}), {fromContainer?.Name} ({fromContainer?.Guid}), {itemRootOwner?.Name} ({itemRootOwner?.Guid}), {wasEquipped}, {wieldedLocation}, {fromSplit}) - removed item from original location, failed to equip, failed to re-add to original location"
@@ -3826,6 +3851,17 @@ partial class Player
     public void HandleActionStackableSplitTo3D(uint stackId, int amount)
     {
         //Console.WriteLine($"\n\n{Name}.HandleActionStackableSplitTo3D(uint {stackId}, int {amount})");
+
+        // Nothing dropped in an instance would survive it
+        if (InstanceId != Landblock.PersistentInstance)
+        {
+            Session.Network.EnqueueSend(
+                new GameEventCommunicationTransientString(Session, "You can't drop items here.")
+            );
+            Session.Network.EnqueueSend(new GameEventInventoryServerSaveFailed(Session, stackId));
+            return;
+        }
+
         if (amount <= 0)
         {
             _log.Warning(
@@ -4986,6 +5022,7 @@ partial class Player
         CheckForBankSplitAndMerge(
             sourceStack,
             targetStack,
+            amount,
             sourceContainer,
             targetContainer,
             sourceStackRootOwner,
@@ -5825,6 +5862,14 @@ partial class Player
             out _
         );
 
+        // your own things in the bank you have open, so a pack can be inscribed for /bank where it sits
+        var inOpenBank = false;
+        if (item == null)
+        {
+            item = FindItemInOpenBank(itemGuid);
+            inOpenBank = item != null;
+        }
+
         if (item == null)
         {
             if (this is Sentinel || this is Admin)
@@ -5841,60 +5886,87 @@ partial class Player
 
         if (item.Inscribable)
         {
-            var doInscribe = false;
-            if (string.IsNullOrWhiteSpace(item.ScribeAccount) && string.IsNullOrWhiteSpace(item.ScribeName))
+            // Something in the bank is otherwise saved only when its landblock saves, so save it now.
+            if (TrySetInscription(item, inscriptionText) && inOpenBank)
             {
-                doInscribe = true;
-            }
-            else
-            {
-                if (this is Sentinel || this is Admin)
-                {
-                    doInscribe = true;
-                }
-                else if (
-                    item.ScribeIID.HasValue
-                    && item.ScribeIID == Guid.Full
-                    && item.ScribeName == Name
-                    && item.ScribeAccount == Account.AccountName
-                )
-                {
-                    doInscribe = true;
-                }
-                else if (item.ScribeName == Name && item.ScribeAccount == Account.AccountName)
-                {
-                    doInscribe = true;
-                }
+                item.SaveBiotaToDatabase();
             }
 
-            if (doInscribe)
-            {
-                if (string.IsNullOrEmpty(inscriptionText))
-                {
-                    item.Inscription = null;
-                    item.ScribeName = null;
-                    item.ScribeAccount = null;
-                    item.ScribeIID = null;
-                }
-                else
-                {
-                    item.Inscription = inscriptionText;
-                    item.ScribeName = Name;
-                    item.ScribeAccount = Account.AccountName;
-                    item.ScribeIID = Guid.Full;
-                }
+            // this response was never recorded occuring from retail servers
+            // Session.Network.EnqueueSend(new GameEventInscriptionResponse(Session, item));
 
-                // this response was never recorded occuring from retail servers
-                // Session.Network.EnqueueSend(new GameEventInscriptionResponse(Session, item));
-
-                // There was no direct response from the servers for this event, client just sent it and moved on.
-            }
+            // There was no direct response from the servers for this event, client just sent it and moved on.
         }
         else
         {
             // Send some cool you cannot inscribe that item message. Not sure how that was handled live, I could not find a pcap of a failed inscription. Og II
             ChatPacket.SendServerMessage(Session, "Target item cannot be inscribed.", ChatMessageType.System);
         }
+    }
+
+    /// <summary>
+    /// Sets (or with empty text, clears) an item's inscription if this player may: nobody has inscribed it yet,
+    /// or this character did, or the player is a Sentinel/Admin. Returns false if someone else's inscription is on it.
+    /// </summary>
+    public bool TrySetInscription(WorldObject item, string inscriptionText)
+    {
+        var doInscribe = false;
+        if (string.IsNullOrWhiteSpace(item.ScribeAccount) && string.IsNullOrWhiteSpace(item.ScribeName))
+        {
+            doInscribe = true;
+        }
+        else
+        {
+            if (this is Sentinel || this is Admin)
+            {
+                doInscribe = true;
+            }
+            else if (
+                item.ScribeIID.HasValue
+                && item.ScribeIID == Guid.Full
+                && item.ScribeName == Name
+                && item.ScribeAccount == Account.AccountName
+            )
+            {
+                doInscribe = true;
+            }
+            else if (item.ScribeName == Name && item.ScribeAccount == Account.AccountName)
+            {
+                doInscribe = true;
+            }
+        }
+
+        if (!doInscribe)
+        {
+            return false;
+        }
+
+        if (string.IsNullOrEmpty(inscriptionText))
+        {
+            item.Inscription = null;
+            item.ScribeName = null;
+            item.ScribeAccount = null;
+            item.ScribeIID = null;
+        }
+        else
+        {
+            item.Inscription = inscriptionText;
+            item.ScribeName = Name;
+            item.ScribeAccount = Account.AccountName;
+            item.ScribeIID = Guid.Full;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// An item (or side pack) in the bank chest this player has open, or null.
+    /// </summary>
+    public WorldObject FindItemInOpenBank(uint itemGuid)
+    {
+        var item = FindObject(itemGuid, SearchLocations.LastUsedContainer, out _, out var rootOwner, out _);
+
+        return rootOwner is Storage ? item : null;
     }
 
     // This handles a peculiar sequence sent by the client in certain scenarios

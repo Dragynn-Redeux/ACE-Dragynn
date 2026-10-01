@@ -273,6 +273,20 @@ public enum PropertyBool : ushort
     [ServerOnly]
     RequiresShrouded = 182,
 
+    /// <summary>
+    /// When true, this monster does NOT restore its vitals to max when it gives up on its target
+    /// and returns home (homesick). Unset/false preserves the stock full-heal behavior.
+    /// </summary>
+    [ServerOnly]
+    NoHomesickHeal = 183,
+
+    /// <summary>
+    /// When true, all damage this creature receives is reduced to 0. Unlike Invincible, attacks
+    /// still land (and trigger on-hit effects / emotes) - they just deal no damage.
+    /// </summary>
+    [ServerOnly]
+    Invulnerable = 184,
+
     /* custom */
     [ServerOnly]
     LinkedPortalOneSummon = 9001,

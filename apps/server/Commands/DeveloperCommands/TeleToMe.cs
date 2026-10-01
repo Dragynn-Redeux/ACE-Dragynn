@@ -33,7 +33,7 @@ public class TeleToMe
             return;
         }
         var currentPos = new Position(player.Location);
-        player.Teleport(session.Player.Location);
+        player.Teleport(session.Player.Location, instanceId: session.Player.InstanceId);
         player.SetPosition(PositionType.TeleportedCharacter, currentPos);
         player.Session.Network.EnqueueSend(
             new GameMessageSystemChat($"{session.Player.Name} has teleported you.", ChatMessageType.Magic)

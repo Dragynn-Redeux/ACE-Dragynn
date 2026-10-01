@@ -58,8 +58,7 @@ public partial class LootGenerationFactory
 
         if (itemProc != SpellId.Undef)
         {
-            var animLength = WeaponAnimationLength.GetWeaponAnimLength(wo) / 100;
-            var procRate = animLength + (animLength * GetDiminishingRoll(profile));
+            var procRate = RollProcSpellRate(wo, profile);
 
             var spell = new Server.Entity.Spell(itemProc);
             wo.ProcSpellRate = procRate;
@@ -67,6 +66,28 @@ public partial class LootGenerationFactory
             wo.ProcSpellSelfTargeted = spell.IsSelfTargeted;
         }
         return true;
+    }
+
+    /// <summary>
+    /// Base proc rate is derived from weapon animation length, doubled.
+    /// Also used by Spell Transference so transferred procs match lootgen rates.
+    /// </summary>
+    public static double RollProcSpellRate(WorldObject wo, TreasureDeath profile = null)
+    {
+        var animLength = WeaponAnimationLength.GetWeaponAnimLength(wo) / 100;
+        var procRate = animLength + (animLength * GetDiminishingRoll(profile));
+
+        return procRate * 2.0;
+    }
+
+    /// <summary>
+    /// Returns the lowest and highest proc rate RollProcSpellRate can produce for this weapon.
+    /// </summary>
+    public static (double min, double max) GetProcSpellRateRange(WorldObject wo)
+    {
+        var animLength = WeaponAnimationLength.GetWeaponAnimLength(wo) / 100;
+
+        return (animLength * 2.0, (animLength + animLength) * 2.0);
     }
 
     private static SpellId RollIProcSpellId(WorldObject wo, TreasureDeath profile, TreasureRoll roll)

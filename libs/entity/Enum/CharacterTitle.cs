@@ -898,7 +898,14 @@ public enum CharacterTitle : uint
     CosmicConscious,
     LastManStanding,
     Spellsword,
-    FistsRecruit,
-    FistsKnight,
-    FistsKnightCaptain
+    Squire = 896, // Cragstone's Fists rank - pinned explicitly so it can't drift if entries elsewhere in this enum are added/removed
+    Knight = 897, // Cragstone's Fists rank - pinned explicitly, see Squire above
+    KnightLieutenant = 898, // Cragstone's Fists rank - pinned explicitly, see Squire above
+    FistOfCragstone = 899, // Cragstone's Fists rank (singular, endgame) - pinned explicitly, see Squire above
+    Beta10,
+    Beta20,
+    Beta30,
+    Beta40,
+    Beta50,
+    VaultCracker
 }

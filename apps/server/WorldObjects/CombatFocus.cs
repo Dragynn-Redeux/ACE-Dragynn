@@ -857,7 +857,7 @@ public class CombatFocus : WorldObject
             player.PhalanxIsActive = false;
 
             player.Session.Network.EnqueueSend(
-                new GameMessageSystemChat($"You lower your shield.", ChatMessageType.Broadcast)
+                new GameMessageSystemChat($"You lower your guard.", ChatMessageType.Broadcast)
             );
         }
     }

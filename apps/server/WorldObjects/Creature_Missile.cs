@@ -144,6 +144,8 @@ partial class Creature
 
         SetProjectilePhysicsState(proj, target, velocity);
 
+        proj.InstanceId = InstanceId;
+
         var success = LandblockManager.AddObject(proj);
 
         if (!success || proj.PhysicsObj == null)

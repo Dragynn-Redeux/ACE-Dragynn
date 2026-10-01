@@ -68,8 +68,8 @@ public class Nudge
             return;
         }
 
-        // ensure landblock instance
-        if (!obj.Guid.IsStatic())
+        // ensure landblock instance (a static object in an instance has a guid of its own, and isn't a row in the world db)
+        if (!obj.Guid.IsStatic() || obj.Guid.IsEphemeralStatic())
         {
             session.Network.EnqueueSend(
                 new GameMessageSystemChat(

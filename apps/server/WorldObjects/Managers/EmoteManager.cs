@@ -88,7 +88,9 @@ public class EmoteManager
                 if (WorldObject.ActivationTarget > 0)
                 {
                     // ActOnUse delay?
-                    var activationTarget = WorldObject.CurrentLandblock?.GetObject(WorldObject.ActivationTarget);
+                    var activationTarget = WorldObject.CurrentLandblock?.GetObjectFromWorldGuid(
+                        WorldObject.ActivationTarget
+                    );
                     activationTarget?.OnActivate(player ?? WorldObject);
                 }
                 else if (WorldObject.GeneratorId.HasValue && WorldObject.GeneratorId > 0) // Fallback to linked generator
@@ -220,7 +222,12 @@ public class EmoteManager
 
                 if (player != null)
                 {
-                    player.EarnXP(emote.Amount64 ?? emote.Amount ?? 0, XpType.Quest, player.Level, ShareType.None);
+                    // Stat, when set, is repurposed as a "Level" for this emote: the amount is reduced
+                    // using the same overlevel penalty applied to monster kill xp when the player is
+                    // higher level than this value. Unset (0/null) preserves the old behavior of always
+                    // granting the full amount, regardless of player level.
+                    var xpSourceLevel = emote.Stat > 0 ? emote.Stat : player.Level;
+                    player.EarnXP(emote.Amount64 ?? emote.Amount ?? 0, XpType.Quest, xpSourceLevel, ShareType.None);
                 }
 
                 break;
@@ -263,7 +270,12 @@ public class EmoteManager
                     var amt = emote.Amount64 ?? emote.Amount ?? 0;
                     if (amt > 0)
                     {
-                        player.EarnXP(amt, XpType.Quest, player.Level, ShareType.All);
+                        // Stat, when set, is repurposed as a "Level" for this emote: the amount is reduced
+                        // using the same overlevel penalty applied to monster kill xp when the player is
+                        // higher level than this value. Unset (0/null) preserves the old behavior of always
+                        // granting the full amount, regardless of player level.
+                        var xpSourceLevel = emote.Stat > 0 ? emote.Stat : player.Level;
+                        player.EarnXP(amt, XpType.Quest, xpSourceLevel, ShareType.All);
                     }
                     else if (amt < 0)
                     {
@@ -3922,6 +3934,13 @@ public class EmoteManager
         IsBusy = false;
 
         var lastDamager = lastDamagerInfo?.TryGetPetOwnerOrAttacker();
+
+        // if a non-player (such as an NPC) landed the killing blow,
+        // credit the player who dealt the most damage instead
+        if (lastDamager is not Player && WorldObject is Creature creature)
+        {
+            lastDamager = creature.DamageHistory.GetTopPlayerDamager() ?? lastDamager;
+        }
 
         ExecuteEmoteSet(EmoteCategory.Death, null, lastDamager);
     }

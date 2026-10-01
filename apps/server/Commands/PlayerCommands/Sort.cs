@@ -1,15 +1,13 @@
 using System.Collections.Generic;
 using System.Linq;
-using ACE.DatLoader;
-using ACE.DatLoader.FileTypes;
 using ACE.Entity.Enum;
 using ACE.Server.Commands.Handlers;
+using ACE.Server.Entity;
 using ACE.Server.Entity.Actions;
 using ACE.Server.Network;
 using ACE.Server.Network.GameEvent.Events;
 using ACE.Server.Network.GameMessages.Messages;
 using ACE.Server.WorldObjects;
-using ACE.Entity.Enum.Properties;
 using System;
 
 namespace ACE.Server.Commands.PlayerCommands;
@@ -17,7 +15,7 @@ namespace ACE.Server.Commands.PlayerCommands;
 public class Sort
 {
     // sort
-    [CommandHandler("sort", AccessLevel.Player, CommandHandlerFlag.RequiresWorld, 0, "Show player main pack by WeenieType>ItemType>Name.", "")]
+    [CommandHandler("sort", AccessLevel.Player, CommandHandlerFlag.RequiresWorld, 0, "Sorts your pack and side packs: files items into named and inscribed packs, combines stacks, and orders items by kind (see /bank for pack tags).", "")]
     public static void HandleSort(Session session, params string[] parameters)
     {
         SortBag(session);
@@ -82,22 +80,14 @@ public class Sort
             originalPackCounts[sp.Guid.Full] = list.Count;
         }
 
-        // Pre-categorize named side packs
-        var salvageSidePacks = allSidePacks
-            .Where(c => !string.IsNullOrEmpty(c.Name) && c.Name.Contains("Salvage Crate", StringComparison.OrdinalIgnoreCase))
-            .ToList();
+        // Pre-categorize named side packs (the bank fills these first too, see NamedPacks)
+        var salvageSidePacks = allSidePacks.Where(c => NamedPacks.KindOf(c) == NamedPackKind.SalvageCrate).ToList();
 
-        var quiverSidePacks = allSidePacks
-            .Where(c => !string.IsNullOrEmpty(c.Name) && c.Name.Contains("Quiver", StringComparison.OrdinalIgnoreCase))
-            .ToList();
+        var quiverSidePacks = allSidePacks.Where(c => NamedPacks.KindOf(c) == NamedPackKind.Quiver).ToList();
 
-        var componentPouches = allSidePacks
-            .Where(c => !string.IsNullOrEmpty(c.Name) && c.Name.Contains("Component Pouch", StringComparison.OrdinalIgnoreCase))
-            .ToList();
+        var componentPouches = allSidePacks.Where(c => NamedPacks.KindOf(c) == NamedPackKind.ComponentPouch).ToList();
 
-        var trophyPacks = allSidePacks
-            .Where(c => !string.IsNullOrEmpty(c.Name) && c.Name.Contains("Trophy Pack", StringComparison.OrdinalIgnoreCase))
-            .ToList();
+        var trophyPacks = allSidePacks.Where(c => NamedPacks.KindOf(c) == NamedPackKind.TrophyPack).ToList();
 
         var actionChain = new ActionChain();
         var movesScheduled = 0;
@@ -169,10 +159,7 @@ public class Sort
         // Trophy items -> "Trophy Pack"
         if (trophyPacks.Count > 0)
         {
-            var trophyCandidates = mainItems.Where(i =>
-                (i.TrophyQuality ?? 0) > 0
-                || (i.GetProperty((PropertyInt)476) ?? 0) > 0
-            ).ToList();
+            var trophyCandidates = mainItems.Where(i => NamedPacks.Takes(NamedPackKind.TrophyPack, i)).ToList();
 
             foreach (var trophy in trophyCandidates)
             {
@@ -187,7 +174,7 @@ public class Sort
         // Ammunition -> "Quiver"
         if (quiverSidePacks.Count > 0)
         {
-            var ammoCandidates = mainItems.Where(i => i.WeenieType == WeenieType.Ammunition).ToList();
+            var ammoCandidates = mainItems.Where(i => NamedPacks.Takes(NamedPackKind.Quiver, i)).ToList();
 
             foreach (var ammo in ammoCandidates)
             {
@@ -202,7 +189,7 @@ public class Sort
         // Spell components -> "Component Pouch"
         if (componentPouches.Count > 0)
         {
-            var compCandidates = mainItems.Where(i => i.WeenieType == WeenieType.SpellComponent).ToList();
+            var compCandidates = mainItems.Where(i => NamedPacks.Takes(NamedPackKind.ComponentPouch, i)).ToList();
 
             foreach (var comp in compCandidates)
             {
@@ -217,7 +204,7 @@ public class Sort
         // Salvage -> "Salvage Crate"
         if (salvageSidePacks.Count > 0)
         {
-            var salvageCandidates = mainItems.Where(i => i.WeenieType == WeenieType.Salvage).ToList();
+            var salvageCandidates = mainItems.Where(i => NamedPacks.Takes(NamedPackKind.SalvageCrate, i)).ToList();
 
             foreach (var salvage in salvageCandidates)
             {
@@ -283,28 +270,84 @@ public class Sort
         }
 
         // Scan side packs for trophy items
-        ScanSidePacksAndSchedule(
-            item => (item.TrophyQuality ?? 0) > 0 || (item.GetProperty((PropertyInt)476) ?? 0) > 0,
-            trophyPacks
-        );
+        ScanSidePacksAndSchedule(item => NamedPacks.Takes(NamedPackKind.TrophyPack, item), trophyPacks);
 
         // Scan side packs for ammunition
-        ScanSidePacksAndSchedule(
-            item => item.WeenieType == WeenieType.Ammunition,
-            quiverSidePacks
-        );
+        ScanSidePacksAndSchedule(item => NamedPacks.Takes(NamedPackKind.Quiver, item), quiverSidePacks);
 
         // Scan side packs for spell components
-        ScanSidePacksAndSchedule(
-            item => item.WeenieType == WeenieType.SpellComponent,
-            componentPouches
-        );
+        ScanSidePacksAndSchedule(item => NamedPacks.Takes(NamedPackKind.ComponentPouch, item), componentPouches);
 
         // Scan side packs for salvage
-        ScanSidePacksAndSchedule(
-            item => item.WeenieType == WeenieType.Salvage,
-            salvageSidePacks
-        );
+        ScanSidePacksAndSchedule(item => NamedPacks.Takes(NamedPackKind.SalvageCrate, item), salvageSidePacks);
+
+        // ---------- PART B2: file items into carried packs inscribed for them (see /bank) ----------
+        // A pack inscribed with category words ("weapons", "gems, keys", ...) collects those items from the main pack
+        // and from other packs, best fit first: a pack inscribed for exactly that category before one that takes it
+        // among others ("weapons" before "gear"). An item already in a pack that fits at least as well stays put.
+        // Nothing is taken out of the named packs above (quivers, component pouches, trophy packs, salvage crates),
+        // other specialized packs, or packs inscribed "keep", so this never fights the rules above from run to run.
+        var taggedPacks = allSidePacks
+            .Select(p => (Pack: p, Tags: BankCategories.ParseInscription(p.Inscription)))
+            .Where(t => t.Tags.Categories != BankCategory.None)
+            .ToList();
+
+        if (taggedPacks.Count > 0)
+        {
+            var namedPacks = trophyPacks.Concat(quiverSidePacks).Concat(componentPouches).Concat(salvageSidePacks).ToList();
+
+            int FreeSlots(Container pack)
+            {
+                containerSnapshots.TryGetValue(pack.Guid.Full, out var snapshot);
+                return (pack.ItemCapacity ?? 0) - (snapshot?.Count ?? 0);
+            }
+
+            var sources = new List<(Container Pack, List<WorldObject> Items, BankCategory Tags)> { (null, mainItems, BankCategory.None) };
+
+            foreach (var pack in allSidePacks)
+            {
+                var tags = BankCategories.ParseInscription(pack.Inscription);
+
+                if (
+                    tags.Keep
+                    || (pack.MerchandiseItemTypes ?? 0) != 0
+                    || namedPacks.Contains(pack)
+                    || !containerSnapshots.TryGetValue(pack.Guid.Full, out var snapshot)
+                )
+                {
+                    continue;
+                }
+
+                sources.Add((pack, snapshot, tags.Categories));
+            }
+
+            foreach (var (source, items, sourceTags) in sources)
+            {
+                foreach (var item in items.ToList())
+                {
+                    var category = BankCategories.Tags(item);
+                    if (category == BankCategory.None)
+                    {
+                        continue;
+                    }
+
+                    var currentFit = BankCategories.PackFit(sourceTags, category);
+
+                    var target = taggedPacks
+                        .Where(t => t.Pack != source)
+                        .Select(t => (t.Pack, Fit: BankCategories.PackFit(t.Tags.Categories, category)))
+                        .Where(t => t.Fit > currentFit && FreeSlots(t.Pack) > 0 && t.Pack.CanHoldItemType(item))
+                        .OrderByDescending(t => t.Fit)
+                        .Select(t => t.Pack)
+                        .FirstOrDefault();
+
+                    if (target != null)
+                    {
+                        ScheduleMove(item, source, target);
+                    }
+                }
+            }
+        }
 
         // Emit a single combined per-pack message (covers moves from main + side packs)
         // Use the difference between originalPackCounts and containerSnapshots to avoid false positives.
@@ -409,11 +452,10 @@ public class Sort
         }
 
         // ---------- PART D: Sort main pack minimally (insertion-style: only move misplaced items). ----------
-        var desiredMain = mainItems.OrderByDescending(i => i.WeenieType)
-            .ThenBy(i => GetSpellComponentSortKey(i))
-            .ThenByDescending(i => i.ItemType)
-            .ThenByDescending(i => i.Name, StringComparer.OrdinalIgnoreCase)
-            .ToList();
+        // Same order as /bank sort: by category, then each kind of item's own rules, then name (ItemSortOrder).
+        var sortOrder = Comparer<WorldObject>.Create(ItemSortOrder.Compare);
+
+        var desiredMain = mainItems.OrderBy(i => i, sortOrder).ToList();
 
         {
             var current = new List<WorldObject>(mainItems);
@@ -479,9 +521,7 @@ public class Sort
             // client updates immediately without needing HandleActionPutItemInContainer round-trips.
             if (salvageSidePacks.Any(sp => sp.Guid.Full == sidePack.Guid.Full))
             {
-                var sortedSalvage = containerItems
-                    .OrderBy(i => Salvage.GetSalvageBagSortKey(i))
-                    .ToList();
+                var sortedSalvage = containerItems.OrderBy(i => i, sortOrder).ToList();
 
                 for (var i = 0; i < sortedSalvage.Count; i++)
                 {
@@ -493,12 +533,7 @@ public class Sort
                 continue;
             }
 
-            var desiredContainer = containerItems
-                .OrderByDescending(i => i.WeenieType)
-                .ThenBy(i => GetSpellComponentSortKey(i))
-                .ThenByDescending(i => i.ItemType)
-                .ThenByDescending(i => i.Name, StringComparer.OrdinalIgnoreCase)
-                .ToList();
+            var desiredContainer = containerItems.OrderBy(i => i, sortOrder).ToList();
 
             var current = new List<WorldObject>(containerItems);
 
@@ -569,102 +604,5 @@ public class Sort
         {
             session.Network.EnqueueSend(new GameMessageSystemChat("No moves necessary; inventory already sorted.", ChatMessageType.System));
         }
-    }
-
-    // Desired spell component ordering: Scarab > Herb > Powder > Talisman > Taper (Potion is a
-    // formula-only category with no droppable item, kept in its dat-defined slot between Powder
-    // and Talisman). Scarabs are further ordered by material tier.
-    private static readonly string[] ScarabMaterialOrder =
-    {
-        "Lead",
-        "Iron",
-        "Copper",
-        "Silver",
-        "Gold",
-        "Pyreal",
-        "Platinum",
-        "Diamond"
-    };
-
-    private static int GetComponentTypeOrder(uint componentType)
-    {
-        if (componentType == (uint)SpellComponentsTable.Type.Scarab)
-        {
-            return 0;
-        }
-
-        if (componentType == (uint)SpellComponentsTable.Type.Herb)
-        {
-            return 1;
-        }
-
-        if (componentType == (uint)SpellComponentsTable.Type.Powder)
-        {
-            return 2;
-        }
-
-        if (componentType == (uint)SpellComponentsTable.Type.Potion)
-        {
-            return 3;
-        }
-
-        if (componentType == (uint)SpellComponentsTable.Type.Talisman)
-        {
-            return 4;
-        }
-
-        if (componentType == (uint)SpellComponentsTable.Type.Taper)
-        {
-            return 5;
-        }
-
-        return 6;
-    }
-
-    private static int GetScarabMaterialOrder(string componentName)
-    {
-        if (!string.IsNullOrEmpty(componentName))
-        {
-            for (var i = 0; i < ScarabMaterialOrder.Length; i++)
-            {
-                if (componentName.Contains(ScarabMaterialOrder[i], StringComparison.OrdinalIgnoreCase))
-                {
-                    return i;
-                }
-            }
-        }
-
-        return ScarabMaterialOrder.Length;
-    }
-
-    // Non-component items (and any component whose id fails the dat lookup) return the same
-    // neutral key, so they fall through unchanged to the existing ItemType/Name ordering below.
-    //
-    // "Pea" (reusable) components are separate weenies from their consumable counterparts and
-    // carry no runtime flag for it, but they share the consumable's PropertyDataId.SpellComponent
-    // id (so spellcasting/formula matching treats them the same) and their WeenieClassName always
-    // carries a "pea" prefix (peascarablead, peaherbamaranth, etc.), so that prefix is what we key
-    // the "own section after the above" split on.
-    private static (bool IsPea, int TypeOrder, int MaterialOrder) GetSpellComponentSortKey(WorldObject item)
-    {
-        if (item.WeenieType != WeenieType.SpellComponent)
-        {
-            return (false, 0, 0);
-        }
-
-        var isPea = item.WeenieClassName?.StartsWith("pea", StringComparison.OrdinalIgnoreCase) ?? false;
-
-        var componentId = item.GetProperty(PropertyDataId.SpellComponent) ?? 0;
-        if (!DatManager.PortalDat.SpellComponentsTable.SpellComponents.TryGetValue(componentId, out var component))
-        {
-            return (isPea, 6, 0);
-        }
-
-        var typeOrder = GetComponentTypeOrder(component.Type);
-        var materialOrder = component.Type == (uint)SpellComponentsTable.Type.Scarab
-            ? GetScarabMaterialOrder(component.Name)
-            : 0;
-
-        return (isPea, typeOrder, materialOrder);
     }
 }

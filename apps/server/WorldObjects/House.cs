@@ -594,10 +594,12 @@ public class House : WorldObject
             //if (HouseType == ACE.Entity.Enum.HouseType.Apartment || HouseType == ACE.Entity.Enum.HouseType.Cottage)
             //return this;
 
+            // RootGuid is a world database guid, even for a house copied into an instance, so the landblock it
+            // encodes is always the real one.
             var landblock = (ushort)((RootGuid.Full >> 12) & 0xFFFF);
 
             var landblockId = new LandblockId((uint)(landblock << 16 | 0xFFFF));
-            var isLoaded = LandblockManager.IsLoaded(landblockId);
+            var isLoaded = LandblockManager.IsLoaded(landblockId, InstanceId);
 
             if (!isLoaded)
             {
@@ -609,8 +611,11 @@ public class House : WorldObject
                 return Load(RootGuid.Full);
             }
 
-            var loaded = LandblockManager.GetLandblock(landblockId, false);
-            return loaded.GetObject(RootGuid) as House;
+            var loaded = LandblockManager.GetLandblock(landblockId, InstanceId, false);
+
+            // the root house's own copy in this instance has a guid of its own, not RootGuid's world guid
+            var rootGuidInInstance = InstanceManager.TranslateWorldGuid(InstanceId, RootGuid.Full);
+            return loaded.GetObject(new ObjectGuid(rootGuidInInstance)) as House;
         }
     }
 
@@ -622,7 +627,12 @@ public class House : WorldObject
         {
             if (_rootGuid == null)
             {
-                if (HouseCell.RootGuids.TryGetValue(Guid.Full, out var rootGuid))
+                // HouseCell.RootGuids only knows world database guids, never the ephemeral guids a house's
+                // statics get when they are copied into an instance, so this house's own guid has to be
+                // translated back to its world guid before looking itself up.
+                var worldGuid = InstanceManager.TranslateInstanceGuid(InstanceId, Guid.Full);
+
+                if (HouseCell.RootGuids.TryGetValue(worldGuid, out var rootGuid))
                 {
                     _rootGuid = new ObjectGuid(rootGuid);
                 }

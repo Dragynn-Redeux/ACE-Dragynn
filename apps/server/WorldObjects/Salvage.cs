@@ -1873,6 +1873,38 @@ public class Salvage : WorldObject
         salvageBag.UiEffects = ACE.Entity.Enum.UiEffects.Frost;
     }
 
+    /// <summary>
+    /// Pours up to amount units from source into target, as /salvage combine and /bank combine do.
+    /// Target's workmanship becomes the unit-weighted average of what it had and what it got,
+    /// and both bags are renamed for their new size. Stops when target is full (MaxStructure, default 1000)
+    /// or source is empty. Returns the units moved; the caller sends the updates and removes an empty source.
+    /// </summary>
+    public static int PourSalvageBag(WorldObject source, WorldObject target, int amount = int.MaxValue)
+    {
+        var sourceStruct = source.Structure ?? 0;
+        var targetStruct = target.Structure ?? 0;
+        var space = (target.MaxStructure ?? 1000) - targetStruct;
+
+        var moved = Math.Min(amount, Math.Min(sourceStruct, space));
+        if (moved <= 0)
+        {
+            return 0;
+        }
+
+        var sourceWork = source.Workmanship ?? 1.0;
+        var targetWork = target.Workmanship ?? 1.0;
+        var newWork = ((sourceWork * moved) + (targetWork * targetStruct)) / (targetStruct + moved);
+
+        target.Workmanship = (float)Math.Round(newWork, 2);
+        target.Structure = (ushort)(targetStruct + moved);
+        target.Name = $"Salvage Wk{(int)(target.Workmanship ?? 1)} ({target.Structure})";
+
+        source.Structure = (ushort)(sourceStruct - moved);
+        source.Name = $"Salvage Wk{(int)(source.Workmanship ?? 1)} ({source.Structure})";
+
+        return moved;
+    }
+
     public static (int category, int materialType, int workmanship) GetSalvageBagSortKey(WorldObject bag)
     {
         var mat = (MT)(bag.GetProperty(ACE.Entity.Enum.Properties.PropertyInt.MaterialType) ?? 0);

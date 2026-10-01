@@ -243,8 +243,8 @@ public class Gem : Stackable
                     startCooldown = player.TryUseEvasiveStance();
                     break;
                 // Vagabond
-                case CombatAbility.Vanish:
-                    startCooldown = player.TryUseVanish(this);
+                case CombatAbility.ShadowFlurry:
+                    startCooldown = player.TryUseShadowFlurry(this);
                     break;
                 case CombatAbility.Smokescreen:
                     startCooldown = player.TryUseSmokescreen(this);

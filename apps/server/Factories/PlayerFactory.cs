@@ -505,46 +505,8 @@ public static class PlayerFactory
             }
         }
 
-        switch (starterArea.Name)
-        {
-            case "Shoushi":
-                player.Location = new Position(
-                    0x20FC016E,
-                    29.900000f,
-                    -130.000000f,
-                    0.005000f,
-                    0.000000f,
-                    0.000000f,
-                    0.000000f,
-                    1.000000f
-                ); // Shoushi West
-                break;
-            case "Yaraq":
-                player.Location = new Position(
-                    0x20FD016E,
-                    29.900000f,
-                    -130.000000f,
-                    0.005000f,
-                    0.000000f,
-                    0.000000f,
-                    0.000000f,
-                    1.000000f
-                ); // Shoushi West
-                break;
-            case "Holtburg":
-            default:
-                player.Location = new Position(
-                    0x20FE016E,
-                    29.900000f,
-                    -130.000000f,
-                    0.005000f,
-                    0.000000f,
-                    0.000000f,
-                    0.000000f,
-                    1.000000f
-                ); // Shoushi West
-                break;
-        }
+        // every new character starts in the training academy of their starter town
+        player.Location = new Position(ACE.Server.Entity.StarterAcademies.ForStarterTown(starterArea.Name).Start);
 
         CheckForAndStampAccountQuests(player);
 

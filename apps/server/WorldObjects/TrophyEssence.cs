@@ -333,6 +333,49 @@ public class TrophyEssence : WorldObject
         return PotionSpellOutputBase + (uint)((baseIndex * AlchSpellCount + spellIndex) * TierCount + (trophyQuality - 1));
     }
 
+    private static readonly uint[] CookSpellIndexToBaseSpellId = BuildInverseSpellIndex(CookBaseSpellIndex, CookSpellCount);
+    private static readonly uint[] AlchSpellIndexToBaseSpellId = BuildInverseSpellIndex(AlchBaseSpellIndex, AlchSpellCount);
+
+    private static uint[] BuildInverseSpellIndex(Dictionary<uint, int> spellIndex, int count)
+    {
+        var inverse = new uint[count];
+        foreach (var kvp in spellIndex)
+        {
+            inverse[kvp.Value] = kvp.Key;
+        }
+
+        return inverse;
+    }
+
+    /// <summary>
+    /// Reverses GetOutputFoodWcid/GetOutputPotionWcid to recover the SpellId a crafted essence
+    /// output item should cast on use, purely from its WCID. Every output WCID encodes exactly
+    /// one base/spell/tier combination, so this lets items spawned outside the live crafting flow
+    /// (e.g. GM /ci) still carry the correct Spell property. Returns null for WCIDs outside the
+    /// two spell-bearing output ranges (this excludes the boost-only "Sudden" chug range, which
+    /// has no associated spell).
+    /// </summary>
+    public static uint? GetSpellIdForOutputWcid(uint wcid)
+    {
+        if (wcid >= FoodSpellOutputBase && wcid < PotionSpellOutputBase)
+        {
+            var offset = wcid - FoodSpellOutputBase;
+            var quality = offset % TierCount + 1;
+            var spellIndex = (int)(offset / TierCount) % CookSpellCount;
+            return CookSpellIndexToBaseSpellId[spellIndex] + quality - 1;
+        }
+
+        if (wcid >= PotionSpellOutputBase && wcid < FoodSuddenOutputBase)
+        {
+            var offset = wcid - PotionSpellOutputBase;
+            var quality = offset % TierCount + 1;
+            var spellIndex = (int)(offset / TierCount) % AlchSpellCount;
+            return AlchSpellIndexToBaseSpellId[spellIndex] + quality - 1;
+        }
+
+        return null;
+    }
+
     private static uint? GetSuddenFoodWcid(uint targetWcid, PropertyAttribute2nd vital, int trophyQuality)
     {
         if (!TargetFoodBaseIndex.TryGetValue(targetWcid, out var baseIndex))

@@ -693,6 +693,7 @@ public class ChessMatch
         wo.Location.Pos = frame.Origin;
         wo.Location.Rotation = frame.Orientation;
 
+        wo.InstanceId = ChessBoard.InstanceId;
         wo.EnterWorld();
 
         piece.Guid = wo.Guid;

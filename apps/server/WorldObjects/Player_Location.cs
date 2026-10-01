@@ -750,7 +750,11 @@ partial class Player
     /// <summary>
     /// This is not thread-safe. Consider using WorldManager.ThreadSafeTeleport() instead if you're calling this from a multi-threaded subsection.
     /// </summary>
-    public void Teleport(Position _newPosition, bool fromPortal = false)
+    /// <param name="instanceId">
+    /// The instance to arrive in. Leave it out for an ordinary teleport, which stays in the current instance if the destination
+    /// is part of it, and otherwise goes to the persistent world (see InstanceManager.ResolveDestinationInstance).
+    /// </param>
+    public void Teleport(Position _newPosition, bool fromPortal = false, uint? instanceId = null)
     {
         var newPosition = new Position(_newPosition);
         //newPosition.PositionZ += 0.005f;
@@ -772,9 +776,24 @@ partial class Player
             var delayTelport = new ActionChain();
             delayTelport.AddAction(this, () => ClearFogColor());
             delayTelport.AddDelaySeconds(1);
-            delayTelport.AddAction(this, () => WorldManager.ThreadSafeTeleport(this, _newPosition));
+            delayTelport.AddAction(
+                this,
+                () => WorldManager.ThreadSafeTeleport(this, _newPosition, instanceId: instanceId)
+            );
 
             delayTelport.EnqueueChain();
+
+            return;
+        }
+
+        var destinationInstance = instanceId ?? InstanceManager.ResolveDestinationInstance(InstanceId, newPosition);
+
+        // Nothing is changed until the place they are being sent to is known to be there: the instance may have ended, or be shutting down
+        if (!InstanceManager.CanEnter(destinationInstance, newPosition.LandblockId))
+        {
+            Session.Network.EnqueueSend(
+                new GameMessageSystemChat("That place is no longer there.", ChatMessageType.Broadcast)
+            );
 
             return;
         }
@@ -813,8 +832,42 @@ partial class Player
 
         HandlePreTeleportVisibility(newPosition);
 
+        if (destinationInstance != InstanceId)
+        {
+            ChangeInstance(destinationInstance);
+        }
+
         UpdatePlayerPosition(new Position(newPosition), true);
     }
+
+    /// <summary>
+    /// Moves the player to another instance, or back to the persistent world.<para />
+    /// Everything the player knows about is forgotten first, because it belongs to the instance they are leaving:
+    /// nothing there may stay aware of them or keep them as a target, and their client must not keep showing it.
+    /// Their physics object is moved by the teleport that follows.
+    /// </summary>
+    private void ChangeInstance(uint newInstance)
+    {
+        var oldInstance = InstanceId;
+
+        ForgetKnownObjects();
+
+        InstanceId = newInstance;
+        PhysicsObj.Instance = newInstance;
+
+        InstanceSafePosition = null;
+        InstanceTurnBackAllowedAfter = DateTime.MinValue;
+
+        InstanceManager.OnPlayerChangedInstance(this, oldInstance, newInstance);
+    }
+
+    /// <summary>
+    /// Where the player last was in the part of the instance they are allowed in. Only kept for an instance that has a boundary,
+    /// and it is where they are turned back to when they get into the boundary.
+    /// </summary>
+    internal Position InstanceSafePosition;
+
+    internal DateTime InstanceTurnBackAllowedAfter;
 
     public void DoPreTeleportHide()
     {

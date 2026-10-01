@@ -678,6 +678,7 @@ partial class Creature
                 }
 
                 item.Location = new Position(Location);
+                item.InstanceId = InstanceId;
                 LandblockManager.AddObject(item);
             }
             return;
@@ -829,7 +830,7 @@ partial class Creature
                 var position = player.Location;
                 var location = "";
 
-                var landblock = LandblockManager.GetLandblock(position.LandblockId, false);
+                var landblock = LandblockManager.GetLandblock(position.LandblockId, player.InstanceId, false);
 
                 if (Player.DungeonList.TryGetValue((int)position.Landblock, out var dungeonName))
                 {
@@ -966,6 +967,7 @@ partial class Creature
         // persist the original creature velocity (only used for falling) to corpse
         corpse.PhysicsObj.Velocity = PhysicsObj.Velocity;
 
+        corpse.InstanceId = InstanceId;
         corpse.EnterWorld();
 
         if (player != null)

@@ -31,6 +31,30 @@ public class Landblock : LandblockStruct
     public List<PhysicsObj> Scenery;
     public List<PhysicsObj> ServerObjects { get; set; }
 
+    private uint instance;
+
+    /// <summary>
+    /// The instance this landblock belongs to. Set by the server landblock that owns it, right after this is constructed,
+    /// so that every cell that belongs to this landblock is in the same instance from the start. 0 is the persistent world.<para />
+    /// The outdoor cells exist as soon as the landblock does, so they are stamped here. Indoor cells are stamped when they are created.
+    /// </summary>
+    public uint Instance
+    {
+        get => instance;
+        set
+        {
+            instance = value;
+
+            if (LandCells != null)
+            {
+                foreach (var landCell in LandCells.Values)
+                {
+                    landCell.Instance = value;
+                }
+            }
+        }
+    }
+
     public static bool UseSceneFiles = true;
 
     public Landblock()
@@ -169,7 +193,7 @@ public class Landblock : LandblockStruct
         var cellY = (int)point.Y / 24;
 
         var blockCellID = (ID & 0xFFFF0000) | (uint)(cellX * 8 + cellY) + 1;
-        return (LandCell)LScape.get_landcell((uint)blockCellID);
+        return (LandCell)LScape.get_landcell((uint)blockCellID, Instance);
     }
 
     public void destroy_buildings()
@@ -909,7 +933,7 @@ public class Landblock : LandblockStruct
         var cellID = startCell;
         for (var i = 0; i < Info.NumCells; i++)
         {
-            var envCell = (EnvCell)LScape.get_landcell(cellID++);
+            var envCell = (EnvCell)LScape.get_landcell(cellID++, Instance);
             if (envCell != null)
             {
                 envcells.Add(envCell);

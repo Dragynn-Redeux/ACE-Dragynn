@@ -1,0 +1,56 @@
+{
+  // Islands: groups of landblocks that are instanced. Nothing is an island until it is listed here.
+  // This is read once, when the server starts. See docs/instanced-landblocks.md.
+  //
+  // An example (remove the // to use it):
+  //
+  // "islands": [
+  //   {
+  //     "name": "example-island",
+  //
+  //     // the landblocks the island is made of, written as the first four digits of a cell: 0xE74E0019 is landblock E74E.
+  //     // "landblocks" lists them one by one and "rectangles" gives every landblock from one corner to the other. Use either or both.
+  //     "landblocks": [ "E74E" ],
+  //     "rectangles": [ { "from": "E750", "to": "E852" } ],
+  //
+  //     // landblocks that are loaded around the island as a margin (0 to 4). Players are turned back when they get into them,
+  //     // so they can never walk to a place where nothing is loaded. 1 is enough for almost everything.
+  //     "bufferRing": 1,
+  //
+  //     // required. true: these landblocks only exist as instances. The persistent world refuses to load them, nobody can be
+  //     // teleported to them there, and someone who is saved there is moved out when they log in.
+  //     "instanceOnly": true,
+  //
+  //     // where players arrive. It has to be in one of the island's landblocks (not in the ring).
+  //     // cell, x, y, z and the rotation as qx, qy, qz, qw (qw 1 and the others 0 is no rotation). /loc shows these.
+  //     "entry": { "cell": "0xE74E0019", "x": 84, "y": 7.1, "z": 94, "qw": 1 },
+  //
+  //     // where players are sent when the island is closed, and where someone who logs out inside it is saved.
+  //     // Leave it out to send them to their sanctuary (lifestone). It can't be inside the island.
+  //     "return": { "cell": "0xA9B40019", "x": 84, "y": 7.1, "z": 94, "qw": 1 }
+  //   }
+  // ]
+  "islands": [
+    {
+      "name": "aerlinthe",
+      "rectangles": [ { "from": "B3F3", "to": "BFE8" } ],
+      "bufferRing": 1,
+      "instanceOnly": false,
+      "entry": { "cell": "0xBAE8001D", "x": 84.141266, "y": 102.750717, "z": 26.004999, "qw": 1 }
+    },
+     {
+      "name": "test-holtburg",
+      "landblocks": [ "A9B4" ],
+      "bufferRing": 1,
+      "instanceOnly": false,
+      "entry": { "cell": "0xA9B40019", "x": 84, "y": 7.1, "z": 94, "qz": -0.0784591, "qw": 0.996917 }
+    },
+    {
+      "name": "test-big",
+      "rectangles": [ { "from": "A8B3", "to": "AAB5" } ],
+      "bufferRing": 1,
+      "instanceOnly": false,
+      "entry": { "cell": "0xA9B40019", "x": 84, "y": 7.1, "z": 94, "qz": -0.0784591, "qw": 0.996917 }
+    }
+  ]
+}

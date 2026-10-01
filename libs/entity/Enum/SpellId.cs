@@ -6422,16 +6422,16 @@ public enum SpellId : uint
     HealKitRegen,
     StaminaKitRegen,
     ManaKitRegen,
-    DungeonEnemyDamage1,
-    DungeonEnemyDamage2,
-    DungeonEnemyDamage3,
-    DungeonEnemyDamage4,
-    DungeonEnemyDamage5,
-    DungeonEnemyDamage6,
-    DungeonEnemyDamage7,
-    DungeonEnemyDamage8,
-    DungeonEnemyDamage9,
-    DungeonEnemyDamage10,
+    DungeonDifficulty1,
+    DungeonDifficulty2,
+    DungeonDifficulty3,
+    DungeonDifficulty4,
+    DungeonDifficulty5,
+    DungeonDifficulty6,
+    DungeonDifficulty7,
+    DungeonDifficulty8,
+    DungeonDifficulty9,
+    DungeonDifficulty10,
     DungeonTitans,
     DungeonDrained,
     DungeonExplosive,
@@ -6842,6 +6842,34 @@ public enum SpellId : uint
     CookFoodThievery9,
     CookFoodThievery10,
     OlthoiQueenAcidVulnerability,
+    DungeonDifficulty11,
+    DungeonDifficulty12,
+    DungeonDifficulty13,
+    DungeonDifficulty14,
+    DungeonDifficulty15,
+    DungeonDifficulty16,
+    DungeonDifficulty17,
+    DungeonDifficulty18,
+    DungeonDifficulty19,
+    DungeonDifficulty20,
+
+    // gear mod bonuses, see Creature.UpdateArmorModBuffs()
+    PhysicalDefenseBonus = 6846,
+    MagicDefenseBonus,
+    DualWieldBonus,
+    TwoHandedCombatBonus,
+    ThieveryBonus,
+    ShieldBonus,
+    PerceptionBonus,
+    DeceptionBonus,
+    WarMagicBonus,
+    LifeMagicBonus,
+    MartialWeaponsAttackBonus,
+    StaffAttackBonus,
+    DaggerAttackBonus,
+    UnarmedCombatAttackBonus,
+    BowAttackBonus,
+    ThrownWeaponAttackBonus,
 
     NumSpells = 8192,
 
@@ -6888,7 +6916,7 @@ public enum SpellId : uint
 
     Provoke = 0x8000 | 10050, // 20 second cooldown
     Smokescreen = 0x8000 | 10051, // 20 second cooldown
-    Vanish = 0x8000 | 10052, // 60 second cooldown
+    ShadowFlurry = 0x8000 | 10052, // 20 second cooldown
     ExposeWeakness = 0x8000 | 10053, // 15 second cooldown
     ActivatedCombatAbilities = 0x8000 | 10054, // 120 second shared cooldown
     ManaBarrier = 0x8000 | 10055, // 10 second cooldown

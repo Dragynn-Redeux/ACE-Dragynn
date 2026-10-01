@@ -48,7 +48,7 @@ public class CraftTool : Stackable
 
         if (BezelTool.IsBezelTool(this))
         {
-            BezelTool.UseObjectOnTarget(player, this, target);
+            BezelTool.SendObsoleteMessage(player);
             return;
         }
 

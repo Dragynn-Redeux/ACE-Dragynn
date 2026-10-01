@@ -18,12 +18,16 @@ public static class LevelScaling
      *   -Player damage is scaled down based on monster average max health.
      *   -Monster armor/ward is scaled up.
      *  -During enemy attacks on the player
-     *   -Player defense skill is scaled down.
+     *   -Player defense skill is reduced by the difference in average defense skill between the two levels.
      *   -Monster damage is scaled up based on player average max health.
-     *   -Player armor/ward is scaled down.
+     *   -Player armor/ward mitigation is scaled down.
      *   -Player resistance is scaled down.
      *  -During player heals on other players:
      *   -Player heal amount is scaled down based on the target's level.
+     *
+     * Player defense, armor/ward, and resistance are scaled so that however far above or below the average a
+     * player's gear is at their own level, it's worth the same at every lower level too. See
+     * GetPlayerArmorWardModScalar() and GetScaledPlayerDefenseSkill().
      */
 
     private static readonly ILogger _log = Log.ForContext(typeof(LevelScaling));
@@ -31,6 +35,9 @@ public static class LevelScaling
     private static readonly int[] AvgPlayerHealthPerTier = [75, 110, 170, 200, 230, 260, 300, 350, 400];
     private static readonly int[] AvgPlayerArmorWardPerTier = [50, 100, 200, 300, 400, 500, 600, 700, 800];
     private static readonly int[] AvgPlayerAttributePerTier = [100, 125, 175, 200, 215, 230, 250, 270, 290];
+    // Monster attack/defense are set a flat amount above these (Creature_ArchetypeSystem's EnemySkillGap, built from its
+    // avgPlayerPhysicalMagicDefense), so a Shrouded player scaled to a monster's level gets the same evade odds a native
+    // does. Keep these matching avgPlayerPhysicalMagicDefense.
     private static readonly int[] AvgPlayerAttackSkillPerTier = [10, 60, 90, 120, 150, 180, 225, 300, 500];
     private static readonly int[] AvgPlayerDefenseSkillPerTier = [10, 60, 90, 120, 150, 180, 225, 300, 500];
     private static readonly float[] AvgPlayerResistancePerTier = [1.0f, 1.0f, 0.9f, 0.9f, 0.85f, 0.8f, 0.8f, 0.75f, 0.75f];
@@ -193,6 +200,10 @@ public static class LevelScaling
         return (float)statAtPlayerLevel / statAtMonsterLevel;
     }
 
+    /// <summary>
+    /// Scales a player's armor/ward LEVEL. Still used for shields (Creature.GetShieldMod) -- body armor and
+    /// ward use GetPlayerArmorWardModScalar(), which scales the mitigation instead.
+    /// </summary>
     public static float GetPlayerArmorWardScalar(Creature player, Creature monster)
     {
         if (!CanScalePlayer(player, monster))
@@ -224,6 +235,53 @@ public static class LevelScaling
         }
 
         return (float)statAtMonsterLevel / statAtPlayerLevel;
+    }
+
+    /// <summary>
+    /// Scales a player's armor/ward mitigation: multiply this into the armor/ward mod AFTER
+    /// SkillFormula.CalcArmorMod()/CalcWardMod(), not into the armor/ward level before it.
+    ///
+    /// Multiplying the level instead (GetPlayerArmorWardScalar) flattens the 100 / (100 + AL) curve for a
+    /// scaled-down player, which strips most of the value of above-average armor in much lower-level content
+    /// (a well-geared level 50 took up to 1.7x more damage in a level-10 capstone than in a level-50 one).
+    /// Scaling the mitigation keeps a player's armor exactly as valuable, relative to the average at their own
+    /// level, at every lower level: monster damage is authored against CalcArmorMod(average AL at the monster's
+    /// level), so the monster's level cancels out. A player with exactly average armor gets the same result
+    /// either way. Works for ward too, since SkillFormula.ArmorMod and WardMod are both 100.
+    /// </summary>
+    public static float GetPlayerArmorWardModScalar(Creature player, Creature monster)
+    {
+        if (!CanScalePlayer(player, monster))
+        {
+            return 1.0f;
+        }
+
+        if (player.Level == null)
+        {
+            _log.Error("LevelScaling.GetPlayerArmorWardModScalar() - Player ({Player}) level is null. Scaling set to x1.0.", player.Name);
+            return 1.0f;
+        }
+
+        if (monster.Level == null)
+        {
+            _log.Error("LevelScaling.GetPlayerArmorWardModScalar() - Monster ({Monster}) level is null. Scaling set to x1.0.", monster.Name);
+            return 1.0f;
+        }
+
+        var statAtPlayerLevel = GetPlayerArmorWardAtLevel(player.Level.Value);
+        var statAtMonsterLevel = GetPlayerArmorWardAtLevel(monster.Level.Value);
+
+        var scalarMod = SkillFormula.CalcArmorMod(statAtMonsterLevel) / SkillFormula.CalcArmorMod(statAtPlayerLevel);
+
+        if (PropertyManager.GetBool("debug_level_scaling_system").Item)
+        {
+            Console.WriteLine(
+                $"\nGetPlayerArmorWardModScalar(Player {player.Name}, Monster {monster.Name})"
+                + $"\n  statAtPlayerLevel: {statAtPlayerLevel}, statAtMonsterLevel: {statAtMonsterLevel}, scalarMod: {scalarMod}"
+            );
+        }
+
+        return scalarMod;
     }
 
     public static float GetPlayerAttributeScalar(Creature player, Creature monster)
@@ -295,38 +353,49 @@ public static class LevelScaling
         return (float)statAtMonsterLevel / statAtPlayerLevel;
     }
 
-    public static float GetPlayerDefenseSkillScalar(Creature player, Creature monster)
+    /// <summary>
+    /// Returns a player's defense skill scaled down to the monster's level, by subtracting the difference in
+    /// average defense skill between the two levels rather than multiplying by their ratio.
+    ///
+    /// Evade and resist chances only depend on the gap between attack and defense skill (SkillCheck), and the
+    /// monster's attack skill isn't scaled. Multiplying shrank a player's above-average defense along with the
+    /// rest of the skill -- a level 50 with 300 defense kept only a third of their 120-point advantage in a
+    /// level-10 capstone. Subtracting keeps the whole advantage, so above-average defense is worth the same at
+    /// every lower level. A player with exactly average defense gets the same result either way.
+    /// </summary>
+    public static uint GetScaledPlayerDefenseSkill(uint defenseSkill, Creature player, Creature monster)
     {
         if (!CanScalePlayer(player, monster))
         {
-            return 1.0f;
+            return defenseSkill;
         }
 
         if (player.Level == null)
         {
-            _log.Error("LevelScaling.GetPlayerDefenseSkillScalar() - Player ({Player}) level is null. Scaling set to x1.0.", player.Name);
-            return 1.0f;
+            _log.Error("LevelScaling.GetScaledPlayerDefenseSkill() - Player ({Player}) level is null. Scaling skipped.", player.Name);
+            return defenseSkill;
         }
 
         if (monster.Level == null)
         {
-            _log.Error("LevelScaling.GetPlayerDefenseSkillScalar() - Monster ({Monster}) level is null. Scaling set to x1.0.", monster.Name);
-            return 1.0f;
+            _log.Error("LevelScaling.GetScaledPlayerDefenseSkill() - Monster ({Monster}) level is null. Scaling skipped.", monster.Name);
+            return defenseSkill;
         }
-
 
         var statAtPlayerLevel = GetPlayerDefenseSkillAtLevel(player.Level.Value);
         var statAtMonsterLevel = GetPlayerDefenseSkillAtLevel(monster.Level.Value);
 
+        var scaledSkill = (uint)Math.Max(0, (int)defenseSkill - (statAtPlayerLevel - statAtMonsterLevel));
+
         if (PropertyManager.GetBool("debug_level_scaling_system").Item)
         {
             Console.WriteLine(
-                $"\nGetPlayerDefenseSkillScalar(Player {player.Name}, Monster {monster.Name})"
-                    + $"\n  statAtPlayerLevel: {statAtPlayerLevel}, statAtMonsterLevel: {statAtMonsterLevel}, scalarMod: {(float)statAtMonsterLevel / statAtPlayerLevel}"
+                $"\nGetScaledPlayerDefenseSkill(Player {player.Name}, Monster {monster.Name})"
+                    + $"\n  statAtPlayerLevel: {statAtPlayerLevel}, statAtMonsterLevel: {statAtMonsterLevel}, defenseSkill: {defenseSkill} -> {scaledSkill}"
             );
         }
 
-        return (float)statAtMonsterLevel / statAtPlayerLevel;
+        return scaledSkill;
     }
 
     public static float GetPlayerResistanceScalar(Creature player, Creature monster)

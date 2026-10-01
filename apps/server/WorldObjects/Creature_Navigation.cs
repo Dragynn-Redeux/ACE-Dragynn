@@ -580,7 +580,10 @@ partial class Creature
 
         LastAttackTime = Time.GetUnixTime();
 
-        SetMaxVitals();
+        if (!NoHomesickHeal)
+        {
+            SetMaxVitals();
+        }
 
         MoveToHome();
     }

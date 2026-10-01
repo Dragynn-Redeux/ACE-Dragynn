@@ -33,6 +33,15 @@ public class Food : Stackable
     {
         ObjectDescriptionFlags |= ObjectDescriptionFlag.Food;
 
+        if (SpellDID == null || SpellDID == 0)
+        {
+            var derivedSpellId = TrophyEssence.GetSpellIdForOutputWcid(WeenieClassId);
+            if (derivedSpellId != null)
+            {
+                SpellDID = derivedSpellId;
+            }
+        }
+
         if ((Spell2 == null || Spell2 == 0) && CooldownId == null)
         {
             CooldownDuration = 300;

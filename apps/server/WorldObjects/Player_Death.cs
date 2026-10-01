@@ -100,13 +100,15 @@ partial class Player
 
             // instead, we get all of the players in the lifestone landblock + adjacent landblocks,
             // and possibly limit that to some radius around the landblock?
+            // Null when the lifestone's landblock can't be loaded in the persistent world any more (for example,
+            // it has become instance-only since this player bound there): nobody there to broadcast to.
             var lifestoneBlock = LandblockManager.GetLandblock(
                 new LandblockId(Sanctuary.Landblock << 16 | 0xFFFF),
                 true
             );
 
             // We enqueue the work onto the target landblock to ensure thread-safety. It's highly likely the lifestoneBlock is far away, and part of a different landblock group (and thus different thread).
-            lifestoneBlock.EnqueueAction(
+            lifestoneBlock?.EnqueueAction(
                 new ActionEventDelegate(
                     () =>
                         lifestoneBlock.EnqueueBroadcast(
@@ -296,7 +298,12 @@ partial class Player
             this,
             () =>
             {
-                if (PropertyManager.GetBool("create_corpse_on_player_death").Item)
+                // Nobody leaves a corpse in an instance, and so nothing is lost: an instance doesn't outlast the people in it,
+                // so a corpse and everything on it would just be deleted along with it
+                if (
+                    InstanceId == Landblock.PersistentInstance
+                    && PropertyManager.GetBool("create_corpse_on_player_death").Item
+                )
                 {
                     CreateCorpse(topDamager, hadVitae);
                 }
@@ -320,8 +327,7 @@ partial class Player
     /// </summary>
     public void ThreadSafeTeleportOnDeath()
     {
-        // teleport to sanctuary or best location
-        var newPosition = Sanctuary ?? Instantiation ?? Location;
+        var newPosition = GetRespawnPosition();
 
         WorldManager.ThreadSafeTeleport(
             this,
@@ -383,6 +389,26 @@ partial class Player
                 teleportChain.EnqueueChain();
             })
         );
+    }
+
+    /// <summary>
+    /// Where a player revives after dying: their bound lifestone, or where they started, whichever is the first of
+    /// those that a teleport there will actually be accepted, checked the same way Teleport() itself would.<para />
+    /// Never wherever they died: that would make death free for as long as their lifestone stayed unreachable
+    /// (for example, bound inside an instance-only island, then left). If neither candidate is reachable any more,
+    /// this is the same safe fallback spot WorldManager uses when a player has nowhere else to go.
+    /// </summary>
+    private Position GetRespawnPosition()
+    {
+        foreach (var candidate in new[] { Sanctuary, Instantiation })
+        {
+            if (candidate != null && InstanceManager.CanReach(InstanceId, candidate))
+            {
+                return candidate;
+            }
+        }
+
+        return new Position(WorldManager.DefaultFallbackPosition);
     }
 
     public bool suicideInProgress;

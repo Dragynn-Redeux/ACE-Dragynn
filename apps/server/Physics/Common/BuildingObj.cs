@@ -69,7 +69,7 @@ public class BuildingObj : PhysicsObj
     {
         foreach (var portal in Portals)
         {
-            var otherCell = portal.GetOtherCell(CurCell.ID);
+            var otherCell = portal.GetOtherCell(CurCell.ID, CurCell.Instance);
             if (otherCell != null)
             {
                 otherCell.check_building_transit(portal.OtherPortalId, pos, numSphere, sphere, cellArray, path);
@@ -81,7 +81,7 @@ public class BuildingObj : PhysicsObj
     {
         foreach (var portal in Portals)
         {
-            var otherCell = portal.GetOtherCell(CurCell.ID);
+            var otherCell = portal.GetOtherCell(CurCell.ID, CurCell.Instance);
             if (otherCell != null)
             {
                 otherCell.check_building_transit(portal.OtherPortalId, numParts, parts, cellArray);
@@ -102,7 +102,7 @@ public class BuildingObj : PhysicsObj
         // aka cells touching the outdoor landblock
         foreach (var portal in Portals)
         {
-            var entrypoint = portal.GetOtherCell(LandblockID);
+            var entrypoint = portal.GetOtherCell(LandblockID, CurCell.Instance);
             add_cells_recursive(entrypoint);
         }
         return BuildingCells;

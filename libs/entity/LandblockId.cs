@@ -2,7 +2,7 @@ using System;
 
 namespace ACE.Entity;
 
-public struct LandblockId
+public struct LandblockId : IEquatable<LandblockId>
 {
     public uint Raw { get; }
 
@@ -110,6 +110,14 @@ public struct LandblockId
         }
     }
 
+    /// <summary>
+    /// Without this, every dictionary or set that has a LandblockId in its key boxes it to compare it
+    /// </summary>
+    public bool Equals(LandblockId other)
+    {
+        return this == other;
+    }
+
     public override bool Equals(object obj)
     {
         if (obj is LandblockId id)
@@ -122,7 +130,10 @@ public struct LandblockId
 
     public override int GetHashCode()
     {
-        return base.GetHashCode();
+        // Must agree with operator ==, which only compares the landblock (X/Y) portion of the ID.
+        // Hashing all of Raw would let two IDs that compare equal hash differently when they only differ in their
+        // cell bits, so they would miss each other when used as dictionary keys.
+        return Landblock;
     }
 
     public override string ToString()

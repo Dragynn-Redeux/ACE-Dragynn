@@ -165,29 +165,18 @@ partial class WorldObject
         var chance = (1.0 - SkillCheck.GetSkillChance((int)casterMagicSkill, (int)targetMagicDefenseSkill));
         resistChance = (float)chance;
 
-        var resistRoll = ThreadSafeRandom.Next(0.0f, 1.0f);
-
-        if (targetPlayer is { EvasiveStanceIsActive: true })
+        // COMBAT ABILITY - Evasive Stance: flat 25% chance to fully resist any spell, independent of magic defense skill.
+        if (targetPlayer is { EvasiveStanceIsActive: true } && ThreadSafeRandom.Next(0.0f, 1.0f) < 0.25f)
         {
-            var luckyRoll = ThreadSafeRandom.Next(0.0f, 1.0f);
-            if (luckyRoll < resistRoll)
-            {
-                resistRoll = luckyRoll;
-            }
+            partialResist = PartialEvasion.All;
+            return true;
         }
+
+        var resistRoll = ThreadSafeRandom.Next(0.0f, 1.0f);
 
         if (resistRoll < chance)
         {
             var partialResistRoll = ThreadSafeRandom.Next(0.0f, 1.0f);
-
-            if (targetPlayer is { EvasiveStanceIsActive: true })
-            {
-                var luckyRoll = ThreadSafeRandom.Next(0.0f, 1.0f);
-                if (luckyRoll < partialResistRoll)
-                {
-                    partialResistRoll = luckyRoll;
-                }
-            }
 
             // Roll resist type (33% for each resist type)
             const float fullResistChance = 1.0f / 3.0f;
@@ -204,32 +193,6 @@ partial class WorldObject
             }
         }
 
-        // If playerDefender has Phalanx active, 25-50% chance to convert a full hit into a partial hit, depending on shield size.
-        if (targetPlayer is { PhalanxIsActive: true } && (targetPlayer.GetEquippedShield() is not null || targetPlayer.GetEquippedWeapon() is { IsTwoHanded: true}))
-        {
-            var phalanxChance = 0.25;
-
-            if (targetPlayer.GetEquippedShield() is not null)
-            {
-                phalanxChance = targetPlayer.GetEquippedShield().ArmorStyle switch
-                {
-                    (int)ACE.Entity.Enum.ArmorStyle.CovenantShield => 0.5f,
-                    (int)ACE.Entity.Enum.ArmorStyle.TowerShield => 0.45f,
-                    (int)ACE.Entity.Enum.ArmorStyle.LargeShield => 0.4f,
-                    (int)ACE.Entity.Enum.ArmorStyle.StandardShield => 0.35f,
-                    (int)ACE.Entity.Enum.ArmorStyle.SmallShield => 0.3f,
-                    (int)ACE.Entity.Enum.ArmorStyle.Buckler => 0.3f,
-                    _ => 0.25f
-                };
-            }
-
-            if (ThreadSafeRandom.Next(0.0f, 1.0f) < phalanxChance)
-            {
-                partialResist = PartialEvasion.Some;
-                return false;
-            }
-        }
-
         partialResist = PartialEvasion.None;
         return false;
     }
@@ -238,6 +201,10 @@ partial class WorldObject
     /// If this spell has a chance to be resisted, rolls for a chance
     /// Returns TRUE if spell is resistable and was resisted for this attempt
     /// </summary>
+    /// <param name="isReflected">
+    /// COMBAT ABILITY - Reflect: set when the spell was reflected back at its original caster.
+    /// The original caster is then passed as the itemCaster, so the resist check uses its own magic skill vs its own magic defense.
+    /// </param>
     public bool TryResistSpell(
         WorldObject target,
         Spell spell,
@@ -245,7 +212,8 @@ partial class WorldObject
         WorldObject itemCaster = null,
         bool projectileHit = false,
         int? weaponSpellcraft = null,
-        double? weaponAttackMod = null
+        double? weaponAttackMod = null,
+        bool isReflected = false
     )
     {
         partialResist = PartialEvasion.None;
@@ -321,9 +289,9 @@ partial class WorldObject
                 magicSkill = (uint)(magicSkill * weaponAttackMod);
             }
 
-            if (player is {OverloadDischargeIsActive: true})
+            if (casterCreature is Player { OverloadDischargeIsActive: true } casterPlayer)
             {
-                magicSkill *= (uint)(player.ManaChargeMeter + 1.0f);
+                magicSkill *= (uint)(casterPlayer.ManaChargeMeter + 1.0f);
             }
 
             magicSkill = (uint)(magicSkill * secondaryAttributeMod * LevelScaling.GetPlayerAttackSkillScalar(casterCreature, target as Creature));
@@ -361,12 +329,15 @@ partial class WorldObject
         }
 
         // Retrieve target's Magic Defense Skill
-        var difficulty = (uint)(targetCreature.GetModdedMagicDefSkill() * LevelScaling.GetPlayerDefenseSkillScalar(targetCreature, casterCreature));
+        var difficulty = targetCreature.GetModdedMagicDefSkill();
 
         difficulty = Convert.ToUInt32(difficulty * (1.0f + CheckForCombatAbilityReflectMagicDefBonus(targetPlayer)));
         // Familiar Foe (Fire Opal): the ramp stamps live on the casting creature's QuestManager,
         // keyed by the defending player's name (accrued while that player attacked this creature).
         difficulty = Convert.ToUInt32(difficulty * (1.0f + Jewel.GetJewelEffectMod(targetPlayer, PropertyInt.GearFamiliarity, "Familiarity", rampQuestSource: casterCreature)));
+
+        // level scaling goes last, so the bonuses above are worth the same at every level (see LevelScaling.GetScaledPlayerDefenseSkill)
+        difficulty = LevelScaling.GetScaledPlayerDefenseSkill(difficulty, targetCreature, casterCreature);
 
         var resisted = MagicDefenseCheck(magicSkill, difficulty, out var pResist, out var resistChance, targetPlayer);
 
@@ -387,7 +358,7 @@ partial class WorldObject
             }
         }
 
-        if (caster == target)
+        if (caster == target && !isReflected)
         {
             resisted = false;
         }
@@ -563,7 +534,10 @@ partial class WorldObject
         }
 
         // Sigil Scarabs
-        if (this is Player)
+        // Excludes spells triggered by consuming a Food/Drink/Gem item (e.g. Alchemy potions) -
+        // those are cast as `player.TryCastSpell(spell, player, item, ...)`, so `this` is
+        // still the player even though the player didn't actively cast the spell themselves.
+        if (this is Player && itemCaster is not (Food or Gem))
         {
             if (targetCreature != null && !equip)
             {
@@ -927,18 +901,27 @@ partial class WorldObject
     /// Handles casting SpellType.Boost / FellowBoost spells
     /// typically for Life Magic, ie. Heal, Harm
     /// </summary>
+    /// <param name="reflectedCaster">
+    /// COMBAT ABILITY - Reflect: when set, this spell was reflected back at its original caster.
+    /// It is still cast by this player (kill credit, threat, messages), but its damage is based on the original caster's stats.
+    /// </param>
     private void HandleCastSpell_Boost(
         Spell spell,
         Creature targetCreature,
         bool fromProc,
         bool showMsg = true,
         WorldObject weapon = null,
-        double damageMultiplier = 1.0
+        double damageMultiplier = 1.0,
+        Creature reflectedCaster = null
     )
     {
         var player = this as Player;
         var creature = this as Creature;
         var targetPlayer = targetCreature as Player;
+
+        // the creature whose stats are used for damage
+        var damageSource = reflectedCaster ?? creature;
+        var damageSourcePlayer = damageSource as Player;
 
         // prevent double deaths from indirect casts
         // caster is already checked in player/monster, and re-checking caster here would break death emotes such as bunny smite
@@ -962,17 +945,18 @@ partial class WorldObject
             weaponRestorationMod = weapon.WeaponRestorationSpellsMod;
         }
 
-        // Resist
-        if (targetPlayer is { ReflectIsActive: true, ReflectFirstSpell: true })
+        // COMBAT ABILITY - Reflect: a reflected spell never damages the reflecting player.
+        // A spell that was already reflected can't be reflected again.
+        if (
+            reflectedCaster == null
+            && CheckForCombatAbilityReflectSpell(_partialEvasion is PartialEvasion.All or PartialEvasion.Some, targetPlayer, creature, spell)
+        )
         {
-            CheckForCombatAbilityReflectSpell(true, targetPlayer, this as Creature, spell);
-            targetPlayer.ReflectFirstSpell = false;
-        }
-        else
-        {
-            CheckForCombatAbilityReflectSpell(_partialEvasion is PartialEvasion.All or PartialEvasion.Some, targetPlayer, this as Creature, spell);
+            targetPlayer.CastReflectedSpell(spell, creature, null, damageMultiplier);
+            return;
         }
 
+        // Resist
         var resistedMod = GetResistedMod(_partialEvasion);
 
         var selfTargetProcSpellMod = SelfTargetSpellProcMod(fromProc, spell, weapon, player);
@@ -1006,7 +990,7 @@ partial class WorldObject
 
         if (targetCreature != this && tryBoost < 0)
         {
-            var damageRating = creature?.GetDamageRating() ?? 0;
+            var damageRating = damageSource?.GetDamageRating() ?? 0;
             var damageRatingMod = Creature.AdditiveCombine(Creature.GetPositiveRatingMod(damageRating));
 
             tryBoost = (int)(tryBoost * damageRatingMod);
@@ -1039,8 +1023,8 @@ partial class WorldObject
             }
         }
 
-        var overloadMod = CheckForCombatAbilityOverloadDamageBonus(player);
-        var batterMod = CheckForCombatAbilityBatteryDamagePenalty(player);
+        var overloadMod = CheckForCombatAbilityOverloadDamageBonus(damageSourcePlayer);
+        var batterMod = CheckForCombatAbilityBatteryDamagePenalty(damageSourcePlayer);
 
         var spellcraftMod = 1.0f;
         if (fromProc && weapon?.ItemSpellcraft != null)
@@ -1049,13 +1033,9 @@ partial class WorldObject
             spellcraftMod += spellcraft * 0.01f;
         }
 
-        // for traps and creatures that don't have a lethality mod,
+        // for traps and creatures the archetype system doesn't scale,
         // make sure they receive multipliers from landblock mods
-        var landblockScalingMod = 1.0f;
-        if (ArchetypeLethality is null && CurrentLandblock is not null)
-        {
-            landblockScalingMod *= (1.0f + (float)CurrentLandblock.GetLandblockLethalityMod());
-        }
+        var landblockScalingMod = (reflectedCaster ?? this).GetLandblockLethalitySpellMod();
 
         tryBoost = (int)(tryBoost * overloadMod * batterMod * damageMultiplier * spellcraftMod * landblockScalingMod * resistedMod);
 
@@ -1081,34 +1061,40 @@ partial class WorldObject
         else // harm
         {
             // increases
-            tryBoost = Convert.ToInt32(tryBoost * (1.0f + Jewel.GetJewelRedFury(player)));
-            tryBoost = Convert.ToInt32(tryBoost * (1.0f + Jewel.GetJewelBlueFury(player)));
-            tryBoost = Convert.ToInt32(tryBoost * (1.0f + Jewel.GetJewelEffectMod(player, PropertyInt.GearSelfHarm)));
+            tryBoost = Convert.ToInt32(tryBoost * (1.0f + Jewel.GetJewelRedFury(damageSourcePlayer)));
+            tryBoost = Convert.ToInt32(tryBoost * (1.0f + Jewel.GetJewelBlueFury(damageSourcePlayer)));
+            tryBoost = Convert.ToInt32(tryBoost * (1.0f + Jewel.GetJewelEffectMod(damageSourcePlayer, PropertyInt.GearSelfHarm)));
 
-            var attributeMod = creature?.GetAttributeMod(weapon, true) ?? 1.0f;
+            var attributeMod = damageSource?.GetAttributeMod(weapon, true) ?? 1.0f;
             tryBoost = Convert.ToInt32(tryBoost * attributeMod);
 
             // reductions
             tryBoost = Convert.ToInt32(tryBoost * (1.0f - Jewel.GetJewelEffectMod(targetPlayer, PropertyInt.GearNullification,"Nullification")));
 
             // ward
-            var ignoreWardMod = 1.0f - Jewel.GetJewelEffectMod(player, PropertyInt.GearWardPen, "WardPen");
-            var wardMod = GetWardMod(player, targetCreature, ignoreWardMod);
+            var ignoreWardMod = 1.0f - Jewel.GetJewelEffectMod(damageSourcePlayer, PropertyInt.GearWardPen, "WardPen");
+            var wardMod = GetWardMod(damageSourcePlayer, targetCreature, ignoreWardMod);
 
             tryBoost = Convert.ToInt32(tryBoost * wardMod);
+
+            // COMBAT ABILITY - Phalanx: health damage taken from full hits reduced by 30%. Partial resists are unaffected.
+            if (spell.VitalDamageType == DamageType.Health && _partialEvasion == PartialEvasion.None)
+            {
+                tryBoost = Convert.ToInt32(tryBoost * (targetPlayer?.GetPhalanxFullHitDamageMod() ?? 1.0f));
+            }
         }
 
         ResetRatingElementalistQuestStamps(player);
 
-        if (creature is not null)
+        if (damageSource is not null)
         {
-            var archetypeSpellDamageMod = (float)(creature.ArchetypeSpellDamageMultiplier ?? 1.0);
+            var archetypeSpellDamageMod = (float)(damageSource.ArchetypeSpellDamageMultiplier ?? 1.0);
             tryBoost = Convert.ToInt32(tryBoost * archetypeSpellDamageMod);
         }
 
         // LEVEL SCALING - Reduces harms against enemies, and restoration for players.
         // Also scales up healing on higher level player targets when both players are Shrouded (excluding self heals).
-        var scalar = LevelScaling.GetPlayerBoostSpellScalar(player, targetCreature);
+        var scalar = LevelScaling.GetPlayerBoostSpellScalar(damageSourcePlayer, targetCreature);
         if (tryBoost > 0 && player != null && targetPlayer != null && targetPlayer != player)
         {
             scalar *= LevelScaling.GetPlayerBoostHealScalarShroudedUpward(player, targetPlayer);
@@ -1131,7 +1117,16 @@ partial class WorldObject
                 srcVital = "stamina";
                 break;
             default: // Health
-                boost = targetCreature.UpdateVitalDelta(targetCreature.Health, tryBoost);
+                // COMBAT ABILITY - Mana Barrier: part of the health damage is taken as mana instead
+                if (tryBoost < 0 && targetCreature != this && targetPlayer is { ManaBarrierIsActive: true })
+                {
+                    boost = -(int)Player.CombatAbilityManaBarrier(targetPlayer, (uint)-tryBoost, this, DamageType.Health);
+                }
+                else
+                {
+                    boost = targetCreature.UpdateVitalDelta(targetCreature.Health, tryBoost);
+                }
+
                 srcVital = "health";
 
                 if (boost >= 0 && !targetCreature.IsMonster)
@@ -1261,18 +1256,88 @@ partial class WorldObject
 
     /// <summary>
     /// COMBAT ABILITY - Reflect: Reflect resisted spells back to the caster.
+    /// During the guaranteed window, or by consuming a guaranteed charge, spells that were not resisted are reflected as well.
     /// </summary>
-    private void CheckForCombatAbilityReflectSpell(bool resisted, Player targetPlayer, Creature sourceCreature, Spell spell)
+    /// <returns>TRUE if the spell is reflected. A reflected spell must not damage the reflecting player.</returns>
+    protected static bool CheckForCombatAbilityReflectSpell(bool resisted, Player targetPlayer, Creature sourceCreature, Spell spell)
     {
-        if (!resisted || targetPlayer == null || sourceCreature == null || targetPlayer == sourceCreature || spell.IsBeneficial)
+        if (targetPlayer is not { ReflectIsActive: true } || sourceCreature == null || targetPlayer == sourceCreature || spell.IsBeneficial)
+        {
+            return false;
+        }
+
+        // guaranteed charges are only spent on spells that would otherwise have hit
+        if (!resisted && !targetPlayer.ReflectGuaranteedWindowActive)
+        {
+            if (targetPlayer.ReflectGuaranteedCharges <= 0)
+            {
+                return false;
+            }
+
+            targetPlayer.ReflectGuaranteedCharges--;
+        }
+
+        targetPlayer.SendChatMessage(
+            sourceCreature,
+            $"Reflect! You reflect {spell.Name} back at {sourceCreature.Name}!",
+            ChatMessageType.Magic
+        );
+
+        targetPlayer.SetCurrentAttacker(sourceCreature);
+
+        return true;
+    }
+
+    /// <summary>
+    /// COMBAT ABILITY - Reflect: Casts a reflected spell back at its original caster.
+    /// The spell is cast by this player (kill credit, threat, messages),
+    /// but its resist check and damage are based on the original caster's stats.
+    /// </summary>
+    /// <param name="originalProjectile">For projectile spells, the incoming projectile that was reflected</param>
+    public void CastReflectedSpell(Spell spell, Creature originalCaster, SpellProjectile originalProjectile, double damageMultiplier = 1.0)
+    {
+        if (originalCaster == null || !originalCaster.IsAlive)
         {
             return;
         }
 
-        if (targetPlayer.ReflectIsActive)
+        switch (spell.MetaSpellType)
         {
-            targetPlayer.TryCastSpell(spell, sourceCreature, null, null, false, false, false);
+            case SpellType.Projectile:
+            case SpellType.LifeProjectile:
+            case SpellType.EnchantmentProjectile:
+
+                // resisted on impact, see SpellProjectile.CalculateDamage()
+                HandleCastSpell_Projectile(
+                    spell,
+                    originalCaster,
+                    null,
+                    null,
+                    false,
+                    false,
+                    null,
+                    originalProjectile?.DamageMultiplier ?? damageMultiplier,
+                    originalCaster,
+                    originalProjectile?.LifeProjectileDamage ?? 0
+                );
+                break;
+
+            case SpellType.Boost:
+            case SpellType.FellowBoost:
+
+                if (TryResistSpell(originalCaster, spell, out _, originalCaster, false, null, null, true))
+                {
+                    return;
+                }
+
+                HandleCastSpell_Boost(spell, originalCaster, false, true, null, damageMultiplier, originalCaster);
+                break;
+
+            default:
+                return;
         }
+
+        DoSpellEffects(spell, this, originalCaster);
     }
 
     /// <summary>
@@ -1476,6 +1541,22 @@ partial class WorldObject
     }
 
     /// <summary>
+    /// The damage bonus from the fellowship leader's dungeon mod (Landblock.GetLandblockLethalityMod) for a spell cast by this object.
+    /// Only for the dungeon's traps and the creatures the archetype system doesn't scale: archetype creatures get the bonus
+    /// through their lethality (Creature.ApplyDungeonMods), and players and their pets never get it, since the mod makes the
+    /// dungeon's enemies stronger, not the fellowship.
+    /// </summary>
+    public float GetLandblockLethalitySpellMod()
+    {
+        if (this is Player or CombatPet or Creature { ArchetypeSystemApplies: true } || CurrentLandblock is null)
+        {
+            return 1.0f;
+        }
+
+        return 1.0f + (float)CurrentLandblock.GetLandblockLethalityMod();
+    }
+
+    /// <summary>
     /// Checks for death from a boost / transfer spell
     /// </summary>
     private static void HandleBoostTransferDeath(Creature caster, Creature target)
@@ -1591,6 +1672,15 @@ partial class WorldObject
                         destVitalChange = (uint)Math.Round(srcVitalChange * (1.0f - spell.LossPercent) * boostMod);
                     }
                 }
+
+                // COMBAT ABILITY - Phalanx: health drained by a full hit reduced by 30%. Partial resists are unaffected.
+                if (targetPlayer is { PhalanxIsEffective: true } && _partialEvasion == PartialEvasion.None)
+                {
+                    var phalanxMod = targetPlayer.GetPhalanxFullHitDamageMod();
+
+                    srcVitalChange = (uint)Math.Round(srcVitalChange * phalanxMod);
+                    destVitalChange = (uint)Math.Round(destVitalChange * phalanxMod);
+                }
             }
 
             string srcVital = null, destVital;
@@ -1628,12 +1718,9 @@ partial class WorldObject
                 destVitalChange = (uint)(destVitalChange * levelScalingMod);
             }
 
-            // for traps and creatures that don't have a lethality mod,
+            // for traps and creatures the archetype system doesn't scale,
             // make sure they receive multipliers from landblock mods
-            if (ArchetypeLethality is null && CurrentLandblock is not null)
-            {
-                destVitalChange *= (uint)(1.0f + (float)CurrentLandblock.GetLandblockLethalityMod());
-            }
+            destVitalChange = Convert.ToUInt32(destVitalChange * GetLandblockLethalitySpellMod());
 
             // Apply the change in vitals to the source
             if (transferSource != null)
@@ -1650,9 +1737,18 @@ partial class WorldObject
                         break;
                     default: // Health
                         srcVital = "health";
-                        srcVitalChange = (uint)-transferSource.UpdateVitalDelta(transferSource.Health, -(int)srcVitalChange);
 
-                        transferSource.DamageHistory.Add(this, DamageType.Health, srcVitalChange);
+                        // COMBAT ABILITY - Mana Barrier: part of the drained health is taken as mana instead
+                        if (isDrain && transferSource is Player { ManaBarrierIsActive: true } barrierPlayer)
+                        {
+                            srcVitalChange = Player.CombatAbilityManaBarrier(barrierPlayer, srcVitalChange, this, DamageType.Health);
+                        }
+                        else
+                        {
+                            srcVitalChange = (uint)-transferSource.UpdateVitalDelta(transferSource.Health, -(int)srcVitalChange);
+
+                            transferSource.DamageHistory.Add(this, DamageType.Health, srcVitalChange);
+                        }
                         break;
                 }
 
@@ -1857,6 +1953,14 @@ partial class WorldObject
     /// <summary>
     /// Handles casting SpellType.Projectile / LifeProjectile / EnchantmentProjectile spells
     /// </summary>
+    /// <param name="reflectedCaster">
+    /// COMBAT ABILITY - Reflect: when set, this spell was reflected back at its original caster,
+    /// and the projectiles use the original caster's stats for their resist check and damage.
+    /// </param>
+    /// <param name="reflectedLifeProjectileDamage">
+    /// For a reflected life projectile, the damage the original caster paid for it.
+    /// The reflecting player's own vitals are not drained.
+    /// </param>
     private void HandleCastSpell_Projectile(
         Spell spell,
         WorldObject target,
@@ -1865,7 +1969,9 @@ partial class WorldObject
         bool isWeaponSpell,
         bool fromProc,
         int? weaponSpellcraft = null,
-        double damageMultiplier = 1.0
+        double damageMultiplier = 1.0,
+        Creature reflectedCaster = null,
+        uint reflectedLifeProjectileDamage = 0
     )
     {
         uint damage = 0;
@@ -1873,7 +1979,11 @@ partial class WorldObject
 
         var damageType = DamageType.Undef;
 
-        if (spell.School == MagicSchool.LifeMagic && caster != null)
+        if (reflectedCaster != null)
+        {
+            damage = reflectedLifeProjectileDamage;
+        }
+        else if (spell.School == MagicSchool.LifeMagic && caster != null)
         {
             if (spell.DamageType.HasFlag(DamageType.Mana))
             {
@@ -1916,7 +2026,7 @@ partial class WorldObject
 
         if (projectileSpellType != ProjectileSpellType.Blast)
         {
-            CreateSpellProjectiles(spell, target, weapon, isWeaponSpell, fromProc, damage, false, weaponSpellcraft, damageMultiplier);
+            CreateSpellProjectiles(spell, target, weapon, isWeaponSpell, fromProc, damage, false, weaponSpellcraft, damageMultiplier, reflectedCaster);
         }
 
         var targetCreature = target as Creature;
@@ -1965,8 +2075,13 @@ partial class WorldObject
 
             foreach (var blastTarget in blastTargets)
             {
-                CreateSpellProjectiles(spell, blastTarget, weapon, isWeaponSpell, fromProc, damage, false, weaponSpellcraft, damageMultiplier);
+                CreateSpellProjectiles(spell, blastTarget, weapon, isWeaponSpell, fromProc, damage, false, weaponSpellcraft, damageMultiplier, reflectedCaster);
             }
+        }
+
+        if (reflectedCaster != null)
+        {
+            return;
         }
 
         CheckForRatingSlashCleaveBonus(spell, weapon, isWeaponSpell, fromProc, caster, targetCreature, damage);
@@ -2146,7 +2261,7 @@ partial class WorldObject
     /// <summary>
     /// Returns a Portal object for a WCID
     /// </summary>
-    private static Portal GetPortal(uint wcid)
+    protected static Portal GetPortal(uint wcid)
     {
         var weenie = DatabaseManager.World.GetCachedWeenie(wcid);
 
@@ -2318,10 +2433,14 @@ partial class WorldObject
                     targetPlayer,
                     () =>
                     {
-                        var teleportDest = new Position(portal.Destination);
-                        AdjustDungeon(teleportDest);
+                        // a capstone dungeon's entrance leaves it to its Portal emote to send the player anywhere
+                        if (!portal.IsCapstoneEntrance)
+                        {
+                            var teleportDest = new Position(portal.Destination);
+                            AdjustDungeon(teleportDest);
 
-                        targetPlayer.Teleport(teleportDest);
+                            targetPlayer.Teleport(teleportDest);
+                        }
 
                         portal.EmoteManager.OnPortal(player);
                     }
@@ -2437,7 +2556,7 @@ partial class WorldObject
             summonLoc.LandblockId = new LandblockId(summonLoc.GetCell());
         }
 
-        var success = SummonPortal(portalId, summonLoc, spell.PortalLifetime);
+        var success = SummonPortal(portalId, summonLoc, spell.PortalLifetime, InstanceId);
 
         if (!success && player != null)
         {
@@ -2450,7 +2569,7 @@ partial class WorldObject
     /// <summary>
     /// Spawns a portal for SpellType.PortalSummon spells
     /// </summary>
-    private static bool SummonPortal(uint portalId, Position location, double portalLifetime)
+    private static bool SummonPortal(uint portalId, Position location, double portalLifetime, uint instanceId)
     {
         var portal = GetPortal(portalId);
 
@@ -2484,6 +2603,9 @@ partial class WorldObject
         gateway.Biota.PropertiesEmote = portal.Biota.PropertiesEmote;
 
         gateway.PortalRestrictions |= PortalBitmask.NoSummon; // all gateways are marked NoSummon but by default ruleset, the OriginalPortal is the one that is checked against
+
+        // the gateway opens in the same instance as whoever summoned it
+        gateway.InstanceId = instanceId;
 
         gateway.EnterWorld();
 
@@ -2720,6 +2842,7 @@ partial class WorldObject
     /// <summary>
     /// Creates and launches the projectiles for a spell
     /// </summary>
+    /// <param name="reflectedCaster">COMBAT ABILITY - Reflect: the original caster of a reflected spell</param>
     protected List<SpellProjectile> CreateSpellProjectiles(
         Spell spell,
         WorldObject target,
@@ -2729,7 +2852,8 @@ partial class WorldObject
         uint lifeProjectileDamage = 0,
         bool castAtTarget = false,
         int? weaponSpellcraft = null,
-        double damageMultiplier = 1.0
+        double damageMultiplier = 1.0,
+        Creature reflectedCaster = null
     )
     {
         if (spell.NumProjectiles == 0)
@@ -2744,12 +2868,13 @@ partial class WorldObject
         var velocity = CalculateProjectileVelocity(spell, target, spellType, origins[0]);
 
         // EMPOWERED SCARAB - Crushing
+        // (not consumed by a reflected spell)
         var fireAllProjectilesFromCenter = false;
         var propertiesEnchantmentRegistry = EnchantmentManager.GetEnchantment(
             (uint)SpellId.GauntletCriticalDamageBoostI,
             null
         );
-        if (propertiesEnchantmentRegistry != null && spellType == ProjectileSpellType.Blast)
+        if (propertiesEnchantmentRegistry != null && spellType == ProjectileSpellType.Blast && reflectedCaster == null)
         {
             EnchantmentManager.Dispel(propertiesEnchantmentRegistry);
             fireAllProjectilesFromCenter = true;
@@ -2768,7 +2893,8 @@ partial class WorldObject
             castAtTarget,
             fireAllProjectilesFromCenter,
             weaponSpellcraft,
-            damageMultiplier
+            damageMultiplier,
+            reflectedCaster
         );
     }
 
@@ -3102,7 +3228,8 @@ partial class WorldObject
         bool castAtTarget = false,
         bool fireAllProjectilesFromCenter = false,
         int? weaponSpellcraft = null,
-        double damageMultiplier = 1.0
+        double damageMultiplier = 1.0,
+        Creature reflectedCaster = null
     )
     {
         var useGravity = spellType == ProjectileSpellType.Arc;
@@ -3183,6 +3310,11 @@ partial class WorldObject
             sp.WeaponSpellcraft = weaponSpellcraft;
 
             sp.DamageMultiplier = damageMultiplier;
+
+            // set before entering the world, a projectile can collide with its target on world entry
+            sp.ReflectedCaster = reflectedCaster;
+
+            sp.InstanceId = InstanceId;
 
             if (!LandblockManager.AddObject(sp))
             {
@@ -3761,14 +3893,18 @@ partial class WorldObject
         {
             wardLevel = Convert.ToInt32(wardLevel * LevelScaling.GetMonsterArmorWardScalar(caster, target));
         }
-        else if (target is Player)
-        {
-            wardLevel = Convert.ToInt32(wardLevel * LevelScaling.GetPlayerArmorWardScalar(target, caster));
-        }
 
         var wardBuffDebuffMod = target.EnchantmentManager.GetWardMultiplicativeMod();
 
-        return SkillFormula.CalcWardMod(wardLevel * ignoreWardMod * wardBuffDebuffMod);
+        var wardMod = SkillFormula.CalcWardMod(wardLevel * ignoreWardMod * wardBuffDebuffMod);
+
+        // level scaling scales the mitigation, not the ward level -- see LevelScaling.GetPlayerArmorWardModScalar()
+        if (caster is not Player && target is Player)
+        {
+            wardMod *= LevelScaling.GetPlayerArmorWardModScalar(target, caster);
+        }
+
+        return wardMod;
     }
 
     /// <summary>

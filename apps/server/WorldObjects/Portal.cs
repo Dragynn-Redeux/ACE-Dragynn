@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Numerics;
 using ACE.Common;
 using ACE.Entity;
@@ -103,6 +104,45 @@ public partial class Portal : WorldObject
     public bool IsGateway
     {
         get => WeenieClassId == 1955;
+    }
+
+    /// <summary>
+    /// True for a capstone dungeon's entrance: a portal whose Portal emote sends the player on to their fellowship's copy or
+    /// instance of the dungeon (EmoteType.AssignCapstoneDungeon), straight away or from a set it goes on to, such as the
+    /// QuestSuccess of a quest check. Such a portal doesn't take them to its own Destination first. For a capstone dungeon that's
+    /// in its original landblock, which is also the first of its copies: going there loaded it, with its creatures, before any
+    /// fellowship had it or its mods had been set, and left the player in it, rather than in their own copy, whenever the emote
+    /// didn't move them on. A player the emote doesn't send anywhere (no fellowship, a failed quest check) stays at the portal.
+    /// </summary>
+    public bool IsCapstoneEntrance =>
+        Biota.PropertiesEmote != null
+        && Biota.PropertiesEmote.Any(emote => emote.Category == EmoteCategory.Portal)
+        && Biota.PropertiesEmote.Any(emote =>
+            emote.PropertiesEmoteAction.Any(action => action.Type == (uint)EmoteType.AssignCapstoneDungeon)
+        );
+
+    /// <summary>
+    /// The capstone dungeon entrance this portal is, or was summoned from, or null. A summoned portal (IsGateway) has the
+    /// gateway's emotes rather than those of the portal it was summoned from, so it's the original that sends the player on.
+    /// </summary>
+    private Portal GetCapstoneEntrance()
+    {
+        if (IsCapstoneEntrance)
+        {
+            return this;
+        }
+
+        if (IsGateway && OriginalPortal is { } originalPortal)
+        {
+            var portal = GetPortal(originalPortal);
+
+            if (portal is { IsCapstoneEntrance: true })
+            {
+                return portal;
+            }
+        }
+
+        return null;
     }
 
     //public override void OnActivate(WorldObject activator)
@@ -361,6 +401,24 @@ public partial class Portal : WorldObject
 #if DEBUG
         // player.Session.Network.EnqueueSend(new GameMessageSystemChat("Portal sending player to destination", ChatMessageType.System));
 #endif
+        // a capstone dungeon's entrance leaves it to its Portal emote to send the player anywhere (IsCapstoneEntrance)
+        var capstoneEntrance = GetCapstoneEntrance();
+
+        if (capstoneEntrance != null)
+        {
+            // on the world thread, where the emote runs after the teleport of any other portal
+            WorldManager.EnqueueAction(
+                new ActionEventDelegate(() =>
+                {
+                    SetLastPortal(player);
+
+                    capstoneEntrance.EmoteManager.OnPortal(player);
+                })
+            );
+
+            return;
+        }
+
         var portalDest = new Position(Destination);
         AdjustDungeon(portalDest);
 
@@ -369,12 +427,7 @@ public partial class Portal : WorldObject
             portalDest,
             new ActionEventDelegate(() =>
             {
-                // If the portal just used is able to be recalled to,
-                // save the destination coordinates to the LastPortal character position save table
-                if (!NoRecall)
-                {
-                    player.LastPortalDID = OriginalPortal == null ? WeenieClassId : OriginalPortal; // if walking through a summoned portal
-                }
+                SetLastPortal(player);
 
                 EmoteManager.OnPortal(player);
 
@@ -382,5 +435,15 @@ public partial class Portal : WorldObject
             }),
             true
         );
+    }
+
+    private void SetLastPortal(Player player)
+    {
+        // If the portal just used is able to be recalled to,
+        // save the destination coordinates to the LastPortal character position save table
+        if (!NoRecall)
+        {
+            player.LastPortalDID = OriginalPortal == null ? WeenieClassId : OriginalPortal; // if walking through a summoned portal
+        }
     }
 }

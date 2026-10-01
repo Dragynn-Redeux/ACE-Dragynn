@@ -306,9 +306,9 @@ public class Healer : WorldObject
 
         var healkitMod = (HealkitMod ?? 1.0);
 
-        // SPEC BONUS: Healing - Heal-over-time doubled.
+        // SPEC BONUS: Healing - Heal-over-time increased by 50%.
         var specialized = healer.GetCreatureSkill(Skill.Healing).AdvancementClass is SkillAdvancementClass.Specialized;
-        var specMod = specialized ? 2.0f : 1.0f;
+        var specMod = specialized ? 1.5f : 1.0f;
 
         spell.SpellStatModVal = (float)healkitMod * (float)healingSkillMod * specMod;
 

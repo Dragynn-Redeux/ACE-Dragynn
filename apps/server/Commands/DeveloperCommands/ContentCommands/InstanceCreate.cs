@@ -27,6 +27,11 @@ public class InstanceCreate
     )]
     public static void HandleCreateInst(Session session, params string[] parameters)
     {
+        if (RefusedInAnInstance(session))
+        {
+            return;
+        }
+
         var loc = new Position(session.Player.Location);
 
         var param = parameters[0];

@@ -37,6 +37,11 @@
     <ProjectReference Include="..\server\ACE.Server.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- The instances.json that comes with the server, for the test that checks it. The copy next to the server is not used: that one gets edited. -->
+    <None Include="..\server\instances.json" Link="instances.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
     <ItemGroup>
       <None Include="..\..\LICENSE">
         <Pack>True</Pack>

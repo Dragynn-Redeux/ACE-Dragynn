@@ -1,5 +1,6 @@
 ﻿using ACE.Entity.Enum;
 using ACE.Server.Commands.Handlers;
+using ACE.Server.Managers;
 using ACE.Server.Network;
 using ACE.Server.Network.GameMessages.Messages;
 
@@ -22,6 +23,12 @@ public class MyLocation
         session.Network.EnqueueSend(
             new GameMessageSystemChat(
                 $"CurrentLandblock: {session.Player.CurrentLandblock.Id.Landblock:X4}",
+                ChatMessageType.Broadcast
+            )
+        );
+        session.Network.EnqueueSend(
+            new GameMessageSystemChat(
+                $"Instance: {InstanceManager.Describe(session.Player.InstanceId)}",
                 ChatMessageType.Broadcast
             )
         );

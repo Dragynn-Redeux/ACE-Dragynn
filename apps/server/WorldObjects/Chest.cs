@@ -322,6 +322,27 @@ public partial class Chest : Container, Lock
         }
     }
 
+    /// <summary>
+    /// Destroys and regenerates this chest's currently spawned treasure using whatever
+    /// LootQualityMod is set at the moment of the call. Unlike Reset(), this does not
+    /// close the chest or reapply DefaultLocked - callers use this to temporarily bias
+    /// loot quality (e.g. the Specialized Thievery lockpick bonus, a key carrying its
+    /// own LootQualityMod) right as the chest is being unlocked, before the player has
+    /// had a chance to open it - a full Reset() would immediately relock a
+    /// DefaultLocked chest out from under them.
+    /// </summary>
+    public void RegenerateLoot(Player player = null)
+    {
+        if (!IsGenerator || InitCreate <= 0)
+        {
+            return;
+        }
+
+        ResetGenerator();
+        CurrentlyPoweringUp = true;
+        Generator_Generate(Tier, player);
+    }
+
     public void Reset(double? resetTimestamp, Player playerOpener = null)
     {
         if (resetTimestamp != ResetTimestamp)

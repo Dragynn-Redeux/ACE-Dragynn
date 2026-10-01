@@ -64,6 +64,12 @@ partial class Player
             return;
         }
 
+        // PK/PKL players cannot see stealthed players at all.
+        if (worldObject is Player stealthedPlayer && stealthedPlayer.IsStealthed && IsPKType)
+        {
+            return;
+        }
+
         Session.Network.EnqueueSend(new GameMessageCreateObject(worldObject, Adminvision, Adminvision));
 
         if (worldObject is Player player && player.IsStealthed)
@@ -326,6 +332,21 @@ partial class Player
             knownObjs = knownObjs.Where(i => i is Creature).ToList();
         }
 
+        ForgetObjects(knownObjs);
+    }
+
+    /// <summary>
+    /// Makes this player and everything it knows about forget each other, and tells the clients.<para />
+    /// This is for moving to a different instance. Nothing in the instance the player left may stay aware of it or keep it as a target,
+    /// and the client must not keep showing objects from the instance it left, which can be at exactly the same coordinates as what it is about to see.
+    /// </summary>
+    public void ForgetKnownObjects()
+    {
+        ForgetObjects(GetKnownObjects());
+    }
+
+    private void ForgetObjects(List<WorldObject> knownObjs)
+    {
         foreach (var knownObj in knownObjs)
         {
             knownObj.PhysicsObj.ObjMaint.RemoveObject(PhysicsObj);

@@ -153,40 +153,20 @@ public class SalvageCommand
                 actionChain.AddDelaySeconds(0.03);
                 actionChain.AddAction(player, () =>
                 {
-                    var sourceStruct = sourceRef.Structure ?? 0;
-                    if (sourceStruct <= 0)
+                    if (Salvage.PourSalvageBag(sourceRef, targetRef) <= 0)
                     {
                         return;
                     }
 
-                    var targetStruct = targetRef.Structure ?? 0;
-                    var space = (targetRef.MaxStructure ?? 1000) - targetStruct;
-                    var amountToAdd = Math.Min(sourceStruct, space);
-
-                    if (amountToAdd <= 0)
-                    {
-                        return;
-                    }
-
-                    var sourceWork = sourceRef.Workmanship ?? 1.0;
-                    var targetWork = targetRef.Workmanship ?? 1.0;
-                    var newWork = ((sourceWork * amountToAdd) + (targetWork * targetStruct)) / (targetStruct + amountToAdd);
-
-                    targetRef.Workmanship = (float)Math.Round(newWork, 2);
-                    targetRef.Structure = (ushort)(targetStruct + amountToAdd);
-                    targetRef.Name = $"Salvage Wk{(int)(targetRef.Workmanship ?? 1)} ({targetRef.Structure})";
                     player.EnqueueBroadcast(new GameMessageUpdateObject(targetRef));
 
-                    var remaining = sourceStruct - amountToAdd;
-                    if (remaining <= 0)
+                    if ((sourceRef.Structure ?? 0) <= 0)
                     {
                         player.TryConsumeFromInventoryWithNetworking(sourceRef);
                         player.Session.Network.EnqueueSend(new GameMessageDeleteObject(sourceRef));
                     }
                     else
                     {
-                        sourceRef.Structure = (ushort)remaining;
-                        sourceRef.Name = $"Salvage Wk{(int)(sourceRef.Workmanship ?? 1)} ({sourceRef.Structure})";
                         player.EnqueueBroadcast(new GameMessageUpdateObject(sourceRef));
                     }
                 });

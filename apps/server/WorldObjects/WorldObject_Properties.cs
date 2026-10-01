@@ -9597,6 +9597,12 @@ partial class WorldObject
         }
     }
 
+    /// <summary>
+    /// A trophy, or a trophy essence made from one: anything with a TrophyQuality.
+    /// This is what goes in a Trophy Pack (/sort) and what the /bank trophies category holds.
+    /// </summary>
+    public bool IsTrophy => (TrophyQuality ?? 0) > 0;
+
     public int? AltCurrencyValue
     {
         get => GetProperty(PropertyInt.AltCurrencyValue);

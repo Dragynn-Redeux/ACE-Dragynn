@@ -1499,8 +1499,8 @@ partial class Jewel
         { ACE.Entity.Enum.MaterialType.Zircon, (PropertyInt.GearElementalWard, "Prismatic Ward", "bracelet", 10, 0.5f, 0, 0.0f) },
 
         // bracelet (or armor)
-        { ACE.Entity.Enum.MaterialType.Diamond, (PropertyInt.GearHardenedDefense, "Hardened Fortification", "bracelet", 20, 1.0f, 0, 0.0f) },
-        { ACE.Entity.Enum.MaterialType.Amethyst, (PropertyInt.GearNullification, "Nullification", "bracelet", 20, 1.0f, 0, 0.0f) },
+        { ACE.Entity.Enum.MaterialType.Diamond, (PropertyInt.GearHardenedDefense, "Hardened Fortification", "bracelet", 10, 0.5f, 0, 0.0f) },
+        { ACE.Entity.Enum.MaterialType.Amethyst, (PropertyInt.GearNullification, "Nullification", "bracelet", 10, 0.5f, 0, 0.0f) },
 
         // shield
         { ACE.Entity.Enum.MaterialType.Turquoise, (PropertyInt.GearBlock, "Stalwart Defense", "shield", 10, 0.5f, 0, 0.0f) },

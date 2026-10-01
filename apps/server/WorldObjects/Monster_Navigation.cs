@@ -667,7 +667,10 @@ partial class Creature
 
         if (homeDistSq > HomeRadiusSq && WeenieClassId is not 1020001)
         {
-            SetMaxVitals();
+            if (!NoHomesickHeal)
+            {
+                SetMaxVitals();
+            }
 
             MoveToHome();
         }

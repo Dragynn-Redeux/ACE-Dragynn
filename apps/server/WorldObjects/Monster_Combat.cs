@@ -449,6 +449,11 @@ partial class Creature
     /// <param name="amount">The amount of damage rounded</param>
     public virtual uint TakeDamage(WorldObject source, DamageType damageType, float amount, bool crit = false)
     {
+        if (Invulnerable)
+        {
+            amount = 0.0f;
+        }
+
         var tryDamage = (int)Math.Round(amount);
         var damage = -UpdateVitalDelta(Health, -tryDamage);
 
@@ -524,11 +529,6 @@ partial class Creature
             BPTableCache[wcid] = bpTable;
         }
         return bpTable;
-    }
-
-    public static BodyPartTable GetBodyParts(Creature creature)
-    {
-        return new BodyPartTable(creature.Weenie);
     }
 
     /// <summary>
