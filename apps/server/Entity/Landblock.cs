@@ -2022,19 +2022,10 @@ public class Landblock : IActor
     /// <summary>
     /// Whether a capstone dungeon is opened as an instance of its original landblock rather than as one of its numbered copies.
     /// This is set with the capstone_instanced_dungeons server property, which has every capstone dungeon by default.
-    /// A dungeon that is more than one landblock (CapstoneInstanceFootprints) has no copies, so it always is.
     /// </summary>
     private static bool IsCapstoneInstanced(string dungeonName)
     {
-        return IsCapstoneInstanced(PropertyManager.GetString("capstone_instanced_dungeons").Item, dungeonName);
-    }
-
-    /// <summary>
-    /// Whether a dungeon opens as an instance, for this value of capstone_instanced_dungeons
-    /// </summary>
-    internal static bool IsCapstoneInstanced(string names, string dungeonName)
-    {
-        return CapstoneInstanceFootprints.ContainsKey(dungeonName) || IsListedAsCapstoneInstanced(names, dungeonName);
+        return IsListedAsCapstoneInstanced(PropertyManager.GetString("capstone_instanced_dungeons").Item, dungeonName);
     }
 
     /// <summary>
@@ -2504,7 +2495,8 @@ public class Landblock : IActor
             case "Olthoi Queen's Lair":
                 dungeonLandblocks = [0xC7B7, 0x1AFE, 0x1AFD, 0x1AFC, 0x1AFB, 0x1AFA];
                 break;
-            // the Shattered Source: always one instance of the residence and the boss room (CapstoneInstanceFootprints), so no copies
+            // the Shattered Source. Instanced, it's one instance of the residence and the boss room (CapstoneInstanceFootprints).
+            // It has no numbered copies: when it isn't instanced, the residence itself is its only one, for one fellowship at a time.
             case "Xarabydun Researcher Halls":
                 dungeonLandblocks = [0x22FE];
                 break;
@@ -2665,8 +2657,8 @@ public class Landblock : IActor
     /// <summary>
     /// The capstone dungeons that are more than one landblock. A fellowship gets one instance of all of them, so the portals between
     /// them keep it in its instance and go to their own destinations. The first is the one the dungeon is entered at
-    /// (CapstoneDungeonLists, CapstoneTeleportLocations). These have no numbered copies, so they're always instanced, whatever
-    /// capstone_instanced_dungeons says.
+    /// (CapstoneDungeonLists, CapstoneTeleportLocations). Like any other capstone dungeon, it's only instanced if
+    /// capstone_instanced_dungeons says so.
     /// </summary>
     private static readonly Dictionary<string, LandblockId[]> CapstoneInstanceFootprints =
         new(StringComparer.OrdinalIgnoreCase)

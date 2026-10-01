@@ -67,16 +67,14 @@ public class CapstoneInstancedDungeonsTests
     }
 
     [TestMethod]
-    public void CapstoneInstancing_TheShatteredSourceIsAlwaysInstancedWhateverTheValue()
+    public void CapstoneInstancing_TheShatteredSourceFollowsTheValueLikeAnyOtherDungeon()
     {
-        foreach (var names in new[] { null, "", EveryName, "Sand Shallow" })
-        {
-            Assert.IsTrue(Landblock.IsCapstoneInstanced(names, "Xarabydun Researcher Halls"), $"'{names}'");
-        }
+        Assert.IsTrue(Landblock.IsListedAsCapstoneInstanced("*", "Xarabydun Researcher Halls"));
+        Assert.IsTrue(Landblock.IsListedAsCapstoneInstanced($"{EveryName},Xarabydun Researcher Halls", "Xarabydun Researcher Halls"));
 
-        // the others still follow the value
-        Assert.IsFalse(Landblock.IsCapstoneInstanced("", Dungeon));
-        Assert.IsTrue(Landblock.IsCapstoneInstanced(EveryName, Dungeon));
+        // the old default, from before it was a capstone dungeon, doesn't have it
+        Assert.IsFalse(Landblock.IsListedAsCapstoneInstanced(EveryName, "Xarabydun Researcher Halls"));
+        Assert.IsFalse(Landblock.IsListedAsCapstoneInstanced("", "Xarabydun Researcher Halls"));
     }
 
     [TestMethod]
