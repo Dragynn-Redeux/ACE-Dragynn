@@ -2700,6 +2700,7 @@ public class Landblock : IActor
             0x02E7, 0x17FE, 0x17FD, 0x17FC, 0x17FB, 0x17FA, // "Lugian Mines2"
             0x011C, 0x12FE, 0x12FD, 0x12FC, 0x12FB, 0x12FA, // "Mountain Fortress"
             0xC7B7, 0x1AFE, 0x1AFD, 0x1AFC, 0x1AFB, 0x1AFA, // "Olthoi Queen's Lair"
+            0x22FE, 0x21FE, // "Xarabydun Researcher Halls" (the Shattered Source: residence and boss room)
         ];
 
     private void IncreaseMinimumEncounterSpawnDensity(List<Encounter> encounters, List<uint> generatedEncounterIdList)
