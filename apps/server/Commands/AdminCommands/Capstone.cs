@@ -41,7 +41,6 @@ public class Capstone
                 "Mage Academy",
                 "Lugian Mines",
                 "Mountain Fortress",
-                "Shattered Source",
                 "Xarabydun Researcher Halls"
             };
             foreach (var capstone in capstones)
@@ -175,11 +174,10 @@ public class Capstone
                 case "hamud":
                     dungeonName = "Mountain Fortress";
                     break;
+                // the Shattered Source, which is one instance of the residence and the boss room
                 case "shattered source":
                 case "shattered":
                 case "ss":
-                    dungeonName = "Shattered Source";
-                    break;
                 case "xarabydun researcher halls":
                 case "xarabydun":
                 case "researcher halls":

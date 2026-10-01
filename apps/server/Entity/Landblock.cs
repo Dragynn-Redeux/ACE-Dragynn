@@ -2022,10 +2022,28 @@ public class Landblock : IActor
     /// <summary>
     /// Whether a capstone dungeon is opened as an instance of its original landblock rather than as one of its numbered copies.
     /// This is set with the capstone_instanced_dungeons server property, which has every capstone dungeon by default.
+    /// A dungeon that is more than one landblock (CapstoneInstanceFootprints) has no copies, so it always is.
     /// </summary>
     private static bool IsCapstoneInstanced(string dungeonName)
     {
-        return IsListedAsCapstoneInstanced(PropertyManager.GetString("capstone_instanced_dungeons").Item, dungeonName);
+        return IsCapstoneInstanced(PropertyManager.GetString("capstone_instanced_dungeons").Item, dungeonName);
+    }
+
+    /// <summary>
+    /// Whether a dungeon opens as an instance, for this value of capstone_instanced_dungeons
+    /// </summary>
+    internal static bool IsCapstoneInstanced(string names, string dungeonName)
+    {
+        return CapstoneInstanceFootprints.ContainsKey(dungeonName) || IsListedAsCapstoneInstanced(names, dungeonName);
+    }
+
+    /// <summary>
+    /// The landblocks a fellowship's instance of a capstone dungeon is made of: the original landblock, and for a dungeon that is
+    /// more than one landblock (CapstoneInstanceFootprints) the rest of it too
+    /// </summary>
+    internal static IReadOnlyCollection<LandblockId> GetCapstoneInstanceFootprint(string dungeonName, LandblockId original)
+    {
+        return CapstoneInstanceFootprints.GetValueOrDefault(dungeonName) ?? new[] { original };
     }
 
     /// <summary>
@@ -2078,7 +2096,7 @@ public class Landblock : IActor
                 // the same as HandleCapstoneLandblockLogin does for the copies
                 template = new InstanceTemplate(
                     $"capstone:{dungeonName}",
-                    new[] { original },
+                    GetCapstoneInstanceFootprint(dungeonName, original),
                     CapstoneTeleportLocations[original]
                 );
                 capstoneInstanceTemplates.Add(dungeonName, template);
@@ -2097,6 +2115,21 @@ public class Landblock : IActor
             {
                 landblock.CapstoneFellowship = fellowship;
                 landblock.SetLandblockMods(fellowship, dungeonName);
+            }
+
+            // and the same for the rest of a dungeon that is more than one landblock. SetLandblockMods has used up the leader's
+            // DungeonModders and kept the mods in the fellowship, so these get those rather than choosing again.
+            foreach (var landblockId in template.Footprint.Where(id => id != original))
+            {
+                var otherLandblock = LandblockManager.TryGetLandblock(landblockId, instance.Id);
+
+                if (otherLandblock == null)
+                {
+                    continue;
+                }
+
+                otherLandblock.CapstoneFellowship = fellowship;
+                otherLandblock.ApplyLandblockMods(fellowship.CapstoneDungeonMods ?? new List<string>());
             }
         }
 
@@ -2471,12 +2504,10 @@ public class Landblock : IActor
             case "Olthoi Queen's Lair":
                 dungeonLandblocks = [0xC7B7, 0x1AFE, 0x1AFD, 0x1AFC, 0x1AFB, 0x1AFA];
                 break;
-            case "Shattered Source":
-                dungeonLandblocks = [0x21FE, 0x21FD, 0x21FC, 0x21FB, 0x21FA, 0x21F9];
-                break;
+            // the Shattered Source: always one instance of the residence and the boss room (CapstoneInstanceFootprints), so no copies
             case "Xarabydun Researcher Halls":
-                dungeonLandblocks = [0x22FE, 0x22FD, 0x22FC, 0x22FB, 0x22FA, 0x22F9];
-                break;    
+                dungeonLandblocks = [0x22FE];
+                break;
             default:
                 return null;
         }
@@ -2622,23 +2653,27 @@ public class Landblock : IActor
         { new LandblockId(0x1AFC << 16 | 0xFFFF), new Position(0x1AFC0462, -50.2814f, 7.25725f, 162.405f, 0f, 0f, -0.017697f, 0.999843f) },
         { new LandblockId(0x1AFB << 16 | 0xFFFF), new Position(0x1AFB0462, -50.2814f, 7.25725f, 162.405f, 0f, 0f, -0.017697f, 0.999843f) },
         { new LandblockId(0x1AFA << 16 | 0xFFFF), new Position(0x1AFA0462, -50.2814f, 7.25725f, 162.405f, 0f, 0f, -0.017697f, 0.999843f) },
-        // Shattered Source 0x21FE, 0x21FD, 0x21FC, 0x21FB, 0x21FA, 0x21F9 - real arrival teleloc,
-        // matches PortalSSBoss's own destination (world-db)
-        { new LandblockId(0x21FE << 16 | 0xFFFF), new Position(0x21FE0194, 118.757774f, -144.056992f, 6.005000f, 0f, 0f, -0.928151f, 0.372205f) },
-        { new LandblockId(0x21FD << 16 | 0xFFFF), new Position(0x21FD0194, 118.757774f, -144.056992f, 6.005000f, 0f, 0f, -0.928151f, 0.372205f) },
-        { new LandblockId(0x21FC << 16 | 0xFFFF), new Position(0x21FC0194, 118.757774f, -144.056992f, 6.005000f, 0f, 0f, -0.928151f, 0.372205f) },
-        { new LandblockId(0x21FB << 16 | 0xFFFF), new Position(0x21FB0194, 118.757774f, -144.056992f, 6.005000f, 0f, 0f, -0.928151f, 0.372205f) },
-        { new LandblockId(0x21FA << 16 | 0xFFFF), new Position(0x21FA0194, 118.757774f, -144.056992f, 6.005000f, 0f, 0f, -0.928151f, 0.372205f) },
-        { new LandblockId(0x21F9 << 16 | 0xFFFF), new Position(0x21F90194, 118.757774f, -144.056992f, 6.005000f, 0f, 0f, -0.928151f, 0.372205f) },
-        // Xarabydun Researcher Halls 0x22FE, 0x22FD, 0x22FC, 0x22FB, 0x22FA, 0x22F9 - real arrival
-        // teleloc, matches 1034519's destination / the Anchor's TeleportTarget (world-db)
+        // Xarabydun Researcher Halls 0x22FE - real arrival teleloc, matches 1034519's destination / the Anchor's TeleportTarget
+        // (world-db). Where the instance lets players in.
         { new LandblockId(0x22FE << 16 | 0xFFFF), new Position(0x22FE013F, 40.065521f, -59.367664f, 0.005000f, 0f, 0f, -0.023613f, -0.999721f) },
-        { new LandblockId(0x22FD << 16 | 0xFFFF), new Position(0x22FD013F, 40.065521f, -59.367664f, 0.005000f, 0f, 0f, -0.023613f, -0.999721f) },
-        { new LandblockId(0x22FC << 16 | 0xFFFF), new Position(0x22FC013F, 40.065521f, -59.367664f, 0.005000f, 0f, 0f, -0.023613f, -0.999721f) },
-        { new LandblockId(0x22FB << 16 | 0xFFFF), new Position(0x22FB013F, 40.065521f, -59.367664f, 0.005000f, 0f, 0f, -0.023613f, -0.999721f) },
-        { new LandblockId(0x22FA << 16 | 0xFFFF), new Position(0x22FA013F, 40.065521f, -59.367664f, 0.005000f, 0f, 0f, -0.023613f, -0.999721f) },
-        { new LandblockId(0x22F9 << 16 | 0xFFFF), new Position(0x22F9013F, 40.065521f, -59.367664f, 0.005000f, 0f, 0f, -0.023613f, -0.999721f) },
+        // the Shattered Source boss room 0x21FE, the other landblock of the same instance - matches PortalSSBoss's own destination
+        // (world-db). Nobody is sent here by this table; it's listed so the boss room counts as a capstone landblock (logging in
+        // there, corpses, uptime).
+        { new LandblockId(0x21FE << 16 | 0xFFFF), new Position(0x21FE0194, 118.757774f, -144.056992f, 6.005000f, 0f, 0f, -0.928151f, 0.372205f) },
     };
+
+    /// <summary>
+    /// The capstone dungeons that are more than one landblock. A fellowship gets one instance of all of them, so the portals between
+    /// them keep it in its instance and go to their own destinations. The first is the one the dungeon is entered at
+    /// (CapstoneDungeonLists, CapstoneTeleportLocations). These have no numbered copies, so they're always instanced, whatever
+    /// capstone_instanced_dungeons says.
+    /// </summary>
+    private static readonly Dictionary<string, LandblockId[]> CapstoneInstanceFootprints =
+        new(StringComparer.OrdinalIgnoreCase)
+        {
+            // the Shattered Source: the residence, then the boss room
+            { "Xarabydun Researcher Halls", [new LandblockId(0x22FE << 16 | 0xFFFF), new LandblockId(0x21FE << 16 | 0xFFFF)] },
+        };
 
     public bool IsFellowshipRequired()
     {
